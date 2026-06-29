@@ -1,0 +1,1 @@
+REVOKE SELECT (email) ON public.profiles FROM authenticated;

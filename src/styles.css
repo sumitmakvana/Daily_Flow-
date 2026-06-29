@@ -1,0 +1,114 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Execution OS — Linear-style dark theme.
+ * Dense, operational, mono-accented. All colors in oklch.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+
+  /* Status tokens */
+  --color-status-todo: var(--status-todo);
+  --color-status-progress: var(--status-progress);
+  --color-status-review: var(--status-review);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-hold: var(--status-hold);
+  --color-status-completed: var(--status-completed);
+
+  /* Priority tokens */
+  --color-priority-high: var(--priority-high);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-low: var(--priority-low);
+}
+
+:root {
+  --radius: 0.5rem;
+
+  /* Dark-by-default Linear palette */
+  --background: oklch(0.16 0.012 264);
+  --foreground: oklch(0.96 0.005 264);
+
+  --card: oklch(0.20 0.012 264);
+  --card-foreground: oklch(0.96 0.005 264);
+
+  --popover: oklch(0.21 0.014 264);
+  --popover-foreground: oklch(0.96 0.005 264);
+
+  --primary: oklch(0.72 0.18 268);          /* indigo accent */
+  --primary-foreground: oklch(0.16 0.012 264);
+
+  --secondary: oklch(0.26 0.014 264);
+  --secondary-foreground: oklch(0.96 0.005 264);
+
+  --muted: oklch(0.24 0.012 264);
+  --muted-foreground: oklch(0.68 0.015 264);
+
+  --accent: oklch(0.28 0.018 264);
+  --accent-foreground: oklch(0.96 0.005 264);
+
+  --destructive: oklch(0.62 0.22 25);
+  --destructive-foreground: oklch(0.98 0.005 264);
+
+  --border: oklch(0.28 0.015 264);
+  --input: oklch(0.26 0.014 264);
+  --ring: oklch(0.72 0.18 268);
+
+  /* Status colors */
+  --status-todo: oklch(0.68 0.015 264);       /* muted */
+  --status-progress: oklch(0.70 0.16 235);    /* blue */
+  --status-review: oklch(0.70 0.18 310);      /* purple */
+  --status-blocked: oklch(0.55 0.22 22);      /* dark red */
+  --status-hold: oklch(0.78 0.15 75);         /* amber */
+  --status-completed: oklch(0.72 0.18 152);   /* green */
+
+  /* Priority colors */
+  --priority-high: oklch(0.66 0.24 22);       /* red */
+  --priority-medium: oklch(0.74 0.17 55);     /* orange */
+  --priority-low: oklch(0.70 0.16 235);       /* blue */
+}
+
+.dark {
+  /* same — dark is default */
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body { background-color: var(--color-background); color: var(--color-foreground); }
+  body {
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Utility helpers */
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }

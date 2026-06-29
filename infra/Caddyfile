@@ -1,0 +1,12 @@
+http://{$API_DOMAIN} {
+    uri strip_prefix /rest/v1
+    reverse_proxy postgrest:3000
+}
+
+http://{$AUTH_DOMAIN} {
+    reverse_proxy keycloak:8080
+}
+
+http://{$FILES_DOMAIN} {
+    reverse_proxy minio:9000
+}

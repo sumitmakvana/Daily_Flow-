@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.detect_risks() TO service_role;
