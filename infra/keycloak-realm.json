@@ -86,14 +86,14 @@
       "directAccessGrantsEnabled": true,
       "standardFlowEnabled": true,
       "redirectUris": [
-        "http://localhost:8080/*",
-        "http://localhost:8081/*",
-        "http://localhost:8082/*"
+        "http://localhost:7050/*",
+        "http://localhost:7051/*",
+        "http://localhost:7052/*"
       ],
       "webOrigins": [
-        "http://localhost:8080",
-        "http://localhost:8081",
-        "http://localhost:8082",
+        "http://localhost:7050",
+        "http://localhost:7051",
+        "http://localhost:7052",
         "*"
       ],
       "protocol": "openid-connect",

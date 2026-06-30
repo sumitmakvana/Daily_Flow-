@@ -97,11 +97,11 @@ services:
       context: ..
       dockerfile: Dockerfile
       args:
-        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-http://localhost:8081}
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-http://localhost:7051}
         - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "7050:8080"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - SUPABASE_URL=http://postgrest:3000
@@ -120,10 +120,10 @@ services:
     image: caddy:2
     restart: unless-stopped
     ports:
-      - "8081:8081"
-      - "8082:8082"
-      - "8083:8083"
-      - "8443:443"
+      - "7051:7051"
+      - "7052:7052"
+      - "7053:7053"
+      - "7054:443"
     environment:
       API_DOMAIN: ${API_DOMAIN}
       

@@ -12,11 +12,11 @@ const isBrowser = typeof window !== "undefined";
 let keycloak: Keycloak | null = null;
 
 if (isBrowser) {
-  // Keycloak runs on AUTH_DOMAIN (http://localhost:8082 in dev, or custom in prod)
-  // We determine the auth URL dynamically or fallback to localhost:8082
+  // Keycloak runs on AUTH_DOMAIN (http://localhost:7052 in dev, or custom in prod)
+  // We determine the auth URL dynamically or fallback to localhost:7052
   const authUrl = window.location.origin.includes("localhost")
-    ? "http://localhost:8082"
-    : `${window.location.protocol}//${window.location.host.replace("8080", "8082")}`;
+    ? "http://localhost:7052"
+    : `${window.location.protocol}//${window.location.host.replace("7050", "7052")}`;
 
   keycloak = new Keycloak({
     url: authUrl,
@@ -57,7 +57,8 @@ export function initKeycloak(): Promise<boolean> {
         try {
           const userId = keycloak.tokenParsed?.sub;
           const email = keycloak.tokenParsed?.email;
-          const name = (keycloak.tokenParsed as any)?.name || keycloak.tokenParsed?.preferred_username;
+          const name =
+            (keycloak.tokenParsed as any)?.name || keycloak.tokenParsed?.preferred_username;
           if (userId && email) {
             const { supabase } = await import("@/integrations/supabase/client");
             await supabase.rpc("ensure_user_profile", {
@@ -81,15 +82,18 @@ export function initKeycloak(): Promise<boolean> {
 
       // Periodically refresh token to ensure it stays valid
       setInterval(() => {
-        keycloak?.updateToken(70).then((refreshed) => {
-          if (refreshed && keycloak?.token) {
-            window.localStorage.setItem("kc_token", keycloak.token);
-            const session = getSessionSync();
-            listeners.forEach((cb) => cb("TOKEN_REFRESHED", session));
-          }
-        }).catch(() => {
-          console.error("Failed to refresh Keycloak token");
-        });
+        keycloak
+          ?.updateToken(70)
+          .then((refreshed) => {
+            if (refreshed && keycloak?.token) {
+              window.localStorage.setItem("kc_token", keycloak.token);
+              const session = getSessionSync();
+              listeners.forEach((cb) => cb("TOKEN_REFRESHED", session));
+            }
+          })
+          .catch(() => {
+            console.error("Failed to refresh Keycloak token");
+          });
       }, 60000);
 
       return authenticated;
@@ -116,7 +120,8 @@ function getSessionSync() {
       email: keycloak.tokenParsed?.email || "",
       email_confirmed_at: new Date().toISOString(),
       user_metadata: {
-        display_name: (keycloak.tokenParsed as any)?.name || keycloak.tokenParsed?.preferred_username || "",
+        display_name:
+          (keycloak.tokenParsed as any)?.name || keycloak.tokenParsed?.preferred_username || "",
       },
       app_metadata: {},
       created_at: new Date().toISOString(),
@@ -186,7 +191,8 @@ export const auth = {
         // Auto-provision user profile in the database
         const userId = keycloak!.tokenParsed?.sub;
         const email = keycloak!.tokenParsed?.email;
-        const name = (keycloak!.tokenParsed as any)?.name || keycloak!.tokenParsed?.preferred_username;
+        const name =
+          (keycloak!.tokenParsed as any)?.name || keycloak!.tokenParsed?.preferred_username;
         if (userId && email) {
           const { supabase } = await import("@/integrations/supabase/client");
           await supabase.rpc("ensure_user_profile", {
