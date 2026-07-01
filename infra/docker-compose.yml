@@ -52,12 +52,12 @@ services:
       KC_DB_USERNAME: ${POSTGRES_USER}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KC_DB_SCHEMA: keycloak
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /
-      JAVA_OPTS_APPEND: "-Dkeycloak.import.strategy=OVERWRITE_EXISTING"
+      JAVA_OPTS_APPEND: "-Dkeycloak.migration.action=import -Dkeycloak.migration.provider=singleFile -Dkeycloak.migration.file=/opt/keycloak/data/import/realm.json -Dkeycloak.migration.strategy=OVERWRITE_EXISTING"
     volumes:
       - ./keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro
     expose: ["8080"]

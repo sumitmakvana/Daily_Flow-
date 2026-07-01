@@ -96,6 +96,9 @@
         "http://localhost:7052",
         "*"
       ],
+      "attributes": {
+        "post.logout.redirect.uris": "+"
+      },
       "protocol": "openid-connect",
       "fullScopeAllowed": true,
       "protocolMappers": [
