@@ -19,6 +19,7 @@ services:
     volumes:
       - /data/docker_volumes/daily-flow/pgdata:/var/lib/postgresql/data
       - ./sql:/sql:ro
+      - ./sql/00-auth-stub.sql:/docker-entrypoint-initdb.d/00-auth-stub.sql:ro
     ports:
       - "7055:5432"
     healthcheck:
