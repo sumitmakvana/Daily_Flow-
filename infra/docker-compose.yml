@@ -1,4 +1,4 @@
-name: lovable-self-hosted
+name: daily-flow
 
 services:
   postgres:
@@ -17,7 +17,7 @@ services:
       - -c
       - cron.database_name=${POSTGRES_DB}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - /data/docker_volumes/daily-flow/pgdata:/var/lib/postgresql/data
       - ./sql:/sql:ro
     ports:
       - "7055:5432"
@@ -40,7 +40,8 @@ services:
       PGRST_JWT_ROLE_CLAIM_KEY: ".role"
       PGRST_JWT_SECRET: '{"keys":[{"kid":"nSFBn7bcYKGix6gpMTZp21ujFQl3Uu6uu-btwNT9FtI","kty":"RSA","alg":"RSA-OAEP","use":"enc","n":"rV-Mh_3kUMJNHrgFGlDlH_M5Jp3dTrmkURZ7CNmhrIRIrY2Ccjufb6Sljh8pUBIjba4i9mHFbsAgazzoIPLutSDcMCi9cGzOjiRmh53XxY2pj3tVCqnhgXzb7lsmG6ol9pztC0eofMNyfI0-51YQMowhE29WdTdMMzv3FFhTa3OIz3cpcdpPhjbS2i0UFcim-iFjQn0DCk1M-Ke-J-I2yxqa30wrVWcnYGT1NZA8Ce_C4NCjKfw7NdS5abEbAHt4afSKE9-btXy7FrHreNUfL2U5yrAsZEX4VO_KJK1RcRUW_7M2WAtihM00wZiGYEBoiBqn0oo0U885Awl4lTOVuQ","e":"AQAB","x5c":["MIICnTCCAYUCBgGfEpTkpzANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAdsb3ZhYmxlMB4XDTI2MDYyOTA4NTExNVoXDTM2MDYyOTA4NTI1NVowEjEQMA4GA1UEAwwHbG92YWJsZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAK1fjIf95FDCTR64BRpQ5R/zOSad3U65pFEWewjZoayESK2NgnI7n2+kpY4fKVASI22uIvZhxW7AIGs86CDy7rUg3DAovXBszo4kZoed18WNqY97VQqp4YF82+5bJhuqJfac7QtHqHzDcnyNPudWEDKMIRNvVnU3TDM79xRYU2tziM93KXHaT4Y20totFBXIpvohY0J9AwpNTPinvifiNssamt9MK1VnJ2Bk9TWQPAnvwuDQoyn8OzXUuWmxGwB7eGn0ihPfm7V8uxax63jVHy9lOcqwLGRF+FTvyiStUXEVFv+zNlgLYoTNNMGYhmBAaIgap9KKNFPPOQMJeJUzlbkCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEASYOY0//KIZlc/rROPkNLVWFK4eXVADyqwDO57JrE7THR3mfmK6Z1rARi0u2JAMI10v08Evhxgq/ANCH4aH6YQ5u3MseK8CnHBPZ+svzIzaFEyHMq2vVA+sIaApEeWJVauRxDxulxU2i91eppZPuqWKjZh6YnjqeTnzDwwyMp6lplciUpgipZ1S/2YvazWlNdlEMt4ffpkIJUK/nUAKigSIgmhYeQvvzD4Ii/3vrt+yMInxR/+32YqV5tkVFrdifThVOH4ffHSazaribBjFKkoUopq9vRqol+/lXZHDWDFqgRtFIZlR9AzEYXNS/xwN2XwKiqHqloWiUniD0GXpdpjw=="],"x5t":"36FwzD9X9LErcLf0M3Ttrfo0Tt0","x5t#S256":"rgLRZAnq7M7ya1bGXVf1n9GX8rjAhgIB2HDJj4TKztE"},{"kid":"E_6hiIlIsOmmcIXQaWwCnZCSSiUV14JDbPvMQRDmZw0","kty":"RSA","alg":"RS256","use":"sig","n":"uh4BGIdcx_BENlof1C3JV66B54vwdZxrOucAQfS2p-XvrNojq-SG6jlXZ7L9Nl3GibKvPM3wrGma0gUkX6sp5OdPdtCiIIiR1SV5X-yOUjngTHkMqv87MvfITM9GkjLUbLDPyRU4L7f6PhfsuGjpUjU86llqwoI53MW6KpO0qwRn1eR1cSsthiI3Bo3qwY3OwLKvWmTtDYhUZLoOz7ZRAiPBAQcqcQYuawc9rJ22T2J7cB-O1SHOueieUh45xG2npu7WtfxWgc7iCt7UKcazdw-m2utNzpbwrFrmHO3DkRWkHQD8fwBtme6i8XXcexl-oSHR3mbZVH8097aqDSrZFw","e":"AQAB","x5c":["MIICnTCCAYUCBgGfEpTjiTANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAdsb3ZhYmxlMB4XDTI2MDYyOTA4NTExNVoXDTM2MDYyOTA4NTI1NVowEjEQMA4GA1UEAwwHbG92YWJsZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALoeARiHXMfwRDZaH9QtyVeugeeL8HWcazrnAEH0tqfl76zaI6vkhuo5V2ey/TZdxomyrzzN8KxpmtIFJF+rKeTnT3bQoiCIkdUleV/sjlI54Ex5DKr/OzL3yEzPRpIy1Gywz8kVOC+3+j4X7Lho6VI1POpZasKCOdzFuiqTtKsEZ9XkdXErLYYiNwaN6sGNzsCyr1pk7Q2IVGS6Ds+2UQIjwQEHKnEGLmsHPaydtk9ie3AfjtUhzrnonlIeOcRtp6bu1rX8VoHO4gre1CnGs3cPptrrTc6W8Kxa5hztw5EVpB0A/H8AbZnuovF13HsZfqEh0d5m2VR/NPe2qg0q2RcCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAjFX3yDe5gKUGlMYoQmcxh1RiwE3bSCs/oetwl8kd39ux5gab9sbthhMyG3HDZN/YwPKgORXLK92jBcq+hTUd55m1OR5msVm3N+XlZ1ce18OQ62fuKA9RdegvJa1wnEB8PJkkfOygHHwIPGof+bmkYrWeJv5q9yB7Mh0hMh/Q3JaoXeK5Btjc61BIC/oSSTW+4m3itSas0DBZq0jUjmMFV7I8d7peJV4f/8kPVPecFo6+4BPvkyQJdSKW6GoN81V5YCqvEKxl74nPQRtKLZ3ZLboyYSFv9fkhNeG4jejwrTwu7TPqvixNBD8UWaMz/8ftdFkEg+R+FqiIpRB0VOuUpQ=="],"x5t":"pSls5nLiiR0j_ufweTInnWJFTvE","x5t#S256":"wtMRlUEGMsqbCFfN7kpGYjiCY9Q-pRGMLDCwRCAZ7UQ"}]}'
       PGRST_DB_USE_LEGACY_GUCS: "false"
-    expose: ["3000"]
+    expose:
+      - "3000"
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0.5
@@ -52,7 +53,7 @@ services:
       KC_DB_USERNAME: ${POSTGRES_USER}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KC_DB_SCHEMA: keycloak
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN: ${KEYAKLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
@@ -60,7 +61,8 @@ services:
       JAVA_OPTS_APPEND: "-Dkeycloak.migration.action=import -Dkeycloak.migration.provider=singleFile -Dkeycloak.migration.file=/opt/keycloak/data/import/realm.json -Dkeycloak.migration.strategy=OVERWRITE_EXISTING"
     volumes:
       - ./keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro
-    expose: ["8080"]
+    expose:
+      - "8080"
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
       interval: 5s
@@ -78,12 +80,15 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
-      - minio:/data
-    expose: ["9000", "9001"]
+      - /data/docker_volumes/daily-flow/minio:/data
+    expose:
+      - "9000"
+      - "9001"
 
   minio-init:
     image: minio/mc:RELEASE.2024-10-08T09-37-26Z
-    depends_on: [minio]
+    depends_on:
+      - minio
     entrypoint: >
       /bin/sh -c "
       until /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 2; done;
@@ -126,16 +131,9 @@ services:
       - "7054:443"
     environment:
       API_DOMAIN: ${API_DOMAIN}
-      
       AUTH_DOMAIN: ${AUTH_DOMAIN}
       FILES_DOMAIN: ${FILES_DOMAIN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-
-volumes:
-  pgdata:
-  minio:
-  caddy_data:
-  caddy_config:
+      - /data/docker_volumes/daily-flow/caddy_data:/data
+      - /data/docker_volumes/daily-flow/caddy_config:/config

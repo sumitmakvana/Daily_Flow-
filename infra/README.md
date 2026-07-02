@@ -35,7 +35,7 @@ sites work unchanged after cutover.
 cp .env.example .env             # then edit secrets
 docker compose pull
 docker compose up -d postgres
-docker compose exec -T postgres psql -U postgres -d app -f /sql/00-auth-stub.sql
+docker compose exec -T postgres psql -U postgres -d postgres -f /sql/00-auth-stub.sql
 ```
 
 ## Cutover sequence
