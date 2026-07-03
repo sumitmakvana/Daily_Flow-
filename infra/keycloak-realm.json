@@ -21,16 +21,17 @@
   },
   "users": [
     {
-      "username": "admin@example.com",
+      "id": "ec180121-f5d9-4de0-b4b6-5a57bb4e30d3",
+      "username": "admin@noesisanalytics.co.in",
       "enabled": true,
-      "email": "admin@example.com",
+      "email": "admin@noesisanalytics.co.in",
       "emailVerified": true,
       "firstName": "Admin",
       "lastName": "User",
       "credentials": [
         {
           "type": "password",
-          "value": "admin123",
+          "value": "daily_flow",
           "temporary": false
         }
       ],
@@ -41,6 +42,7 @@
       ]
     },
     {
+      "id": "1bfcf005-c7bf-4d8e-823f-9e509384acaa",
       "username": "manager@example.com",
       "enabled": true,
       "email": "manager@example.com",
@@ -60,6 +62,7 @@
       ]
     },
     {
+      "id": "57e5b576-508c-4c58-9b3b-3545062acfd3",
       "username": "member@example.com",
       "enabled": true,
       "email": "member@example.com",
