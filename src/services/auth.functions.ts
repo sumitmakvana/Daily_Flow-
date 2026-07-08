@@ -10,20 +10,35 @@ import type { AppRole } from "@/lib/types";
  */
 export async function getMyRoles(): Promise<AppRole[]> {
   // Dynamically import to avoid SSR issues
-  const { supabase } = await import("@/integrations/supabase/client");
+  const { supabase, isSelfHosted } = await import("@/integrations/supabase/client");
 
-  // Get current user id from Keycloak token
-  const token = typeof window !== "undefined" ? window.localStorage.getItem("kc_token") : null;
-  if (!token) return [];
+  const isSelf = isSelfHosted();
 
-  // Decode JWT to get the sub (user id)
   let userId: string | null = null;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    userId = payload.sub ?? null;
-  } catch {
-    return [];
+
+  if (isSelf) {
+    // Get current user id from Keycloak token
+    const token = typeof window !== "undefined" ? window.localStorage.getItem("kc_token") : null;
+    if (!token) return [];
+
+    // Decode JWT to get the sub (user id)
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      userId = payload.sub ?? null;
+    } catch {
+      return [];
+    }
+  } else {
+    // Get current user id from Supabase auth session
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      userId = session?.user?.id ?? null;
+    } catch (err) {
+      console.error("[getMyRoles] Error getting Supabase session:", err);
+      return [];
+    }
   }
+
   if (!userId) return [];
 
   const { data, error } = await supabase

@@ -5,9 +5,57 @@
  * and direct grant (ROPC) flow to keep the existing login page UI working.
  */
 import Keycloak from "keycloak-js";
+import { createClient } from "@supabase/supabase-js";
 
 // Check if window is defined (for SSR safety)
 const isBrowser = typeof window !== "undefined";
+
+let supabaseAuthFallback: any = null;
+
+function getSupabaseAuthFallback() {
+  if (!supabaseAuthFallback) {
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+    if (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) {
+      const client = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+        auth: {
+          storage: typeof window !== 'undefined' ? localStorage : undefined,
+          persistSession: true,
+          autoRefreshToken: true,
+        }
+      });
+      supabaseAuthFallback = client.auth;
+    }
+  }
+  return supabaseAuthFallback;
+}
+
+function isSelfHosted(): boolean {
+  if (typeof process !== 'undefined' && process.env && process.env.BACKEND_MODE) {
+    return process.env.BACKEND_MODE === 'self';
+  }
+  if (import.meta.env) {
+    if (import.meta.env.VITE_BACKEND_MODE) {
+      return import.meta.env.VITE_BACKEND_MODE === 'self';
+    }
+    if (import.meta.env.BACKEND_MODE) {
+      return import.meta.env.BACKEND_MODE === 'self';
+    }
+  }
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const isLovable = hostname.endsWith('.lovable.app') || 
+                     hostname.endsWith('.zite.so') || 
+                     hostname.endsWith('.lovable.dev');
+    if (isLovable) {
+      return false;
+    }
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return true;
+    }
+  }
+  return false;
+}
 
 let keycloak: Keycloak | null = null;
 
@@ -132,6 +180,12 @@ function getSessionSync() {
 
 export const auth = {
   signInWithPassword: async (args: { email?: string; password?: string }) => {
+    const isSelf = isSelfHosted();
+    if (!isSelf) {
+      const fallback = getSupabaseAuthFallback();
+      if (fallback) return fallback.signInWithPassword(args);
+    }
+
     if (!isBrowser) return { error: new Error("Not in browser") };
     await initKeycloak();
 
@@ -218,6 +272,12 @@ export const auth = {
   },
 
   signUp: async (args: any) => {
+    const isSelf = isSelfHosted();
+    if (!isSelf) {
+      const fallback = getSupabaseAuthFallback();
+      if (fallback) return fallback.signUp(args);
+    }
+
     if (!isBrowser) return { error: new Error("Not in browser") };
     await initKeycloak();
     await keycloak!.register({
@@ -227,6 +287,12 @@ export const auth = {
   },
 
   signOut: async () => {
+    const isSelf = isSelfHosted();
+    if (!isSelf) {
+      const fallback = getSupabaseAuthFallback();
+      if (fallback) return fallback.signOut();
+    }
+
     if (!isBrowser) return { error: null, redirected: false };
     window.localStorage.removeItem("kc_token");
     window.localStorage.removeItem("kc_refresh_token");
@@ -240,12 +306,24 @@ export const auth = {
   },
 
   getSession: async () => {
+    const isSelf = isSelfHosted();
+    if (!isSelf) {
+      const fallback = getSupabaseAuthFallback();
+      if (fallback) return fallback.getSession();
+    }
+
     if (!isBrowser) return { data: { session: null }, error: null };
     await initKeycloak();
     return { data: { session: getSessionSync() }, error: null };
   },
 
   getUser: async () => {
+    const isSelf = isSelfHosted();
+    if (!isSelf) {
+      const fallback = getSupabaseAuthFallback();
+      if (fallback) return fallback.getUser();
+    }
+
     if (!isBrowser) return { data: { user: null }, error: null };
     await initKeycloak();
     const session = getSessionSync();
@@ -253,6 +331,12 @@ export const auth = {
   },
 
   onAuthStateChange: (cb: (event: string, session: any) => void | Promise<void>) => {
+    const isSelf = isSelfHosted();
+    if (!isSelf) {
+      const fallback = getSupabaseAuthFallback();
+      if (fallback) return fallback.onAuthStateChange(cb);
+    }
+
     listeners.add(cb);
 
     if (isBrowser) {

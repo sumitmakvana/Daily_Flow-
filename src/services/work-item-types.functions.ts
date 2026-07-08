@@ -19,7 +19,7 @@ const PatchSchema = InputSchema.partial().extend({
 });
 
 const SELECT_COLS = `id, key, name, description, icon, color, sort_order,
-                     id_prefix, active, created_at, updated_at`;
+                     id_prefix, active, created_at`;
 
 export const listWorkItemTypesFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])

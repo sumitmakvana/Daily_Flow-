@@ -2,6 +2,33 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { auth as keycloakAuth } from '../backend/auth';
 
+export function isSelfHosted(): boolean {
+  if (typeof process !== 'undefined' && process.env && process.env.BACKEND_MODE) {
+    return process.env.BACKEND_MODE === 'self';
+  }
+  if (import.meta.env) {
+    if (import.meta.env.VITE_BACKEND_MODE) {
+      return import.meta.env.VITE_BACKEND_MODE === 'self';
+    }
+    if (import.meta.env.BACKEND_MODE) {
+      return import.meta.env.BACKEND_MODE === 'self';
+    }
+  }
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const isLovable = hostname.endsWith('.lovable.app') || 
+                     hostname.endsWith('.zite.so') || 
+                     hostname.endsWith('.lovable.dev');
+    if (isLovable) {
+      return false;
+    }
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return true;
+    }
+  }
+  return false;
+}
+
 function createSupabaseClient() {
   // Use import.meta.env for client-side (Vite build-time replacement)
   // Fall back to process.env for SSR (server-side rendering)
@@ -27,22 +54,24 @@ function createSupabaseClient() {
     global: {
       fetch: (url, options) => {
         if (typeof window !== 'undefined') {
-          const token = window.localStorage.getItem("kc_token");
-          if (token) {
-            console.log("Supabase Fetch Interceptor attaching token:", token);
-            options = options || {};
-            if (!options.headers) {
-              options.headers = {};
-            }
-            if (options.headers instanceof Headers) {
-              options.headers.set("Authorization", `Bearer ${token}`);
-            } else if (Array.isArray(options.headers)) {
-              options.headers = [...options.headers, ["Authorization", `Bearer ${token}`]];
-            } else {
-              options.headers = {
-                ...options.headers,
-                Authorization: `Bearer ${token}`,
-              };
+          if (isSelfHosted()) {
+            const token = window.localStorage.getItem("kc_token");
+            if (token) {
+              console.log("Supabase Fetch Interceptor attaching token:", token);
+              options = options || {};
+              if (!options.headers) {
+                options.headers = {};
+              }
+              if (options.headers instanceof Headers) {
+                options.headers.set("Authorization", `Bearer ${token}`);
+              } else if (Array.isArray(options.headers)) {
+                options.headers = [...options.headers, ["Authorization", `Bearer ${token}`]];
+              } else {
+                options.headers = {
+                  ...options.headers,
+                  Authorization: `Bearer ${token}`,
+                };
+              }
             }
           }
         }
@@ -58,25 +87,33 @@ let _supabase: ReturnType<typeof createSupabaseClient> | undefined;
 // import { supabase } from "@/integrations/supabase/client";
 export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>, {
   get(target, prop, receiver) {
+    const isSelf = isSelfHosted();
+
     if (prop === "auth") {
-      return keycloakAuth;
+      if (isSelf) {
+        return keycloakAuth;
+      }
     }
     if (prop === "channel") {
-      return (channelName: string) => {
-        const mockChannel = {
-          on: () => mockChannel,
-          subscribe: () => mockChannel,
-          unsubscribe: () => {},
-          presenceState: () => ({}),
-          send: async () => ({ status: "ok" }),
-          track: async () => ({ status: "ok" }),
-          untrack: async () => ({ status: "ok" }),
+      if (isSelf) {
+        return (channelName: string) => {
+          const mockChannel = {
+            on: () => mockChannel,
+            subscribe: () => mockChannel,
+            unsubscribe: () => {},
+            presenceState: () => ({}),
+            send: async () => ({ status: "ok" }),
+            track: async () => ({ status: "ok" }),
+            untrack: async () => ({ status: "ok" }),
+          };
+          return mockChannel;
         };
-        return mockChannel;
-      };
+      }
     }
     if (prop === "removeChannel") {
-      return () => {};
+      if (isSelf) {
+        return () => {};
+      }
     }
     if (!_supabase) _supabase = createSupabaseClient();
     return Reflect.get(_supabase, prop, receiver);
