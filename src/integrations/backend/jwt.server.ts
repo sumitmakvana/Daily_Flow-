@@ -27,6 +27,21 @@ export async function verifyBackendJwt(token: string): Promise<VerifiedClaims> {
   const mode = process.env.BACKEND_MODE ?? "supabase";
 
   if (mode === "self") {
+    // Debug token details before verification
+    try {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const header = JSON.parse(Buffer.from(parts[0], 'base64').toString('utf8'));
+        console.log('[DEBUG JWT] Header:', JSON.stringify(header));
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+        console.log('[DEBUG JWT] Payload (iss, sub, email):', JSON.stringify({ iss: payload.iss, sub: payload.sub, email: payload.email }));
+      } else {
+        console.log('[DEBUG JWT] Token is not a valid 3-part JWT:', token);
+      }
+    } catch (e: any) {
+      console.error('[DEBUG JWT] Failed to parse token header/payload:', e.message);
+    }
+
     // Self-hosted: Verify Keycloak tokens using JWKS endpoint
     const { jwtVerify } = await import("jose");
     const keycloakInternalUrl = process.env.KEYCLOAK_INTERNAL_URL ?? "http://keycloak:8080";
@@ -36,13 +51,18 @@ export async function verifyBackendJwt(token: string): Promise<VerifiedClaims> {
     const { createRemoteJWKSet } = await import("jose");
     const jwks = createRemoteJWKSet(new URL(jwksUrl));
 
-    const { payload } = await jwtVerify(token, jwks);
-    return {
-      ...payload,
-      sub: payload.sub,
-      email: payload.email as string,
-      role: "authenticated", // map all successfully authenticated users to the 'authenticated' role
-    } as VerifiedClaims;
+    try {
+      const { payload } = await jwtVerify(token, jwks);
+      return {
+        ...payload,
+        sub: payload.sub,
+        email: payload.email as string,
+        role: "authenticated", // map all successfully authenticated users to the 'authenticated' role
+      } as VerifiedClaims;
+    } catch (err: any) {
+      console.error('[DEBUG JWT] jwtVerify failed. error name:', err.name, 'code:', err.code, 'message:', err.message);
+      throw err;
+    }
   }
 
   // Default: delegate to Supabase Auth (unchanged behaviour).

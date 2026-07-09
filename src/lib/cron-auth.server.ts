@@ -12,9 +12,13 @@
  *  - ts > 5 min skew ⇒ expired
  *
  * Returns null on success, or a 401/429 Response on failure.
+ *
+ * NOTE: Uses adminQuery (direct PostgreSQL) instead of supabaseAdmin because
+ * public.cron_invocations has a deny_all RLS policy for anon/authenticated roles.
+ * Direct DB connection bypasses PostgREST/RLS and runs as the superuser role.
  */
 import { timingSafeEqual } from "node:crypto";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { adminQuery, adminSelect } from "@/integrations/postgres/query.server";
 
 const SKEW_MS = 5 * 60 * 1000; // ±5 min
 const RATE_WINDOW_MS = 30 * 1000; // 30s per route
@@ -50,31 +54,30 @@ export async function requireCronAuth(
 
   // Rate limit: any successful invocation for the same route within the window blocks.
   const since = new Date(Date.now() - RATE_WINDOW_MS).toISOString();
-  const { count } = await supabaseAdmin
-    .from("cron_invocations")
-    .select("nonce", { head: true, count: "exact" })
-    .eq("route", route)
-    .gte("ts", since);
-  if ((count ?? 0) > 0) {
+  const rows = await adminSelect<{ nonce: string }>(
+    `SELECT nonce FROM public.cron_invocations WHERE route = $1 AND ts >= $2 LIMIT 1`,
+    [route, since],
+  );
+  if (rows.length > 0) {
     return new Response("Rate limited", { status: 429 });
   }
 
-  // Replay protection: PK on nonce ⇒ second insert fails with 23505.
-  const { error } = await supabaseAdmin.from("cron_invocations").insert({
-    nonce: headerNonce,
-    route,
-    ts: new Date(tsMs).toISOString(),
-  });
-  if (error) {
-    if (error.code === "23505") return new Response("Replay detected", { status: 401 });
+  // Replay protection: PK on nonce => second insert fails with 23505.
+  try {
+    await adminQuery(
+      `INSERT INTO public.cron_invocations (nonce, route, ts) VALUES ($1, $2, $3)`,
+      [headerNonce, route, new Date(tsMs).toISOString()],
+    );
+  } catch (err: any) {
+    if (err?.code === "23505") return new Response("Replay detected", { status: 401 });
     return new Response("Auth store error", { status: 500 });
   }
 
   // Best-effort GC of old invocations (>24h).
-  void supabaseAdmin
-    .from("cron_invocations")
-    .delete()
-    .lt("ts", new Date(Date.now() - 86_400_000).toISOString());
+  void adminQuery(
+    `DELETE FROM public.cron_invocations WHERE ts < $1`,
+    [new Date(Date.now() - 86_400_000).toISOString()],
+  );
 
   return null;
 }

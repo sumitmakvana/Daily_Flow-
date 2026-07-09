@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Activity } from "lucide-react";
+
 import { toast } from "sonner";
 
 const loginSearchSchema = z.object({
@@ -79,12 +79,13 @@ function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <Activity className="h-5 w-5 text-primary" />
-          <div>
-            <h1 className="font-semibold">Execution OS</h1>
-            <p className="text-xs text-muted-foreground">Daily execution for operational teams</p>
-          </div>
+        <div className="flex flex-col items-center mb-6">
+          <img
+            src="/noesis-logo.png"
+            alt="Noesis Analytics"
+            className="h-16 w-auto object-contain mb-2"
+          />
+          <p className="text-xs text-muted-foreground">Daily execution for operational teams</p>
         </div>
         <form onSubmit={submit} className="space-y-3">
           {mode === "signup" && (

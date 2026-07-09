@@ -1,8 +1,14 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { ListChecks, LayoutDashboard, AlertOctagon, BarChart3, Bell, LogOut, Activity, Sun, CalendarRange, Grid3x3, Settings, ShieldAlert, Gauge, Sparkles, Brain, Download, Sunrise, TrendingUp } from "lucide-react";
+import { ListChecks, LayoutDashboard, AlertOctagon, BarChart3, Bell, LogOut, Activity, Sun, CalendarRange, Grid3x3, Settings, ShieldAlert, Gauge, Sparkles, Brain, Download, Sunrise, TrendingUp, MoreHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth, signOut } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -37,6 +43,14 @@ const managerNav = [
   { to: "/exports", icon: Download, label: "Exports" },
 ];
 
+const managerPrimaryNav = managerNav.slice(0, 7);
+const managerMoreNav = managerNav.slice(7);
+
+const adminMoreNav = [
+  { to: "/configure", icon: Settings, label: "Configure" },
+  { to: "/admin", icon: ShieldAlert, label: "Admin" },
+];
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isManager, isAdmin } = useAuth();
   const location = useLocation();
@@ -44,6 +58,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [unread, setUnread] = useState(0);
 
   const nav = isManager ? managerNav : memberNav;
+  const primaryNav = isManager ? managerPrimaryNav : nav;
+  const moreNav = isManager ? [...managerMoreNav, ...(isAdmin ? adminMoreNav : [])] : [];
+  const isActive = (to: string) => location.pathname === to || location.pathname.startsWith(to + "/");
+  const hasActiveMoreItem = moreNav.some((n) => isActive(n.to));
 
   useEffect(() => {
     if (!user) return;
@@ -77,14 +95,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col bg-background">
       {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
-        <div className="flex h-12 items-center px-3 md:px-4 gap-3">
-          <Link to="/today" className="flex items-center gap-2 font-semibold text-sm">
-            <Activity className="h-4 w-4 text-primary" />
-            <span>Execution OS</span>
+        <div className="flex h-12 min-w-0 items-center gap-2 px-3 md:px-4">
+          <Link to="/today" className="flex shrink-0 items-center gap-2">
+            <img src="/noesis-logo.png" alt="Noesis Analytics" className="h-7 max-w-28 object-contain" />
           </Link>
-          <nav className="hidden md:flex items-center gap-0.5 ml-4">
-            {nav.map((n) => {
-              const active = location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+          <nav className="ml-2 hidden min-w-0 flex-1 items-center gap-0.5 overflow-hidden md:flex">
+            {primaryNav.map((n) => {
+              const active = isActive(n.to);
               return (
                 <Link
                   key={n.to}
@@ -98,8 +115,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+            {moreNav.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-8 shrink-0 gap-1.5 px-2.5 text-xs font-medium",
+                      hasActiveMoreItem ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                    More
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-48">
+                  {moreNav.map((n) => {
+                    const active = isActive(n.to);
+                    return (
+                      <DropdownMenuItem key={n.to} asChild>
+                        <Link
+                          to={n.to}
+                          className={cn(
+                            "flex w-full items-center gap-2",
+                            active && "bg-accent text-accent-foreground",
+                          )}
+                        >
+                          <n.icon className="h-4 w-4" />
+                          {n.label}
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </nav>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             <SyncStatusBadge />
             <StreakChip className="mr-1" />
             {user && <NudgeCenter userId={user.id} />}
@@ -113,15 +166,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Badge>
               )}
             </Link>
-            {isAdmin && (
-              <>
+            {isAdmin && !isManager && (
+              <div className="hidden items-center gap-1 xl:flex">
                 <Link to="/configure">
                   <Button variant="ghost" size="sm" className="h-8 text-xs hidden md:inline-flex">Configure</Button>
                 </Link>
                 <Link to="/admin">
                   <Button variant="ghost" size="sm" className="h-8 text-xs hidden md:inline-flex">Admin</Button>
                 </Link>
-              </>
+              </div>
             )}
             <Link to="/settings/notifications" className="hidden md:inline-flex">
               <Button variant="ghost" size="icon" className="h-8 w-8" title="Notification settings">
@@ -166,3 +219,4 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
