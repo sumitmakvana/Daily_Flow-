@@ -48,8 +48,7 @@ ALTER TABLE public.notifications
 DROP INDEX IF EXISTS public.notifications_digest_uniq;
 DROP INDEX IF EXISTS public.notifications_digest_daily_uniq;
 CREATE UNIQUE INDEX IF NOT EXISTS notifications_dedupe_key_uniq
-  ON public.notifications (dedupe_key)
-  WHERE dedupe_key IS NOT NULL;
+  ON public.notifications (dedupe_key);
 
 -- =========================================================
 -- Phase G: FK manager_id ON DELETE SET NULL
