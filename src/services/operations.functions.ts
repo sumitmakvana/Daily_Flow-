@@ -79,7 +79,7 @@ export const listAllStreaksFn = createServerFn({ method: "GET" })
 
 // ----- teams ----------------------------------------------------------------
 
-const TEAM_COLS = `id, name, description, manager_id, created_at`;
+const TEAM_COLS = `id, name, parent_team_id, manager_id, created_at`;
 
 export const listTeamsFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -126,7 +126,7 @@ export const deleteTeamFn = createServerFn({ method: "POST" })
 
 // ----- projects -------------------------------------------------------------
 
-const PROJECT_COLS = `id, name, description, team_id, owner_id, status, created_at`;
+const PROJECT_COLS = `id, name, client, team_id, sla_days, status, created_at`;
 
 export const listProjectsFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
