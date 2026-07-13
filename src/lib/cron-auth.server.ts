@@ -66,24 +66,7 @@ export async function requireCronAuth(
     ts: new Date(tsMs).toISOString(),
   });
   if (error) {
-    const allKeys: string[] = [];
-    let curr: any = error;
-    while (curr && curr !== Object.prototype) {
-      Object.getOwnPropertyNames(curr).forEach(k => {
-        if (!allKeys.includes(k)) allKeys.push(k);
-      });
-      curr = Object.getPrototypeOf(curr);
-    }
-    const payload: Record<string, any> = {};
-    allKeys.forEach(k => {
-      try { payload[k] = (error as any)[k]; } catch {}
-    });
-    console.error("[cron-auth] Insert failed details:", {
-      type: typeof error,
-      constructor: error.constructor?.name,
-      keys: allKeys,
-      payload
-    });
+    console.error("[cron-auth] Insert to cron_invocations failed:", error);
     if (error.code === "23505") return new Response("Replay detected", { status: 401 });
     return new Response("Auth store error", { status: 500 });
   }
