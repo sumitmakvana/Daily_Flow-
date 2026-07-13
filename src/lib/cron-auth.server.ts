@@ -66,7 +66,7 @@ export async function requireCronAuth(
     ts: new Date(tsMs).toISOString(),
   });
   if (error) {
-    console.error("[cron-auth] Insert failed. String:", error.toString(), "Stack:", (error as Error).stack, "Raw:", error);
+    console.error("[cron-auth] Insert failed. Properties:", Object.getOwnPropertyNames(error), "Payload:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
     if (error.code === "23505") return new Response("Replay detected", { status: 401 });
     return new Response("Auth store error", { status: 500 });
   }
