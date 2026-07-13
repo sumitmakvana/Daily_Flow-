@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+    
+    <!-- Analytics Bars Gradient -->
+    <linearGradient id="barGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#1E40AF" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.8"/>
+    </linearGradient>
+
+    <!-- Task Checkmark Glow Gradient -->
+    <linearGradient id="checkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00E5FF" />
+      <stop offset="100%" stop-color="#00E676" />
+    </linearGradient>
+
+    <!-- Drop Shadow for the main task layer -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Icon Base Squircle -->
+  <rect x="32" y="32" width="448" height="448" rx="105" fill="url(#bgGrad)" />
+
+  <!-- Background Analytics Grid Lines (Subtle) -->
+  <g opacity="0.15" stroke="#FFFFFF" stroke-width="2" stroke-dasharray="8 8">
+    <line x1="120" y1="100" x2="120" y2="412" />
+    <line x1="200" y1="100" x2="200" y2="412" />
+    <line x1="280" y1="100" x2="280" y2="412" />
+    <line x1="360" y1="100" x2="360" y2="412" />
+    
+    <line x1="100" y1="180" x2="412" y2="180" />
+    <line x1="100" y1="260" x2="412" y2="260" />
+    <line x1="100" y1="340" x2="412" y2="340" />
+  </g>
+
+  <!-- Stylized Analytics Bars (Representing Data / Progress) -->
+  <g fill="url(#barGrad)">
+    <rect x="105" y="280" width="30" height="100" rx="6" />
+    <rect x="185" y="220" width="30" height="160" rx="6" />
+    <rect x="265" y="150" width="30" height="230" rx="6" />
+    <rect x="345" y="250" width="30" height="130" rx="6" />
+    <rect x="377" y="190" width="30" height="190" rx="6" opacity="0.5" />
+  </g>
+
+  <!-- The Core "Task Done" Checkmark integrated with an upward trend arrow -->
+  <path d="M130 270 L215 355 L390 150" 
+        fill="none" 
+        stroke="url(#checkGrad)" 
+        stroke-width="42" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"
+        filter="url(#dropShadow)" />
+
+  <!-- Decorative Accent: Analytics Node/Dot to highlight 'precision' -->
+  <circle cx="390" cy="150" r="12" fill="#FFFFFF" filter="url(#dropShadow)" />
+</svg>
