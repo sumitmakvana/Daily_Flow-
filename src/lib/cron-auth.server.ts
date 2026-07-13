@@ -66,7 +66,7 @@ export async function requireCronAuth(
     ts: new Date(tsMs).toISOString(),
   });
   if (error) {
-    console.error("[cron-auth] Insert to cron_invocations failed:", error);
+    console.error("[cron-auth] Insert to cron_invocations failed. Code:", error.code, "Message:", error.message, "Details:", error.details);
     if (error.code === "23505") return new Response("Replay detected", { status: 401 });
     return new Response("Auth store error", { status: 500 });
   }
