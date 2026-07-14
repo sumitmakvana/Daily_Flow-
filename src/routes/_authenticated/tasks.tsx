@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { TaskCard } from "@/components/TaskCard";
@@ -16,6 +16,9 @@ import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { downloadCSV, toCSV } from "@/lib/csv";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    highlightId: typeof search.highlightId === "string" ? search.highlightId : undefined,
+  }),
   component: TasksPage,
 });
 
@@ -23,6 +26,10 @@ const ALL = "__all";
 
 function TasksPage() {
   const { user, isManager } = useAuth();
+  const { highlightId } = Route.useSearch();
+  const navigate = useNavigate({ from: "/tasks" });
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
@@ -72,13 +79,41 @@ function TasksPage() {
   useEffect(() => { load(); }, []);
   useRealtimeTasks(load, "tasks-page-rt");
 
-  const filtered = useMemo(() => tasks.filter((t) => {
-    if (status !== ALL && t.status !== status) return false;
-    if (priority !== ALL && t.priority !== priority) return false;
-    if (assignee !== ALL && t.assigned_to !== assignee) return false;
-    if (q && !`${t.task_code} ${t.task_name} ${t.client ?? ""} ${t.project_name ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
-    return true;
-  }), [tasks, q, status, priority, assignee]);
+  // Sort: logged-in user's tasks first, then everyone else's
+  const filtered = useMemo(() => {
+    const base = tasks.filter((t) => {
+      if (status !== ALL && t.status !== status) return false;
+      if (priority !== ALL && t.priority !== priority) return false;
+      if (assignee !== ALL && t.assigned_to !== assignee) return false;
+      if (q && !`${t.task_code} ${t.task_name} ${t.client ?? ""} ${t.project_name ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
+      return true;
+    });
+    // Put current user's tasks at the top
+    if (user) {
+      return [...base].sort((a, b) => {
+        const aIsMe = a.assigned_to === user.id ? 0 : 1;
+        const bIsMe = b.assigned_to === user.id ? 0 : 1;
+        return aIsMe - bIsMe;
+      });
+    }
+    return base;
+  }, [tasks, q, status, priority, assignee, user]);
+
+  // Scroll to and briefly highlight the task referenced from a notification
+  useEffect(() => {
+    if (!highlightId || filtered.length === 0) return;
+    const el = document.getElementById(`task-card-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-primary", "ring-offset-2");
+      const t = setTimeout(() => {
+        el.classList.remove("ring-2", "ring-primary", "ring-offset-2");
+        // Remove highlightId from the URL so refresh doesn't re-scroll
+        navigate({ search: {} as never, replace: true });
+      }, 2500);
+      return () => clearTimeout(t);
+    }
+  }, [highlightId, filtered]);
 
   if (!user) return null;
 
@@ -128,15 +163,16 @@ function TasksPage() {
       <div className="text-xs text-muted-foreground">{filtered.length} tasks</div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
         {filtered.map((t) => (
-          <TaskCard
-            key={t.id}
-            task={t}
-            assignee={profiles.find((p) => p.id === t.assigned_to)}
-            profiles={profiles}
-            userId={user.id}
-            canManage={isManager}
-            onChanged={load}
-          />
+          <div key={t.id} id={`task-card-${t.id}`} ref={highlightId === t.id ? highlightRef : undefined} className="rounded-lg transition-shadow duration-300">
+            <TaskCard
+              task={t}
+              assignee={profiles.find((p) => p.id === t.assigned_to)}
+              profiles={profiles}
+              userId={user.id}
+              canManage={isManager}
+              onChanged={load}
+            />
+          </div>
         ))}
         {filtered.length === 0 && <p className="text-sm text-muted-foreground italic">No tasks match.</p>}
       </div>

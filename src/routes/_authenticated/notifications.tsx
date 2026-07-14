@@ -1,10 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bell, Check } from "lucide-react";
+import { Bell, Check, ExternalLink } from "lucide-react";
 import { formatRelative } from "@/lib/format";
 import type { AppNotification } from "@/lib/types";
 
@@ -14,6 +14,7 @@ export const Route = createFileRoute("/_authenticated/notifications")({
 
 function NotifPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<AppNotification[]>([]);
 
   const load = async () => {
@@ -30,6 +31,22 @@ function NotifPage() {
     load();
   };
 
+  const handleClick = async (n: AppNotification) => {
+    // Mark this single notification as read
+    if (!n.read_at) {
+      await supabase
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() } as never)
+        .eq("id", n.id);
+      load();
+    }
+
+    // Navigate to the relevant task if task_id is set
+    if (n.task_id) {
+      navigate({ to: "/tasks", search: { highlightId: n.task_id } });
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto px-3 md:px-4 py-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -38,13 +55,23 @@ function NotifPage() {
       </div>
       <div className="space-y-2">
         {items.map((n) => (
-          <Card key={n.id} className={`p-3 ${!n.read_at ? "border-primary/40" : ""}`}>
+          <Card
+            key={n.id}
+            className={`p-3 transition-colors ${!n.read_at ? "border-primary/40" : ""} ${n.task_id ? "cursor-pointer hover:bg-accent/50" : ""}`}
+            onClick={() => handleClick(n)}
+          >
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="font-medium text-sm">{n.title}</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm flex items-center gap-1.5">
+                  {n.title}
+                  {n.task_id && <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                </div>
                 {n.body && <div className="text-xs text-muted-foreground mt-0.5">{n.body}</div>}
               </div>
-              <span className="text-[10px] text-muted-foreground shrink-0">{formatRelative(n.created_at)}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                {!n.read_at && <span className="h-2 w-2 rounded-full bg-primary shrink-0" />}
+                <span className="text-[10px] text-muted-foreground">{formatRelative(n.created_at)}</span>
+              </div>
             </div>
           </Card>
         ))}
