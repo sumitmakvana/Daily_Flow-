@@ -60,16 +60,16 @@ export function CommentsPanel({
     setBusy(true);
     try {
       const mentionUserIds = resolveMentions(body, profiles);
-      await commentsService.add({
+      const created = await commentsService.add({
         workItemId,
         userId,
         body,
         parentId: replyTo,
         mentionUserIds,
       });
+      setItems((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]));
       setBody("");
       setReplyTo(null);
-      await load();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {

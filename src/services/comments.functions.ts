@@ -8,7 +8,7 @@ export interface CommentWithMentionsRow extends Comment {
   mentions: string[];
 }
 
-export const listCommentsFn = createServerFn({ method: "GET" })
+export const listCommentsFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { workItemId: string }) =>
     z.object({ workItemId: z.string() }).parse(d),
@@ -69,6 +69,7 @@ export const addCommentFn = createServerFn({ method: "POST" })
       const mentions = Array.from(new Set(data.mentionUserIds ?? [])).filter(
         (u) => u !== context.userId,
       );
+      let savedMentions = mentions;
       if (mentions.length > 0) {
         try {
           await client.query(
@@ -79,9 +80,10 @@ export const addCommentFn = createServerFn({ method: "POST" })
         } catch (err) {
           // Best-effort: trigger fires notifications; failure shouldn't undo comment.
           console.warn("[comments.add] mention insert failed:", (err as Error).message);
+          savedMentions = [];
         }
       }
-      return created;
+      return { ...created, mentions: savedMentions };
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return row as any;

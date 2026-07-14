@@ -29,7 +29,7 @@ export const commentsService = {
     body: string;
     parentId?: string | null;
     mentionUserIds?: string[];
-  }): Promise<Comment> {
+  }): Promise<CommentWithMentions> {
     void opts.userId;
     return (await addCommentFn({
       data: {
@@ -38,7 +38,7 @@ export const commentsService = {
         parentId: opts.parentId ?? null,
         mentionUserIds: opts.mentionUserIds,
       },
-    })) as unknown as Comment;
+    })) as unknown as CommentWithMentions;
   },
 
   async edit(commentId: string, body: string): Promise<void> {
