@@ -26,18 +26,40 @@ function createSupabaseClient() {
     },
     global: {
       fetch: (url, options) => {
+        options = options || {};
+        if (!options.headers) {
+          options.headers = {};
+        }
+
+        // Prevent browser and proxy caching of database queries
+        if (options.headers instanceof Headers) {
+          options.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+          options.headers.set("Pragma", "no-cache");
+          options.headers.set("Expires", "0");
+        } else if (Array.isArray(options.headers)) {
+          options.headers = [
+            ...options.headers,
+            ["Cache-Control", "no-cache, no-store, must-revalidate"],
+            ["Pragma", "no-cache"],
+            ["Expires", "0"],
+          ];
+        } else {
+          options.headers = {
+            ...options.headers,
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+          };
+        }
+
         if (typeof window !== 'undefined') {
           const token = window.localStorage.getItem("kc_token");
           if (token) {
             console.log("Supabase Fetch Interceptor attaching token:", token);
-            options = options || {};
-            if (!options.headers) {
-              options.headers = {};
-            }
             if (options.headers instanceof Headers) {
               options.headers.set("Authorization", `Bearer ${token}`);
             } else if (Array.isArray(options.headers)) {
-              options.headers = [...options.headers, ["Authorization", `Bearer ${token}`]];
+              options.headers.push(["Authorization", `Bearer ${token}`]);
             } else {
               options.headers = {
                 ...options.headers,

@@ -64,6 +64,25 @@ export function TaskFormDialog({
     dynamicFieldsService.listDefs(form.type_id).then(setFieldDefs).catch(() => setFieldDefs([]));
   }, [open, form.type_id]);
 
+  // Clean up any custom_fields values that are not in the new fieldDefs to prevent "Unknown field" errors
+  useEffect(() => {
+    if (!open) return;
+    const allowed = new Set(fieldDefs.map((d) => d.key));
+    const current = (form.custom_fields ?? {}) as Record<string, unknown>;
+    const next: Record<string, unknown> = {};
+    let changed = false;
+    for (const [k, v] of Object.entries(current)) {
+      if (allowed.has(k)) {
+        next[k] = v;
+      } else {
+        changed = true;
+      }
+    }
+    if (changed) {
+      setForm((f) => ({ ...f, custom_fields: next }));
+    }
+  }, [fieldDefs, open]);
+
   const handleSave = async () => {
     if (!form.task_name?.trim()) {
       toast.error("Task name required");
