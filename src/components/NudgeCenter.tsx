@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,7 +37,7 @@ export function NudgeCenter({ userId }: { userId: string }) {
     <Popover open={open} onOpenChange={(v) => { setOpen(v); if (v) items.filter((n) => !n.read_at).forEach((n) => nudgesService.markRead(n.id)); }}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8 relative" title="Nudges">
-          <Bell className="h-4 w-4" />
+          <Sparkles className="h-4 w-4 text-amber-500" />
           {unread > 0 && (
             <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] bg-priority-high text-white border-0">
               {unread}
