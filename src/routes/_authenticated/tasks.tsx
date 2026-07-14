@@ -16,7 +16,7 @@ import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { downloadCSV, toCSV } from "@/lib/csv";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { highlightId?: string } => ({
     highlightId: typeof search.highlightId === "string" ? search.highlightId : undefined,
   }),
   component: TasksPage,
