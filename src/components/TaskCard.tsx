@@ -110,13 +110,12 @@ export function TaskCard({
                 <MoreHorizontal className="h-5 w-5 md:h-4 md:w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="w-52 max-h-64 overflow-y-auto">
               {canManage && (
                 <>
                   <DropdownMenuLabel>Transfer to</DropdownMenuLabel>
                   {profiles
                     .filter((p) => p.id !== task.assigned_to)
-                    .slice(0, 8)
                     .map((p) => (
                       <DropdownMenuItem key={p.id} onClick={() => transfer(p.id)}>
                         <Send className="mr-2 h-3.5 w-3.5" /> {p.display_name}
