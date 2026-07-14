@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { TaskCard } from "@/components/TaskCard";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Upload, Download } from "lucide-react";
+import { Plus, Search, Upload, Download, User, Users } from "lucide-react";
 import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task } from "@/lib/types";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { downloadCSV, toCSV } from "@/lib/csv";
@@ -28,7 +28,6 @@ function TasksPage() {
   const { user, isManager } = useAuth();
   const { highlightId } = Route.useSearch();
   const navigate = useNavigate({ from: "/tasks" });
-  const highlightRef = useRef<HTMLDivElement | null>(null);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -39,6 +38,9 @@ function TasksPage() {
   const [assignee, setAssignee] = useState<string>(ALL);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+
+  // Highlight state — React state (not classList) so Tailwind v4 includes the classes
+  const [activeHighlight, setActiveHighlight] = useState<string | null>(null);
 
   const emailOf = (id: string | null) => (id ? emails[id] ?? "" : "");
 
@@ -66,8 +68,6 @@ function TasksPage() {
     const [{ data: t }, { data: p }, { data: e }] = await Promise.all([
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("id,display_name,avatar_url"),
-      // profile_emails is a security_invoker view that only returns rows the
-      // caller is allowed to see (self + managers/admins see all).
       supabase.from("profile_emails" as never).select("id,email") as never,
     ]);
     setTasks((t ?? []) as Task[]);
@@ -79,36 +79,34 @@ function TasksPage() {
   useEffect(() => { load(); }, []);
   useRealtimeTasks(load, "tasks-page-rt");
 
-  // Sort: logged-in user's tasks first, then everyone else's
-  const filtered = useMemo(() => {
-    const base = tasks.filter((t) => {
-      if (status !== ALL && t.status !== status) return false;
-      if (priority !== ALL && t.priority !== priority) return false;
-      if (assignee !== ALL && t.assigned_to !== assignee) return false;
-      if (q && !`${t.task_code} ${t.task_name} ${t.client ?? ""} ${t.project_name ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
-      return true;
-    });
-    // Put current user's tasks at the top
-    if (user) {
-      return [...base].sort((a, b) => {
-        const aIsMe = a.assigned_to === user.id ? 0 : 1;
-        const bIsMe = b.assigned_to === user.id ? 0 : 1;
-        return aIsMe - bIsMe;
-      });
-    }
-    return base;
-  }, [tasks, q, status, priority, assignee, user]);
+  // Base filtered list (no sorting yet)
+  const filtered = useMemo(() => tasks.filter((t) => {
+    if (status !== ALL && t.status !== status) return false;
+    if (priority !== ALL && t.priority !== priority) return false;
+    if (assignee !== ALL && t.assigned_to !== assignee) return false;
+    if (q && !`${t.task_code} ${t.task_name} ${t.client ?? ""} ${t.project_name ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  }), [tasks, q, status, priority, assignee]);
 
-  // Scroll to and briefly highlight the task referenced from a notification
+  // Split into two sections: my tasks vs team tasks
+  const myTasks = useMemo(
+    () => filtered.filter((t) => t.assigned_to === user?.id),
+    [filtered, user?.id]
+  );
+  const teamTasks = useMemo(
+    () => filtered.filter((t) => t.assigned_to !== user?.id),
+    [filtered, user?.id]
+  );
+
+  // Scroll + highlight task when coming from a notification click
   useEffect(() => {
     if (!highlightId || filtered.length === 0) return;
     const el = document.getElementById(`task-card-${highlightId}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("ring-2", "ring-primary", "ring-offset-2");
+      setActiveHighlight(highlightId);
       const t = setTimeout(() => {
-        el.classList.remove("ring-2", "ring-primary", "ring-offset-2");
-        // Remove highlightId from the URL so refresh doesn't re-scroll
+        setActiveHighlight(null);
         navigate({ search: {} as never, replace: true });
       }, 2500);
       return () => clearTimeout(t);
@@ -117,8 +115,31 @@ function TasksPage() {
 
   if (!user) return null;
 
+  const renderTaskCard = (t: Task) => (
+    <div
+      key={t.id}
+      id={`task-card-${t.id}`}
+      className={[
+        "rounded-lg transition-all duration-300",
+        activeHighlight === t.id
+          ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+          : "",
+      ].join(" ")}
+    >
+      <TaskCard
+        task={t}
+        assignee={profiles.find((p) => p.id === t.assigned_to)}
+        profiles={profiles}
+        userId={user.id}
+        canManage={isManager}
+        onChanged={load}
+      />
+    </div>
+  );
+
   return (
     <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Tasks</h1>
         <div className="flex items-center gap-1.5">
@@ -132,6 +153,7 @@ function TasksPage() {
         </div>
       </div>
 
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -160,22 +182,39 @@ function TasksPage() {
         </Select>
       </div>
 
-      <div className="text-xs text-muted-foreground">{filtered.length} tasks</div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-        {filtered.map((t) => (
-          <div key={t.id} id={`task-card-${t.id}`} ref={highlightId === t.id ? highlightRef : undefined} className="rounded-lg transition-shadow duration-300">
-            <TaskCard
-              task={t}
-              assignee={profiles.find((p) => p.id === t.assigned_to)}
-              profiles={profiles}
-              userId={user.id}
-              canManage={isManager}
-              onChanged={load}
-            />
+      {/* My Tasks Section */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <User className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold text-primary">My Tasks</h2>
+          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{myTasks.length}</span>
+        </div>
+        {myTasks.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {myTasks.map(renderTaskCard)}
           </div>
-        ))}
-        {filtered.length === 0 && <p className="text-sm text-muted-foreground italic">No tasks match.</p>}
+        ) : (
+          <p className="text-sm text-muted-foreground italic pl-6">No tasks assigned to you.</p>
+        )}
       </div>
+
+      {/* Team Tasks Section */}
+      {teamTasks.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 pt-2 border-t border-border">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-muted-foreground">Team Tasks</h2>
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{teamTasks.length}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {teamTasks.map(renderTaskCard)}
+          </div>
+        </div>
+      )}
+
+      {filtered.length === 0 && (
+        <p className="text-sm text-muted-foreground italic">No tasks match.</p>
+      )}
 
       <TaskFormDialog open={dialogOpen} onOpenChange={setDialogOpen} userId={user.id} onSaved={load} />
       <CSVImportDialog open={importOpen} onOpenChange={setImportOpen} profiles={profiles} userId={user.id} onDone={load} />
