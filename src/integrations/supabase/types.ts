@@ -2071,6 +2071,8 @@ export type Database = {
           sla_default_days: number
           updated_at: string
           workdays: number[]
+          morning_digest_time: string
+          evening_digest_time: string
         }
         Insert: {
           daily_capacity_hours?: number
@@ -2078,6 +2080,8 @@ export type Database = {
           sla_default_days?: number
           updated_at?: string
           workdays?: number[]
+          morning_digest_time?: string
+          evening_digest_time?: string
         }
         Update: {
           daily_capacity_hours?: number
@@ -2085,6 +2089,8 @@ export type Database = {
           sla_default_days?: number
           updated_at?: string
           workdays?: number[]
+          morning_digest_time?: string
+          evening_digest_time?: string
         }
         Relationships: []
       }

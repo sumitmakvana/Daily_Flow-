@@ -62,8 +62,10 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
   const [initialized, setInitialized] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const { data: { subscription } } = auth.onAuthStateChange(() => {
       setInitialized(true);
       router.invalidate();
@@ -94,7 +96,7 @@ function RootComponent() {
     }
   }, []);
 
-  if (!initialized && typeof window !== "undefined") {
+  if (!initialized && mounted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
