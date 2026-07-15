@@ -36,9 +36,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
   
-  // Do not intercept external requests, auth routes, or /api endpoints
+  // Do not intercept external requests, auth routes, API endpoints, or database queries
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/api') || url.pathname.includes('/auth/')) return;
+  if (
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/rest') ||
+    url.pathname.includes('/auth/')
+  ) return;
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
