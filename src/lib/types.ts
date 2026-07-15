@@ -203,6 +203,8 @@ export interface WorkSettings {
   workdays: number[];
   daily_capacity_hours: number;
   sla_default_days: number;
+  morning_digest_time: string;
+  evening_digest_time: string;
 }
 
 export interface UserStreak {

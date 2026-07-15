@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_authenticated/settings/notifications")({
 });
 
 function NotifPrefsPage() {
-  const { user } = useAuth();
+  const { user, isManager } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -44,6 +44,27 @@ function NotifPrefsPage() {
   return (
     <div className="max-w-xl mx-auto px-3 md:px-4 py-4 space-y-4">
       <h1 className="text-xl font-semibold">Notification preferences</h1>
+
+      {isManager && (
+        <div className="flex gap-2 border-b border-border pb-2">
+          <Link
+            to="/settings/notifications"
+            className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+            activeProps={{ className: "bg-primary text-primary-foreground font-semibold" }}
+            inactiveProps={{ className: "text-muted-foreground hover:text-foreground hover:bg-accent/40" }}
+          >
+            Notifications
+          </Link>
+          <Link
+            to="/settings/operations"
+            className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+            activeProps={{ className: "bg-primary text-primary-foreground font-semibold" }}
+            inactiveProps={{ className: "text-muted-foreground hover:text-foreground hover:bg-accent/40" }}
+          >
+            Operations
+          </Link>
+        </div>
+      )}
 
       <Card className="p-3 space-y-3">
         <Row label="Morning digest" description="One summary in the morning instead of per-event pings.">

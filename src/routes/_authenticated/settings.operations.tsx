@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,27 @@ function OpsSettings() {
     <div className="max-w-3xl mx-auto px-3 md:px-4 py-4 space-y-5">
       <h1 className="text-xl font-semibold">Operations settings</h1>
 
+      {isManager && (
+        <div className="flex gap-2 border-b border-border pb-2">
+          <Link
+            to="/settings/notifications"
+            className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+            activeProps={{ className: "bg-primary text-primary-foreground font-semibold" }}
+            inactiveProps={{ className: "text-muted-foreground hover:text-foreground hover:bg-accent/40" }}
+          >
+            Notifications
+          </Link>
+          <Link
+            to="/settings/operations"
+            className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+            activeProps={{ className: "bg-primary text-primary-foreground font-semibold" }}
+            inactiveProps={{ className: "text-muted-foreground hover:text-foreground hover:bg-accent/40" }}
+          >
+            Operations
+          </Link>
+        </div>
+      )}
+
       <Card className="p-4 space-y-3">
         <h2 className="text-sm font-semibold">Work settings</h2>
         <div className="grid grid-cols-2 gap-3">
@@ -54,6 +75,26 @@ function OpsSettings() {
               type="number" min="1" max="60"
               value={settings.sla_default_days}
               onChange={(e) => setSettings({ ...settings, sla_default_days: Number(e.target.value) })}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Morning digest time (5m intervals)</Label>
+            <Input
+              type="time" step="300"
+              className="[color-scheme:dark] text-foreground bg-background"
+              value={settings.morning_digest_time ?? "11:00"}
+              onChange={(e) => setSettings({ ...settings, morning_digest_time: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Evening digest time (5m intervals)</Label>
+            <Input
+              type="time" step="300"
+              className="[color-scheme:dark] text-foreground bg-background"
+              value={settings.evening_digest_time ?? "18:00"}
+              onChange={(e) => setSettings({ ...settings, evening_digest_time: e.target.value })}
             />
           </div>
         </div>
@@ -81,6 +122,8 @@ function OpsSettings() {
             daily_capacity_hours: settings.daily_capacity_hours,
             sla_default_days: settings.sla_default_days,
             workdays: settings.workdays,
+            morning_digest_time: settings.morning_digest_time ?? "11:00",
+            evening_digest_time: settings.evening_digest_time ?? "18:00",
           });
           toast.success("Settings saved");
         }}>Save</Button>

@@ -17,7 +17,15 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         const today = new Date().toISOString().slice(0, 10);
         const todayMs = new Date(today).getTime();
 
-        const [{ data: profiles }, { data: tasks }, { data: prefs }] = await Promise.all([
+        // Get current time in Indian Standard Time (IST) formatted as HH:MM
+        const currentLocalTime = new Date().toLocaleTimeString("en-US", {
+          timeZone: "Asia/Kolkata",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+
+        const [{ data: profiles }, { data: tasks }, { data: prefs }, { data: settings }] = await Promise.all([
           supabaseAdmin
             .from("profiles")
             .select("id, display_name, manager_id, is_active")
@@ -26,7 +34,17 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             .from("tasks")
             .select("id, task_code, task_name, assigned_to, status, priority, due_date, completed_at"),
           supabaseAdmin.from("notification_prefs").select("user_id, digest_enabled"),
+          supabaseAdmin.from("work_settings").select("evening_digest_time").eq("id", 1).maybeSingle(),
         ]);
+
+        const eveningTime = settings?.evening_digest_time ?? "18:00";
+        if (currentLocalTime !== eveningTime) {
+          return Response.json({
+            ok: true,
+            skipped: true,
+            reason: `Current time ${currentLocalTime} does not match configured evening digest time ${eveningTime}`,
+          });
+        }
 
         const optedOut = new Set(
           (prefs ?? []).filter((p) => p.digest_enabled === false).map((p) => p.user_id),

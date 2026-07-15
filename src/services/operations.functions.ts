@@ -9,11 +9,25 @@ export const getWorkSettingsFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const row = await withUser(context.userId, async (client) => {
-      const res = await client.query(
-        `SELECT id, workdays, daily_capacity_hours, sla_default_days
-           FROM public.work_settings WHERE id = 1`,
-      );
-      return res.rows[0] ?? null;
+      try {
+        const res = await client.query(
+          `SELECT id, workdays, daily_capacity_hours, sla_default_days, morning_digest_time, evening_digest_time
+             FROM public.work_settings WHERE id = 1`,
+        );
+        return res.rows[0] ?? null;
+      } catch (err) {
+        // Fallback if morning_digest_time or evening_digest_time columns do not exist yet in database
+        const res = await client.query(
+          `SELECT id, workdays, daily_capacity_hours, sla_default_days
+             FROM public.work_settings WHERE id = 1`,
+        );
+        const data = res.rows[0] ?? null;
+        if (data) {
+          data.morning_digest_time = "11:00";
+          data.evening_digest_time = "18:00";
+        }
+        return data;
+      }
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return row as any;
