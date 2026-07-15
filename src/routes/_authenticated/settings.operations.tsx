@@ -8,6 +8,61 @@ import { useAuth } from "@/hooks/use-auth";
 import { teamsService, projectsService, workSettingsService, holidaysService } from "@/services/operations";
 import type { Team, Project, WorkSettings, HolidayCalendar } from "@/lib/types";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+function TimeDropdownPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [hStr, mStr] = (value || "12:00").split(":");
+  let mVal = parseInt(mStr, 10) || 0;
+  mVal = Math.round(mVal / 5) * 5;
+  if (mVal === 60) mVal = 55;
+  const currentHour = hStr || "12";
+  const currentMinute = String(mVal).padStart(2, "0");
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1">
+      <Select value={currentHour} onValueChange={(h) => onChange(`${h}:${currentMinute}`)}>
+        <SelectTrigger className="w-[75px] bg-background text-foreground [color-scheme:dark]">
+          <SelectValue placeholder="HH" />
+        </SelectTrigger>
+        <SelectContent className="bg-popover border border-border max-h-[200px]">
+          {hours.map((h) => (
+            <SelectItem key={h} value={h}>
+              {h}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <span className="text-muted-foreground font-semibold">:</span>
+      <Select value={currentMinute} onValueChange={(m) => onChange(`${currentHour}:${m}`)}>
+        <SelectTrigger className="w-[75px] bg-background text-foreground [color-scheme:dark]">
+          <SelectValue placeholder="MM" />
+        </SelectTrigger>
+        <SelectContent className="bg-popover border border-border max-h-[200px]">
+          {minutes.map((m) => (
+            <SelectItem key={m} value={m}>
+              {m}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/settings/operations")({
   component: OpsSettings,
@@ -80,21 +135,17 @@ function OpsSettings() {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Morning digest time (5m intervals)</Label>
-            <Input
-              type="time" step="300"
-              className="[color-scheme:dark] text-foreground bg-background"
+            <Label className="text-xs text-muted-foreground">Morning digest time</Label>
+            <TimeDropdownPicker
               value={settings.morning_digest_time ?? "11:00"}
-              onChange={(e) => setSettings({ ...settings, morning_digest_time: e.target.value })}
+              onChange={(val) => setSettings({ ...settings, morning_digest_time: val })}
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Evening digest time (5m intervals)</Label>
-            <Input
-              type="time" step="300"
-              className="[color-scheme:dark] text-foreground bg-background"
+            <Label className="text-xs text-muted-foreground">Evening digest time</Label>
+            <TimeDropdownPicker
               value={settings.evening_digest_time ?? "18:00"}
-              onChange={(e) => setSettings({ ...settings, evening_digest_time: e.target.value })}
+              onChange={(val) => setSettings({ ...settings, evening_digest_time: val })}
             />
           </div>
         </div>
