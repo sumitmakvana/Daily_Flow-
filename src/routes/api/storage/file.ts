@@ -56,10 +56,13 @@ export const Route = createFileRoute("/api/storage/file")({
             return new Response("File has no binary data stored", { status: 404 });
           }
 
-          return new Response(bytes, {
+          // Convert Node.js Buffer to standard Web Uint8Array for serialization
+          const binary = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+          return new Response(binary, {
             headers: {
               "Content-Type": row.file_type || "application/octet-stream",
-              "Content-Length": String(bytes.length),
+              "Content-Length": String(binary.length),
               "Content-Disposition": `inline; filename="${encodeURIComponent(row.file_name || "file")}"`,
               "Cache-Control": "private, max-age=3600",
             },
