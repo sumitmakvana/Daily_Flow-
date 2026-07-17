@@ -18,6 +18,8 @@
  */
 import { get, set, del, keys } from "idb-keyval";
 import { supabase } from "@/integrations/supabase/client";
+import { storage } from "@/integrations/backend/storage";
+import { insertAttachmentMetaFn } from "@/services/attachments.functions";
 
 export type QueueOpKind =
   | "task.create"
@@ -176,20 +178,23 @@ async function executeOp(op: QueueOp): Promise<void> {
       if (!op.blob || !op.workItemId) throw new Error("photo.upload missing blob/workItemId");
       const safeName = (op.blobName ?? "photo.jpg").replace(/[^\w.\-]+/g, "_").slice(0, 200);
       const path = `${op.workItemId}/${crypto.randomUUID()}-${safeName}`;
-      const { error: upErr } = await supabase.storage
-        .from("work-item-files")
-        .upload(path, op.blob, { contentType: op.blobType ?? "image/jpeg", upsert: false });
+      const { error: upErr } = await storage.upload(path, op.blob, {
+        contentType: op.blobType ?? "image/jpeg",
+        upsert: false,
+      });
       if (upErr) throw upErr;
-      const { error: insErr } = await supabase.from("attachments").insert({
-        work_item_id: op.workItemId,
-        file_name: safeName,
-        file_size: op.blob.size,
-        file_type: op.blobType ?? "image/jpeg",
-        storage_path: path,
-        uploaded_by: op.userId,
-      } as never);
-      if (insErr) {
-        await supabase.storage.from("work-item-files").remove([path]);
+      try {
+        await insertAttachmentMetaFn({
+          data: {
+            workItemId: op.workItemId,
+            fileName: safeName,
+            fileSize: op.blob.size,
+            fileType: op.blobType ?? "image/jpeg",
+            storagePath: path,
+          },
+        });
+      } catch (insErr) {
+        await storage.remove([path]);
         throw insErr;
       }
       return;
