@@ -7,6 +7,7 @@
  * Path convention: `{work_item_id}/{uuid}-{filename}`.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { storage } from "@/integrations/backend/storage";
 import type { Attachment } from "@/lib/types";
 import {
   listAttachmentsFn,
@@ -45,7 +46,7 @@ export const attachmentsService = {
     }
     const safeName = file.name.replace(/[^\w.\-]+/g, "_").slice(0, 200);
     const path = `${workItemId}/${crypto.randomUUID()}-${safeName}`;
-    const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+    const { error: upErr } = await storage.upload(path, file, {
       contentType: file.type || "application/octet-stream",
       upsert: false,
     });
@@ -63,21 +64,20 @@ export const attachmentsService = {
       return row;
     } catch (err) {
       // best-effort cleanup of the orphaned object
-      await supabase.storage.from(BUCKET).remove([path]);
+      await storage.remove([path]);
       throw err;
     }
   },
 
   async download(att: Attachment): Promise<string> {
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(att.storage_path, 300);
+    const { data, error } = await storage.signedUrl(att.storage_path, 300);
     if (error) throw error;
+    if (!data?.signedUrl) throw new Error("Could not retrieve download URL");
     return data.signedUrl;
   },
 
   async remove(att: Attachment): Promise<void> {
     await deleteAttachmentMetaFn({ data: { id: att.id } });
-    await supabase.storage.from(BUCKET).remove([att.storage_path]);
+    await storage.remove([att.storage_path]);
   },
 };

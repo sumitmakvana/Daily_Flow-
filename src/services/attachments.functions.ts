@@ -53,6 +53,19 @@ export const insertAttachmentMetaFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const row = await withUser(context.userId, async (client) => {
+      // 1. Check if the row was already created by the upload step
+      const existing = await client.query<Attachment>(
+        `SELECT id, work_item_id, file_name, file_size, file_type,
+                storage_path, uploaded_by, uploaded_at
+         FROM public.attachments
+         WHERE storage_path = $1`,
+        [data.storagePath]
+      );
+      if (existing.rows.length > 0) {
+        return existing.rows[0];
+      }
+
+      // 2. Otherwise insert a new row (e.g. for Supabase fallback mode)
       const res = await client.query<Attachment>(
         `INSERT INTO public.attachments
             (work_item_id, file_name, file_size, file_type, storage_path, uploaded_by)

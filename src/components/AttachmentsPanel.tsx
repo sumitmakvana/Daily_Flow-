@@ -109,8 +109,14 @@ export function AttachmentsPanel({
             return (
               <li key={a.id} className="flex items-center gap-2 rounded-md border border-border p-2 text-xs">
                 <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{a.file_name}</div>
+                <div
+                  className="min-w-0 flex-1 cursor-pointer group"
+                  onClick={() => download(a)}
+                  title="View / Open in new tab"
+                >
+                  <div className="truncate font-medium group-hover:underline text-foreground">
+                    {a.file_name}
+                  </div>
                   <div className="text-muted-foreground">
                     {humanSize(a.file_size)} · {formatRelative(a.uploaded_at)}
                   </div>
