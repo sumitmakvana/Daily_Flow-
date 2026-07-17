@@ -1,6 +1,7 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ListChecks, LayoutDashboard, AlertOctagon, BarChart3, Bell, LogOut, Activity, Sun, CalendarRange, Grid3x3, Settings, ShieldAlert, Gauge, Sparkles, Brain, Download, Sunrise, TrendingUp, Menu, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth, signOut } from "@/hooks/use-auth";
@@ -74,6 +75,7 @@ const secondaryManagerNav = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isManager, isAdmin } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [unread, setUnread] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -92,19 +94,53 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    const load = () =>
-      supabase
-        .from("notifications")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .is("read_at", null)
-        .then(({ count }) => setUnread(count ?? 0));
-    load();
-    const ch = supabase
-      .channel("notif-count")
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` }, load)
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+
+    const knownIds = new Set<string>();
+    let firstLoad = true;
+
+    const checkNotifications = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("notifications")
+          .select("id, title, body, read_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        if (error || !data) return;
+
+        const unreadCount = data.filter((n) => !n.read_at).length;
+        setUnread(unreadCount);
+
+        data.forEach((n) => {
+          if (!knownIds.has(n.id)) {
+            knownIds.add(n.id);
+            if (!n.read_at && !firstLoad) {
+              toast(n.title, {
+                description: n.body ?? undefined,
+                action: {
+                  label: "View",
+                  onClick: () => {
+                    navigate({ to: "/notifications" });
+                  },
+                },
+              });
+            }
+          }
+        });
+
+        firstLoad = false;
+      } catch (err) {
+        console.warn("Error polling notifications:", err);
+      }
+    };
+
+    checkNotifications();
+    const interval = setInterval(checkNotifications, 5000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, [user]);
 
   const handleLogout = async () => {

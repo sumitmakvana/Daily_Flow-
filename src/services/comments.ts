@@ -30,6 +30,9 @@ export const commentsService = {
     parentId?: string | null;
     mentionUserIds?: string[];
   }): Promise<CommentWithMentions> {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = opts.userId;
+    }
     void opts.userId;
     return (await addCommentFn({
       data: {

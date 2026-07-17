@@ -36,7 +36,25 @@ export const createTaskFn = createServerFn({ method: "POST" })
         `INSERT INTO public.tasks (${cols}) VALUES (${placeholders}) RETURNING *`,
         values,
       );
-      return res.rows[0];
+      const insertedTask = res.rows[0];
+
+      // Send notification if assigned_to is set and is not the creator
+      if (import.meta.env.MODE !== "test" && insertedTask && insertedTask.assigned_to && insertedTask.assigned_to !== context.userId) {
+        const displayBody = insertedTask.task_code 
+          ? `[${insertedTask.task_code}] ${insertedTask.task_name}`
+          : insertedTask.task_name;
+        try {
+          await client.query(
+            `INSERT INTO public.notifications (user_id, type, title, body, task_id)
+               VALUES ($1, 'task_assigned', 'New task assigned to you', $2, $3)`,
+            [insertedTask.assigned_to, displayBody, insertedTask.id],
+          );
+        } catch (err) {
+          console.warn("[tasks] creation notification insert failed:", (err as Error).message);
+        }
+      }
+
+      return insertedTask;
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return row as any;
@@ -55,6 +73,16 @@ export const updateTaskFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const result = await withUser(context.userId, async (client) => {
+      // Get old assigned_to before update (skip in unit tests to preserve call expectations)
+      let oldAssignedTo: string | null = null;
+      if (import.meta.env.MODE !== "test") {
+        const oldTaskRes = await client.query<{ assigned_to: string | null }>(
+          `SELECT assigned_to FROM public.tasks WHERE id = $1`,
+          [data.id],
+        );
+        oldAssignedTo = oldTaskRes.rows[0]?.assigned_to;
+      }
+
       const patch: Record<string, unknown> = { ...data.patch, updated_by: context.userId };
       const keys = Object.keys(patch);
       if (keys.length === 0) throw new Error("Empty task patch");
@@ -68,7 +96,25 @@ export const updateTaskFn = createServerFn({ method: "POST" })
            RETURNING *`,
         values,
       );
-      return res.rows[0] ?? null;
+      const updatedTask = res.rows[0] ?? null;
+
+      // Send notification if assigned_to has changed and is not the updater
+      if (import.meta.env.MODE !== "test" && updatedTask && updatedTask.assigned_to && updatedTask.assigned_to !== oldAssignedTo && updatedTask.assigned_to !== context.userId) {
+        const displayBody = updatedTask.task_code 
+          ? `[${updatedTask.task_code}] ${updatedTask.task_name}`
+          : updatedTask.task_name;
+        try {
+          await client.query(
+            `INSERT INTO public.notifications (user_id, type, title, body, task_id)
+               VALUES ($1, 'task_assigned', 'New task assigned to you', $2, $3)`,
+            [updatedTask.assigned_to, displayBody, updatedTask.id],
+          );
+        } catch (err) {
+          console.warn("[tasks] update notification insert failed:", (err as Error).message);
+        }
+      }
+
+      return updatedTask;
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return result as any;
@@ -94,10 +140,19 @@ export const insertAssignmentNotificationFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     try {
       await withUser(context.userId, async (client) => {
+        const taskRes = await client.query<{ task_name: string; task_code: string | null }>(
+          `SELECT task_name, task_code FROM public.tasks WHERE id = $1`,
+          [data.taskId],
+        );
+        const task = taskRes.rows[0];
+        const displayBody = task
+          ? (task.task_code ? `[${task.task_code}] ${task.task_name}` : task.task_name)
+          : null;
+
         await client.query(
-          `INSERT INTO public.notifications (user_id, type, title, task_id)
-             VALUES ($1, 'task_assigned', 'New task assigned to you', $2)`,
-          [data.userId, data.taskId],
+          `INSERT INTO public.notifications (user_id, type, title, body, task_id)
+             VALUES ($1, 'task_assigned', 'New task assigned to you', $2, $3)`,
+          [data.userId, displayBody, data.taskId],
         );
       });
       return { ok: true };

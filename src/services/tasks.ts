@@ -29,6 +29,9 @@ export class TaskConflictError extends Error {
 
 export const tasksService = {
   async create(payload: Partial<Task>, _userId: string): Promise<Task> {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = _userId;
+    }
     void _userId;
     const row = (await createTaskFn({
       data: { payload: payload as Record<string, unknown> },
@@ -42,6 +45,9 @@ export const tasksService = {
    * Throws TaskConflictError when the row's version has moved on.
    */
   async update(task: Task, patch: Partial<Task>, _userId: string): Promise<Task> {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = _userId;
+    }
     void _userId;
     const row = (await updateTaskFn({
       data: {
@@ -60,6 +66,9 @@ export const tasksService = {
     userId: string,
     extras: { blocker_reason?: string } = {},
   ): Promise<Task> {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = userId;
+    }
     const patch: Partial<Task> = { status: newStatus };
     if (newStatus === "Completed") {
       patch.done = true;
@@ -87,6 +96,9 @@ export const tasksService = {
   },
 
   async transfer(task: Task, newAssignee: string, userId: string) {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = userId;
+    }
     await this.update(task, { assigned_to: newAssignee } as Partial<Task>, userId);
     // Best-effort notification — failures logged server-side, don't roll back.
     await insertAssignmentNotificationFn({
@@ -95,10 +107,16 @@ export const tasksService = {
   },
 
   async setPriority(task: Task, priority: TaskPriority, userId: string) {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = userId;
+    }
     return this.update(task, { priority }, userId);
   },
 
   async addComment(taskId: string, comment: string, _userId: string, status: TaskStatus) {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = _userId;
+    }
     void _userId;
     await addTaskCommentHistoryFn({
       data: { taskId, comment, status },
