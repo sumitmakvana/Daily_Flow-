@@ -12,56 +12,7 @@ import { z } from "zod";
 
 const BUCKET = "work-item-files";
 
-// Server function to upload and store file binaries (either in local DB or Supabase)
-const uploadFileFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((fd: FormData) => fd)
-  .handler(async ({ data: formData, context }) => {
-    const file = formData.get("file") as File;
-    const path = formData.get("path") as string;
-    
-    if (!file || !path) {
-      throw new Error("Missing file or path in upload data");
-    }
 
-    const mode = process.env.BACKEND_MODE ?? "supabase";
-
-    if (mode === "self") {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const workItemId = path.split("/")[0];
-
-      // Ensure the bytea file_data column exists in the database
-      await adminQuery("ALTER TABLE public.attachments ADD COLUMN IF NOT EXISTS file_data bytea");
-
-      // Insert/update row containing binary data
-      await adminQuery(
-        `INSERT INTO public.attachments 
-           (work_item_id, file_name, file_size, file_type, storage_path, uploaded_by, file_data)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (storage_path) DO UPDATE SET
-           file_data = EXCLUDED.file_data`,
-        [
-          workItemId,
-          file.name.slice(0, 255),
-          file.size,
-          file.type || "application/octet-stream",
-          path,
-          context.userId,
-          buffer,
-        ]
-      );
-      return { path };
-    } else {
-      // Fallback: Upload to Supabase Storage using admin client
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data, error } = await supabaseAdmin.storage.from(BUCKET).upload(path, file, {
-        contentType: file.type || "application/octet-stream",
-        upsert: true,
-      });
-      if (error) throw error;
-      return { path: data.path };
-    }
-  });
 
 // Server function to generate a secure local proxy signed URL (or Supabase signed URL)
 const getDownloadUrlFn = createServerFn({ method: "POST" })
@@ -129,8 +80,18 @@ export const storage = {
       formData.append("file", file);
       formData.append("path", path);
 
-      const res = await uploadFileFn({ data: formData });
-      return { data: { path: res.path }, error: null };
+      const res = await fetch("/api/storage/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(errJson.error || `Upload failed with status ${res.status}`);
+      }
+
+      const resData = await res.json();
+      return { data: { path: resData.path }, error: null };
     } catch (err) {
       console.error("Storage upload error:", err);
       return { data: null, error: err as Error };
