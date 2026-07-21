@@ -49,6 +49,7 @@ export const attachmentsService = {
     const { error: upErr } = await storage.upload(path, file, {
       contentType: file.type || "application/octet-stream",
       upsert: false,
+      userId: _userId,
     });
     if (upErr) throw upErr;
     try {

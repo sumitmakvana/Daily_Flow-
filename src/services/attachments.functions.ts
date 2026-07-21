@@ -62,6 +62,13 @@ export const insertAttachmentMetaFn = createServerFn({ method: "POST" })
         [data.storagePath]
       );
       if (existing.rows.length > 0) {
+        if (!existing.rows[0].uploaded_by && context.userId) {
+          await client.query(
+            `UPDATE public.attachments SET uploaded_by = $1 WHERE id = $2`,
+            [context.userId, existing.rows[0].id]
+          );
+          existing.rows[0].uploaded_by = context.userId;
+        }
         return existing.rows[0];
       }
 

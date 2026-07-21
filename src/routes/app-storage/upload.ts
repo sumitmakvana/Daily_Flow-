@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const BUCKET = "work-item-files";
 
-export const Route = createFileRoute("/api/storage/upload")({
+export const Route = createFileRoute("/app-storage/upload")({
   server: {
     handlers: {
       POST: async ({ request }) => {

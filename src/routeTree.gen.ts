@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppStorageUploadRouteImport } from './routes/app-storage/upload'
+import { Route as AppStorageFileRouteImport } from './routes/app-storage/file'
 import { Route as AuthenticatedWorkloadRouteImport } from './routes/_authenticated/workload'
 import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
 import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
@@ -36,8 +38,6 @@ import { Route as AuthenticatedCommandRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedBlockersRouteImport } from './routes/_authenticated/blockers'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
-import { Route as ApiStorageUploadRouteImport } from './routes/api/storage/upload'
-import { Route as ApiStorageFileRouteImport } from './routes/api/storage/file'
 import { Route as AuthenticatedSettingsOperationsRouteImport } from './routes/_authenticated/settings.operations'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings.notifications'
 import { Route as AuthenticatedConfigureNewRouteImport } from './routes/_authenticated/configure.new'
@@ -65,6 +65,16 @@ const AuthenticatedRoute = AuthenticatedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppStorageUploadRoute = AppStorageUploadRouteImport.update({
+  id: '/app-storage/upload',
+  path: '/app-storage/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppStorageFileRoute = AppStorageFileRouteImport.update({
+  id: '/app-storage/file',
+  path: '/app-storage/file',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedWorkloadRoute = AuthenticatedWorkloadRouteImport.update({
@@ -190,16 +200,6 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const ApiStorageUploadRoute = ApiStorageUploadRouteImport.update({
-  id: '/api/storage/upload',
-  path: '/api/storage/upload',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiStorageFileRoute = ApiStorageFileRouteImport.update({
-  id: '/api/storage/file',
-  path: '/api/storage/file',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedSettingsOperationsRoute =
   AuthenticatedSettingsOperationsRouteImport.update({
     id: '/settings/operations',
@@ -312,12 +312,12 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof AuthenticatedTasksRoute
   '/today': typeof AuthenticatedTodayRoute
   '/workload': typeof AuthenticatedWorkloadRoute
+  '/app-storage/file': typeof AppStorageFileRoute
+  '/app-storage/upload': typeof AppStorageUploadRoute
   '/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/configure/new': typeof AuthenticatedConfigureNewRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
-  '/api/storage/file': typeof ApiStorageFileRoute
-  '/api/storage/upload': typeof ApiStorageUploadRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
   '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
@@ -356,12 +356,12 @@ export interface FileRoutesByTo {
   '/tasks': typeof AuthenticatedTasksRoute
   '/today': typeof AuthenticatedTodayRoute
   '/workload': typeof AuthenticatedWorkloadRoute
+  '/app-storage/file': typeof AppStorageFileRoute
+  '/app-storage/upload': typeof AppStorageUploadRoute
   '/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/configure/new': typeof AuthenticatedConfigureNewRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
-  '/api/storage/file': typeof ApiStorageFileRoute
-  '/api/storage/upload': typeof ApiStorageUploadRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
   '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
@@ -402,12 +402,12 @@ export interface FileRoutesById {
   '/_authenticated/tasks': typeof AuthenticatedTasksRoute
   '/_authenticated/today': typeof AuthenticatedTodayRoute
   '/_authenticated/workload': typeof AuthenticatedWorkloadRoute
+  '/app-storage/file': typeof AppStorageFileRoute
+  '/app-storage/upload': typeof AppStorageUploadRoute
   '/_authenticated/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/_authenticated/configure/new': typeof AuthenticatedConfigureNewRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/settings/operations': typeof AuthenticatedSettingsOperationsRoute
-  '/api/storage/file': typeof ApiStorageFileRoute
-  '/api/storage/upload': typeof ApiStorageUploadRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
   '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
@@ -448,12 +448,12 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/today'
     | '/workload'
+    | '/app-storage/file'
+    | '/app-storage/upload'
     | '/configure/automations'
     | '/configure/new'
     | '/settings/notifications'
     | '/settings/operations'
-    | '/api/storage/file'
-    | '/api/storage/upload'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
     | '/api/public/hooks/automation-tick'
@@ -492,12 +492,12 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/today'
     | '/workload'
+    | '/app-storage/file'
+    | '/app-storage/upload'
     | '/configure/automations'
     | '/configure/new'
     | '/settings/notifications'
     | '/settings/operations'
-    | '/api/storage/file'
-    | '/api/storage/upload'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
     | '/api/public/hooks/automation-tick'
@@ -537,12 +537,12 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks'
     | '/_authenticated/today'
     | '/_authenticated/workload'
+    | '/app-storage/file'
+    | '/app-storage/upload'
     | '/_authenticated/configure/automations'
     | '/_authenticated/configure/new'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/settings/operations'
-    | '/api/storage/file'
-    | '/api/storage/upload'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
     | '/api/public/hooks/automation-tick'
@@ -559,8 +559,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
-  ApiStorageFileRoute: typeof ApiStorageFileRoute
-  ApiStorageUploadRoute: typeof ApiStorageUploadRoute
+  AppStorageFileRoute: typeof AppStorageFileRoute
+  AppStorageUploadRoute: typeof AppStorageUploadRoute
   ApiPublicHooksAdoptionRollupRoute: typeof ApiPublicHooksAdoptionRollupRoute
   ApiPublicHooksAutomationDueEnqueueRoute: typeof ApiPublicHooksAutomationDueEnqueueRoute
   ApiPublicHooksAutomationTickRoute: typeof ApiPublicHooksAutomationTickRoute
@@ -594,6 +594,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app-storage/upload': {
+      id: '/app-storage/upload'
+      path: '/app-storage/upload'
+      fullPath: '/app-storage/upload'
+      preLoaderRoute: typeof AppStorageUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app-storage/file': {
+      id: '/app-storage/file'
+      path: '/app-storage/file'
+      fullPath: '/app-storage/file'
+      preLoaderRoute: typeof AppStorageFileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/workload': {
@@ -763,20 +777,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin'
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
-    }
-    '/api/storage/upload': {
-      id: '/api/storage/upload'
-      path: '/api/storage/upload'
-      fullPath: '/api/storage/upload'
-      preLoaderRoute: typeof ApiStorageUploadRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/storage/file': {
-      id: '/api/storage/file'
-      path: '/api/storage/file'
-      fullPath: '/api/storage/file'
-      preLoaderRoute: typeof ApiStorageFileRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/settings/operations': {
       id: '/_authenticated/settings/operations'
@@ -963,8 +963,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
-  ApiStorageFileRoute: ApiStorageFileRoute,
-  ApiStorageUploadRoute: ApiStorageUploadRoute,
+  AppStorageFileRoute: AppStorageFileRoute,
+  AppStorageUploadRoute: AppStorageUploadRoute,
   ApiPublicHooksAdoptionRollupRoute: ApiPublicHooksAdoptionRollupRoute,
   ApiPublicHooksAutomationDueEnqueueRoute:
     ApiPublicHooksAutomationDueEnqueueRoute,

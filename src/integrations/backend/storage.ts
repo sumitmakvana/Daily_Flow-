@@ -33,7 +33,7 @@ const getDownloadUrlFn = createServerFn({ method: "POST" })
         .digest("hex");
 
       // Return relative URL pointing to our local storage proxy endpoint
-      return `/api/storage/file?path=${encodeURIComponent(data.path)}&token=${token}&expires=${expires}`;
+      return `/app-storage/file?path=${encodeURIComponent(data.path)}&token=${token}&expires=${expires}`;
     } else {
       // Fallback: Get signed URL from Supabase Storage
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -73,14 +73,17 @@ export const storage = {
   upload: async (
     path: string,
     file: File | Blob,
-    opts?: { contentType?: string; upsert?: boolean }
+    opts?: { contentType?: string; upsert?: boolean; userId?: string }
   ): Promise<{ data: { path: string } | null; error: Error | null }> => {
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("path", path);
+      if (opts?.userId) {
+        formData.append("userId", opts.userId);
+      }
 
-      const res = await fetch("/api/storage/upload", {
+      const res = await fetch("/app-storage/upload", {
         method: "POST",
         body: formData,
       });

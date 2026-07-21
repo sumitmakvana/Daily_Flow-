@@ -18,7 +18,7 @@ const verifySignedToken = (path: string, expires: number, token: string) => {
   return token === expected;
 };
 
-export const Route = createFileRoute("/api/storage/file")({
+export const Route = createFileRoute("/app-storage/file")({
   server: {
     handlers: {
       GET: async ({ request }) => {
