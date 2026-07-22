@@ -51,8 +51,28 @@ function ExportsPage() {
       <Card className="p-3 space-y-3">
         <h2 className="text-sm font-semibold">Filters</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <Input type="date" value={filters.from ?? ""} onChange={(e) => setFilters({ ...filters, from: e.target.value || undefined })} className="h-8 text-xs" />
-          <Input type="date" value={filters.to ?? ""} onChange={(e) => setFilters({ ...filters, to: e.target.value || undefined })} className="h-8 text-xs" />
+          <Input
+            type="date"
+            value={filters.from ?? ""}
+            onChange={(e) => setFilters({ ...filters, from: e.target.value || undefined })}
+            onClick={(e) => {
+              try {
+                e.currentTarget.showPicker();
+              } catch (err) {}
+            }}
+            className="h-8 text-xs cursor-pointer"
+          />
+          <Input
+            type="date"
+            value={filters.to ?? ""}
+            onChange={(e) => setFilters({ ...filters, to: e.target.value || undefined })}
+            onClick={(e) => {
+              try {
+                e.currentTarget.showPicker();
+              } catch (err) {}
+            }}
+            className="h-8 text-xs cursor-pointer"
+          />
           <Select value={filters.userId ?? ""} onValueChange={(v) => setFilters({ ...filters, userId: v || undefined })}>
             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All users" /></SelectTrigger>
             <SelectContent>

@@ -56,9 +56,33 @@ function renderInput(d: WorkItemFieldDef, v: unknown, set: (v: unknown) => void,
     case "number":
       return <Input type="number" value={(v as number) ?? ""} onChange={(e) => set(e.target.value === "" ? null : Number(e.target.value))} />;
     case "date":
-      return <Input type="date" value={(v as string) ?? ""} onChange={(e) => set(e.target.value || null)} />;
+      return (
+        <Input
+          type="date"
+          value={(v as string) ?? ""}
+          onChange={(e) => set(e.target.value || null)}
+          onClick={(e) => {
+            try {
+              e.currentTarget.showPicker();
+            } catch (err) {}
+          }}
+          className="cursor-pointer"
+        />
+      );
     case "datetime":
-      return <Input type="datetime-local" value={(v as string) ?? ""} onChange={(e) => set(e.target.value || null)} />;
+      return (
+        <Input
+          type="datetime-local"
+          value={(v as string) ?? ""}
+          onChange={(e) => set(e.target.value || null)}
+          onClick={(e) => {
+            try {
+              e.currentTarget.showPicker();
+            } catch (err) {}
+          }}
+          className="cursor-pointer"
+        />
+      );
     case "boolean":
       return <div className="pt-2"><Switch checked={!!v} onCheckedChange={set} /></div>;
     case "url":
