@@ -273,7 +273,17 @@ function HolidayCreator({ onCreated }: { onCreated: () => void }) {
   const [label, setLabel] = useState("");
   return (
     <div className="flex gap-2 items-end">
-      <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      <Input
+        type="date"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        onClick={(e) => {
+          try {
+            e.currentTarget.showPicker();
+          } catch (err) {}
+        }}
+        className="cursor-pointer"
+      />
       <Input placeholder="Label" value={label} onChange={(e) => setLabel(e.target.value)} />
       <Button size="sm" disabled={!date || !label} onClick={async () => {
         await holidaysService.add(date, label); setDate(""); setLabel(""); onCreated();

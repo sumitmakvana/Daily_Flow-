@@ -8,6 +8,10 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import {
   Play,
@@ -19,6 +23,7 @@ import {
   User as UserIcon,
   Send,
   History,
+  Pencil,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
@@ -27,6 +32,7 @@ import { BlockerAge } from "./BlockerAge";
 import { CarryForwardBadge } from "./CarryForwardBadge";
 import { TaskHistorySheet } from "./TaskHistorySheet";
 import { WorkItemTypeBadge } from "./WorkItemTypeBadge";
+import { TaskFormDialog } from "./TaskFormDialog";
 import type { Profile, Task, TaskStatus, WorkItemType } from "@/lib/types";
 import { formatDate, isOverdue } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -55,6 +61,7 @@ export function TaskCard({
 }) {
   const [blockOpen, setBlockOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const overdue = isOverdue(task.due_date, task.status);
   const isOwner = task.assigned_to === userId;
   const canAct = isOwner || canManage;
@@ -111,18 +118,10 @@ export function TaskCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52 max-h-64 overflow-y-auto">
-              {canManage && (
-                <>
-                  <DropdownMenuLabel>Transfer to</DropdownMenuLabel>
-                  {profiles
-                    .filter((p) => p.id !== task.assigned_to)
-                    .map((p) => (
-                      <DropdownMenuItem key={p.id} onClick={() => transfer(p.id)}>
-                        <Send className="mr-2 h-3.5 w-3.5" /> {p.display_name}
-                      </DropdownMenuItem>
-                    ))}
-                  <DropdownMenuSeparator />
-                </>
+              {canAct && (
+                <DropdownMenuItem onClick={() => setFormOpen(true)}>
+                  <Pencil className="mr-2 h-3.5 w-3.5" /> Edit task
+                </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
                 <History className="mr-2 h-3.5 w-3.5" /> History & comments
@@ -131,6 +130,27 @@ export function TaskCard({
                 <DropdownMenuItem onClick={() => setStatus("On Hold")}>
                   <Pause className="mr-2 h-3.5 w-3.5" /> Put on hold
                 </DropdownMenuItem>
+              )}
+              {canManage && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Send className="mr-2 h-3.5 w-3.5" /> Transfer to
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                      <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                        {profiles
+                          .filter((p) => p.id !== task.assigned_to)
+                          .map((p) => (
+                            <DropdownMenuItem key={p.id} onClick={() => transfer(p.id)}>
+                              <Send className="mr-2 h-3.5 w-3.5" /> {p.display_name}
+                            </DropdownMenuItem>
+                          ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                  </DropdownMenuSub>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -245,6 +265,14 @@ export function TaskCard({
         profiles={profiles}
         userId={userId}
         canModerate={canManage}
+      />
+
+      <TaskFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        initial={task}
+        userId={userId}
+        onSaved={onChanged}
       />
     </>
   );

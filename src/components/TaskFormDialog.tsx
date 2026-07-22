@@ -203,6 +203,12 @@ export function TaskFormDialog({
                 type="date"
                 value={form.due_date ?? ""}
                 onChange={(e) => setForm({ ...form, due_date: e.target.value || null })}
+                onClick={(e) => {
+                  try {
+                    e.currentTarget.showPicker();
+                  } catch (err) {}
+                }}
+                className="cursor-pointer"
               />
             </div>
             <div>
@@ -235,6 +241,7 @@ export function TaskFormDialog({
             defs={fieldDefs}
             values={(form.custom_fields ?? {}) as Record<string, unknown>}
             onChange={(next) => setForm({ ...form, custom_fields: next })}
+            workItemId={initial?.id ?? form.id ?? null}
           />
         </div>
         <DialogFooter>
