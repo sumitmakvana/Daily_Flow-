@@ -625,18 +625,18 @@ export function CSVImportDialog({
                 </div>
               )}
 
-              <div className="border border-border rounded-lg overflow-hidden max-h-[350px] overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/50 border-b border-border sticky top-0 z-10">
-                    <tr>
-                      <th className="text-left px-3 py-2.5 font-semibold w-1/2">CSV Employee Name</th>
-                      <th className="text-left px-3 py-2.5 font-semibold w-1/2">System Profile / User</th>
+              <div className="border border-border rounded-lg overflow-hidden max-h-[350px] overflow-y-auto bg-card">
+                <table className="w-full table-fixed text-xs">
+                  <thead className="bg-muted sticky top-0 z-10">
+                    <tr className="border-b border-border bg-muted">
+                      <th className="text-left px-3 py-2.5 font-semibold w-1/2 sticky top-0 bg-muted/95 backdrop-blur-sm">CSV Employee Name</th>
+                      <th className="text-left px-3 py-2.5 font-semibold w-1/2 sticky top-0 bg-muted/95 backdrop-blur-sm">System Profile / User</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-border bg-card">
                     {uniqueNames.map((name) => (
                       <tr key={name} className="hover:bg-muted/10">
-                        <td className="px-3 py-2.5 font-medium truncate max-w-[200px]" title={name}>
+                        <td className="px-3 py-2.5 font-medium truncate" title={name}>
                           {name}
                         </td>
                         <td className="px-3 py-2.5">
@@ -684,33 +684,33 @@ export function CSVImportDialog({
                 </div>
               )}
 
-              <div className="border border-border rounded-lg overflow-hidden max-h-[350px] overflow-y-auto">
-                <table className="w-full text-[11px]">
-                  <thead className="bg-muted/50 border-b border-border sticky top-0 z-10">
-                    <tr>
-                      <th className="text-left px-2 py-2 font-semibold">Task Name</th>
-                      <th className="text-left px-2 py-2 font-semibold">Assignee</th>
-                      <th className="text-left px-2 py-2 font-semibold">Client</th>
-                      <th className="text-left px-2 py-2 font-semibold">Project</th>
-                      <th className="text-left px-2 py-2 font-semibold">Status</th>
-                      <th className="text-left px-2 py-2 font-semibold">Due Date</th>
+              <div className="border border-border rounded-lg overflow-hidden max-h-[350px] overflow-y-auto bg-card">
+                <table className="w-full table-fixed text-[11px]">
+                  <thead className="bg-muted sticky top-0 z-10">
+                    <tr className="border-b border-border bg-muted">
+                      <th className="text-left px-2 py-2 font-semibold w-[35%] sticky top-0 bg-muted/95 backdrop-blur-sm">Task Name</th>
+                      <th className="text-left px-2 py-2 font-semibold w-[15%] sticky top-0 bg-muted/95 backdrop-blur-sm">Assignee</th>
+                      <th className="text-left px-2 py-2 font-semibold w-[12%] sticky top-0 bg-muted/95 backdrop-blur-sm">Client</th>
+                      <th className="text-left px-2 py-2 font-semibold w-[15%] sticky top-0 bg-muted/95 backdrop-blur-sm">Project</th>
+                      <th className="text-left px-2 py-2 font-semibold w-[11%] sticky top-0 bg-muted/95 backdrop-blur-sm">Status</th>
+                      <th className="text-left px-2 py-2 font-semibold w-[12%] sticky top-0 bg-muted/95 backdrop-blur-sm">Due Date</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-border bg-card">
                     {previewTasks.slice(0, 100).map((task, idx) => {
                       const assigneeProfile = profiles.find(p => p.id === task.assigned_to);
                       return (
                         <tr key={idx} className="hover:bg-muted/5">
-                          <td className="px-2 py-2 font-medium truncate max-w-[180px]" title={task.task_name}>
+                          <td className="px-2 py-2 font-medium truncate" title={task.task_name}>
                             {task.task_name}
                           </td>
-                          <td className="px-2 py-2 text-muted-foreground truncate max-w-[100px]">
+                          <td className="px-2 py-2 text-muted-foreground truncate">
                             {assigneeProfile?.display_name || "—"}
                           </td>
-                          <td className="px-2 py-2 text-muted-foreground truncate max-w-[80px]">
+                          <td className="px-2 py-2 text-muted-foreground truncate">
                             {task.client || "—"}
                           </td>
-                          <td className="px-2 py-2 text-muted-foreground truncate max-w-[100px]">
+                          <td className="px-2 py-2 text-muted-foreground truncate">
                             {task.project_name || "—"}
                           </td>
                           <td className="px-2 py-2">
