@@ -116,6 +116,16 @@ function EodTasksPage() {
         </div>
       </div>
 
+      {/* Guide Card to explain what to do */}
+      <Card className="p-3 bg-muted/40 border border-border space-y-1.5">
+        <h2 className="text-xs font-semibold flex items-center gap-1.5 text-foreground/80">
+          💡 EOD Reporting Guide
+        </h2>
+        <p className="text-[11px] text-muted-foreground leading-normal">
+          For each task, select your updated status, enter the hours spent today, and click <strong>Submit EOD</strong> or <strong>Save Changes</strong>. Your changes will sync automatically to the tasks board.
+        </p>
+      </Card>
+
       {loading && rows.length === 0 && (
         <Card className="p-6 text-center text-sm text-muted-foreground">Loading…</Card>
       )}
@@ -132,6 +142,17 @@ function EodTasksPage() {
           if (!d) return null;
           const submission = row.submission;
           const acknowledged = !!submission?.acknowledged_at;
+
+          const draftHours = Number(d.actual_hours || "0");
+          const subHours = submission ? Number(submission.actual_hours || "0") : 0;
+          const draftNote = (d.note || "").trim();
+          const subNote = submission ? (submission.note || "").trim() : "";
+
+          const hasChanges = !submission || 
+            d.progress_status !== submission.progress_status ||
+            draftHours !== subHours ||
+            draftNote !== subNote;
+
           return (
             <Card key={row.task_id} className="p-3 space-y-3">
               <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -208,10 +229,20 @@ function EodTasksPage() {
                 className="text-sm"
               />
 
-              <div className="flex justify-end">
-                <Button size="sm" onClick={() => submit(row)} disabled={d.busy}>
+              <div className="flex justify-end items-center gap-2.5">
+                {!hasChanges && submission && (
+                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    ✓ Saved for today
+                  </span>
+                )}
+                <Button 
+                  size="sm" 
+                  onClick={() => submit(row)} 
+                  disabled={d.busy || (!hasChanges && !!submission)}
+                  variant={hasChanges ? "default" : "outline"}
+                >
                   {d.busy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
-                  {submission ? "Update" : "Submit EOD"}
+                  {submission ? (hasChanges ? "Save Changes" : "Saved") : "Submit EOD"}
                 </Button>
               </div>
             </Card>

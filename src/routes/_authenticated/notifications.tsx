@@ -41,13 +41,13 @@ function NotifPage() {
       load();
     }
 
-    // Navigate to the relevant task if task_id is set, or general tasks tab for digests
+    // Navigate to the relevant page based on the notification type
     if (n.task_id) {
       navigate({ to: "/tasks", search: { highlightId: n.task_id } });
-    } else if (
-      ["eod_digest", "sod_digest", "eod_team_digest", "sod_team_digest"].includes(n.type)
-    ) {
-      navigate({ to: "/tasks" });
+    } else if (["eod_digest", "sod_digest"].includes(n.type)) {
+      navigate({ to: "/my-day" });
+    } else if (["eod_team_digest", "sod_team_digest"].includes(n.type)) {
+      navigate({ to: "/manager" });
     }
   };
 
