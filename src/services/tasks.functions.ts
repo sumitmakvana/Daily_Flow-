@@ -184,8 +184,11 @@ export const deleteTaskFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string() }).parse(d))
   .handler(async ({ data, context }) => {
-    await withUser(context.userId, async (client) => {
-      await client.query(`DELETE FROM public.tasks WHERE id = $1`, [data.id]);
+    const res = await withUser(context.userId, async (client) => {
+      return await client.query(`DELETE FROM public.tasks WHERE id = $1`, [data.id]);
     });
+    if (res.rowCount === 0) {
+      throw new Error("Task not found or permission denied");
+    }
     return { ok: true };
   });

@@ -36,9 +36,13 @@ export function daysSince(iso: string | null): number {
 
 /** Today as YYYY-MM-DD in local time. */
 export function todayISO(): string {
-  const d = new Date();
-  const tz = d.getTimezoneOffset() * 60000;
-  return new Date(d.getTime() - tz).toISOString().slice(0, 10);
+  return toLocalISO(new Date());
+}
+
+/** Format any Date to YYYY-MM-DD in local time. */
+export function toLocalISO(date: Date): string {
+  const tz = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - tz).toISOString().slice(0, 10);
 }
 
 /** Next working day (skip Sat/Sun) as YYYY-MM-DD. */
@@ -49,3 +53,156 @@ export function nextWorkingDay(fromISO?: string): string {
   const tz = base.getTimezoneOffset() * 60000;
   return new Date(base.getTime() - tz).toISOString().slice(0, 10);
 }
+
+export interface Holiday {
+  name: string;
+  emoji: string;
+  isHoliday: boolean;
+}
+
+let cachedHolidays: Record<string, Record<string, Holiday>> = {};
+let activeFetches = new Set<number>();
+
+export async function fetchIndianHolidays(year: number): Promise<Record<string, Holiday>> {
+  if (cachedHolidays[year]) {
+    return cachedHolidays[year];
+  }
+
+  const cacheKey = `in_holidays_${year}`;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      cachedHolidays[year] = JSON.parse(cached);
+      return cachedHolidays[year];
+    }
+  } catch (e) {}
+
+  if (activeFetches.has(year)) {
+    return cachedHolidays[year] || {};
+  }
+
+  activeFetches.add(year);
+  try {
+    const res = await fetch(`https://date.nager.at/api/v3/publicholidays/${year}/IN`);
+    if (res.ok) {
+      const data = await res.json();
+      const apiHolidays: Record<string, Holiday> = {};
+      
+      data.forEach((item: any) => {
+        const dateStr = item.date; // YYYY-MM-DD
+        let emoji = "🗓️";
+        const lowerName = item.name.toLowerCase();
+        if (lowerName.includes("republic")) emoji = "🇮🇳";
+        else if (lowerName.includes("independence")) emoji = "🇮🇳";
+        else if (lowerName.includes("diwali") || lowerName.includes("deepavali")) emoji = "🪔";
+        else if (lowerName.includes("holi")) emoji = "🎨";
+        else if (lowerName.includes("christmas")) emoji = "🎄";
+        else if (lowerName.includes("gandhi")) emoji = "👓";
+        else if (lowerName.includes("sankranti") || lowerName.includes("uttarayan")) emoji = "🪁";
+        else if (lowerName.includes("eid") || lowerName.includes("ramadan")) emoji = "🌙";
+        else if (lowerName.includes("good friday")) emoji = "✝️";
+        
+        apiHolidays[dateStr] = {
+          name: item.localName || item.name,
+          emoji,
+          isHoliday: true
+        };
+      });
+
+      cachedHolidays[year] = apiHolidays;
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(apiHolidays));
+      } catch (e) {}
+    }
+  } catch (err) {
+    console.warn("Failed to fetch holidays from public API:", err);
+  } finally {
+    activeFetches.delete(year);
+  }
+
+  return cachedHolidays[year] || {};
+}
+
+export function getLocalHoliday(
+  dateOrStr: Date | string | null | undefined,
+  apiHolidays: Record<string, Holiday> = {}
+): Holiday | null {
+  if (!dateOrStr) return null;
+
+  let y = 0;
+  let mStr = "";
+  let dStr = "";
+  let ymd = "";
+  let md = "";
+
+  if (typeof dateOrStr === "string") {
+    // Expected format YYYY-MM-DD
+    const parts = dateOrStr.split("-");
+    if (parts.length !== 3) return null;
+    y = Number(parts[0]);
+    mStr = parts[1];
+    dStr = parts[2];
+    ymd = dateOrStr;
+    md = `${mStr}-${dStr}`;
+  } else {
+    // Date object
+    const date = dateOrStr;
+    y = date.getFullYear();
+    mStr = String(date.getMonth() + 1).padStart(2, "0");
+    dStr = String(date.getDate()).padStart(2, "0");
+    ymd = `${y}-${mStr}-${dStr}`;
+    md = `${mStr}-${dStr}`;
+  }
+
+  // Fixed regional holidays (like Uttarayan / Vasi Uttarayan)
+  const fixed: Record<string, Holiday> = {
+    "01-14": { name: "Uttarayan", emoji: "🪁", isHoliday: true },
+    "01-15": { name: "Vasi Uttarayan", emoji: "🪁", isHoliday: true },
+    "05-01": { name: "Gujarat Day", emoji: "🦁", isHoliday: true },
+  };
+
+  // Variable Gujarati and Indian holidays (if not captured by the API or as reliable backup)
+  const variableGujarati: Record<string, Holiday> = {
+    // 2026
+    "2026-03-03": { name: "Holi", emoji: "🎨", isHoliday: true },
+    "2026-09-14": { name: "Ganesh Chaturthi", emoji: "🐘", isHoliday: true },
+    "2026-10-20": { name: "Dussehra", emoji: "🏹", isHoliday: true },
+    "2026-11-08": { name: "Diwali", emoji: "🪔", isHoliday: true },
+    "2026-11-09": { name: "Gujarati New Year", emoji: "🪔", isHoliday: true },
+    "2026-11-10": { name: "Bhai Dooj", emoji: "🌸", isHoliday: true },
+    
+    // 2027
+    "2027-03-22": { name: "Holi", emoji: "🎨", isHoliday: true },
+    "2027-09-04": { name: "Ganesh Chaturthi", emoji: "🐘", isHoliday: true },
+    "2027-10-09": { name: "Dussehra", emoji: "🏹", isHoliday: true },
+    "2027-10-29": { name: "Diwali", emoji: "🪔", isHoliday: true },
+    "2027-10-30": { name: "Gujarati New Year", emoji: "🪔", isHoliday: true },
+    "2027-10-31": { name: "Bhai Dooj", emoji: "🌸", isHoliday: true },
+    
+    // 2028
+    "2028-03-10": { name: "Holi", emoji: "🎨", isHoliday: true },
+    "2028-09-22": { name: "Ganesh Chaturthi", emoji: "🐘", isHoliday: true },
+    "2028-09-28": { name: "Dussehra", emoji: "🏹", isHoliday: true },
+    "2028-10-17": { name: "Diwali", emoji: "🪔", isHoliday: true },
+    "2028-10-18": { name: "Gujarati New Year", emoji: "🪔", isHoliday: true },
+    "2028-10-19": { name: "Bhai Dooj", emoji: "🌸", isHoliday: true },
+  };
+
+  if (variableGujarati[ymd]) return variableGujarati[ymd];
+  if (fixed[md]) return fixed[md];
+  if (apiHolidays[ymd]) return apiHolidays[ymd];
+
+  // Fallback to static values if API didn't load yet
+  const staticFallback: Record<string, Holiday> = {
+    "01-01": { name: "New Year", emoji: "✨", isHoliday: true },
+    "01-26": { name: "Republic Day", emoji: "🇮🇳", isHoliday: true },
+    "08-15": { name: "Independence Day", emoji: "🇮🇳", isHoliday: true },
+    "10-02": { name: "Gandhi Jayanti", emoji: "👓", isHoliday: true },
+    "12-25": { name: "Christmas", emoji: "🎄", isHoliday: true },
+  };
+
+  return staticFallback[md] || null;
+}
+
+
+
