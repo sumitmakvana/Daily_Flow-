@@ -44,6 +44,7 @@ import { Route as AuthenticatedConfigureNewRouteImport } from './routes/_authent
 import { Route as AuthenticatedConfigureAutomationsRouteImport } from './routes/_authenticated/configure.automations'
 import { Route as ApiPublicHooksWorkloadSnapshotRouteImport } from './routes/api/public/hooks/workload-snapshot'
 import { Route as ApiPublicHooksPlanningSuggestionsRouteImport } from './routes/api/public/hooks/planning-suggestions'
+import { Route as ApiPublicHooksNoTasksReminderRouteImport } from './routes/api/public/hooks/no-tasks-reminder'
 import { Route as ApiPublicHooksMorningDigestRouteImport } from './routes/api/public/hooks/morning-digest'
 import { Route as ApiPublicHooksGenerateNudgesRouteImport } from './routes/api/public/hooks/generate-nudges'
 import { Route as ApiPublicHooksEveningDigestRouteImport } from './routes/api/public/hooks/evening-digest'
@@ -236,6 +237,12 @@ const ApiPublicHooksPlanningSuggestionsRoute =
     path: '/api/public/hooks/planning-suggestions',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksNoTasksReminderRoute =
+  ApiPublicHooksNoTasksReminderRouteImport.update({
+    id: '/api/public/hooks/no-tasks-reminder',
+    path: '/api/public/hooks/no-tasks-reminder',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksMorningDigestRoute =
   ApiPublicHooksMorningDigestRouteImport.update({
     id: '/api/public/hooks/morning-digest',
@@ -326,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/evening-digest': typeof ApiPublicHooksEveningDigestRoute
   '/api/public/hooks/generate-nudges': typeof ApiPublicHooksGenerateNudgesRoute
   '/api/public/hooks/morning-digest': typeof ApiPublicHooksMorningDigestRoute
+  '/api/public/hooks/no-tasks-reminder': typeof ApiPublicHooksNoTasksReminderRoute
   '/api/public/hooks/planning-suggestions': typeof ApiPublicHooksPlanningSuggestionsRoute
   '/api/public/hooks/workload-snapshot': typeof ApiPublicHooksWorkloadSnapshotRoute
 }
@@ -370,6 +378,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/evening-digest': typeof ApiPublicHooksEveningDigestRoute
   '/api/public/hooks/generate-nudges': typeof ApiPublicHooksGenerateNudgesRoute
   '/api/public/hooks/morning-digest': typeof ApiPublicHooksMorningDigestRoute
+  '/api/public/hooks/no-tasks-reminder': typeof ApiPublicHooksNoTasksReminderRoute
   '/api/public/hooks/planning-suggestions': typeof ApiPublicHooksPlanningSuggestionsRoute
   '/api/public/hooks/workload-snapshot': typeof ApiPublicHooksWorkloadSnapshotRoute
 }
@@ -416,6 +425,7 @@ export interface FileRoutesById {
   '/api/public/hooks/evening-digest': typeof ApiPublicHooksEveningDigestRoute
   '/api/public/hooks/generate-nudges': typeof ApiPublicHooksGenerateNudgesRoute
   '/api/public/hooks/morning-digest': typeof ApiPublicHooksMorningDigestRoute
+  '/api/public/hooks/no-tasks-reminder': typeof ApiPublicHooksNoTasksReminderRoute
   '/api/public/hooks/planning-suggestions': typeof ApiPublicHooksPlanningSuggestionsRoute
   '/api/public/hooks/workload-snapshot': typeof ApiPublicHooksWorkloadSnapshotRoute
 }
@@ -462,6 +472,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/evening-digest'
     | '/api/public/hooks/generate-nudges'
     | '/api/public/hooks/morning-digest'
+    | '/api/public/hooks/no-tasks-reminder'
     | '/api/public/hooks/planning-suggestions'
     | '/api/public/hooks/workload-snapshot'
   fileRoutesByTo: FileRoutesByTo
@@ -506,6 +517,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/evening-digest'
     | '/api/public/hooks/generate-nudges'
     | '/api/public/hooks/morning-digest'
+    | '/api/public/hooks/no-tasks-reminder'
     | '/api/public/hooks/planning-suggestions'
     | '/api/public/hooks/workload-snapshot'
   id:
@@ -551,6 +563,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/evening-digest'
     | '/api/public/hooks/generate-nudges'
     | '/api/public/hooks/morning-digest'
+    | '/api/public/hooks/no-tasks-reminder'
     | '/api/public/hooks/planning-suggestions'
     | '/api/public/hooks/workload-snapshot'
   fileRoutesById: FileRoutesById
@@ -569,6 +582,7 @@ export interface RootRouteChildren {
   ApiPublicHooksEveningDigestRoute: typeof ApiPublicHooksEveningDigestRoute
   ApiPublicHooksGenerateNudgesRoute: typeof ApiPublicHooksGenerateNudgesRoute
   ApiPublicHooksMorningDigestRoute: typeof ApiPublicHooksMorningDigestRoute
+  ApiPublicHooksNoTasksReminderRoute: typeof ApiPublicHooksNoTasksReminderRoute
   ApiPublicHooksPlanningSuggestionsRoute: typeof ApiPublicHooksPlanningSuggestionsRoute
   ApiPublicHooksWorkloadSnapshotRoute: typeof ApiPublicHooksWorkloadSnapshotRoute
 }
@@ -820,6 +834,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksPlanningSuggestionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/no-tasks-reminder': {
+      id: '/api/public/hooks/no-tasks-reminder'
+      path: '/api/public/hooks/no-tasks-reminder'
+      fullPath: '/api/public/hooks/no-tasks-reminder'
+      preLoaderRoute: typeof ApiPublicHooksNoTasksReminderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/morning-digest': {
       id: '/api/public/hooks/morning-digest'
       path: '/api/public/hooks/morning-digest'
@@ -974,6 +995,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksEveningDigestRoute: ApiPublicHooksEveningDigestRoute,
   ApiPublicHooksGenerateNudgesRoute: ApiPublicHooksGenerateNudgesRoute,
   ApiPublicHooksMorningDigestRoute: ApiPublicHooksMorningDigestRoute,
+  ApiPublicHooksNoTasksReminderRoute: ApiPublicHooksNoTasksReminderRoute,
   ApiPublicHooksPlanningSuggestionsRoute:
     ApiPublicHooksPlanningSuggestionsRoute,
   ApiPublicHooksWorkloadSnapshotRoute: ApiPublicHooksWorkloadSnapshotRoute,

@@ -45,7 +45,11 @@ function NotifPage() {
     if (n.task_id) {
       navigate({ to: "/tasks", search: { highlightId: n.task_id } });
     } else if (["eod_digest", "sod_digest"].includes(n.type)) {
-      navigate({ to: "/my-day" });
+      if (n.type === "sod_digest" && (n.title.includes("0 tasks") || n.body?.includes("No tasks"))) {
+        navigate({ to: "/tasks", search: { create: true } });
+      } else {
+        navigate({ to: "/my-day" });
+      }
     } else if (["eod_team_digest", "sod_team_digest"].includes(n.type)) {
       navigate({ to: "/manager" });
     }
