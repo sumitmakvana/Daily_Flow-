@@ -26,6 +26,7 @@ export interface Profile {
   display_name: string;
   email?: string;
   avatar_url: string | null;
+  manager_id?: string | null;
 }
 
 export interface WorkItemType {

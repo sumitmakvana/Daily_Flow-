@@ -37,8 +37,10 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           supabaseAdmin.from("work_settings").select("evening_digest_time").eq("id", 1).maybeSingle(),
         ]);
 
+        const url = new URL(request.url);
+        const force = url.searchParams.get("force") === "true";
         const eveningTime = settings?.evening_digest_time ?? "18:00";
-        if (currentLocalTime !== eveningTime) {
+        if (currentLocalTime !== eveningTime && !force) {
           return Response.json({
             ok: true,
             skipped: true,
@@ -90,17 +92,18 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
 
         for (const p of profiles ?? []) {
           const mine = plateByUser.get(p.id) ?? [];
-          if (mine.length === 0) continue;
           const s = summarize(mine);
 
-          const body = [
-            fmt("✅ Completed", s.completed),
-            fmt("🔄 In progress", s.inProgress),
-            fmt("⛔ Blocked", s.blocked),
-            fmt("📋 Still pending", s.pending),
-          ]
-            .filter(Boolean)
-            .join("\n\n");
+          const body = mine.length > 0
+            ? [
+                fmt("✅ Completed", s.completed),
+                fmt("🔄 In progress", s.inProgress),
+                fmt("⛔ Blocked", s.blocked),
+                fmt("📋 Still pending", s.pending),
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "No active tasks today.";
 
           if (!optedOut.has(p.id)) {
             const dedupeKey = `EOD_${today}_${p.id}`;

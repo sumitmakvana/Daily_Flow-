@@ -38,8 +38,10 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
           supabaseAdmin.from("work_settings").select("morning_digest_time").eq("id", 1).maybeSingle(),
         ]);
 
+        const url = new URL(request.url);
+        const force = url.searchParams.get("force") === "true";
         const morningTime = settings?.morning_digest_time ?? "11:00";
-        if (currentLocalTime !== morningTime) {
+        if (currentLocalTime !== morningTime && !force) {
           return Response.json({
             ok: true,
             skipped: true,
@@ -78,11 +80,10 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
 
         for (const p of profiles ?? []) {
           const mine = (plateByUser.get(p.id) ?? []).slice(0, 20);
-          if (mine.length === 0) continue;
 
           const high = mine.filter((t) => t.priority === "High").length;
           const blocked = mine.filter((t) => t.status === "Blocked").length;
-          const body = mine.map(fmtLine).join("\n");
+          const body = mine.length > 0 ? mine.map(fmtLine).join("\n") : "No tasks on your plate today! Click here to add your first task.";
 
           if (!optedOut.has(p.id)) {
             const dedupeKey = `SOD_${today}_${p.id}`;
@@ -108,10 +109,22 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
             }
           }
 
+          if (mine.length === 0 && p.manager_id && profileById.has(p.manager_id) && !optedOut.has(p.manager_id)) {
+            const managerDedupeKey = `NO_TASK_${today}_${p.id}_${p.manager_id}`;
+            await supabaseAdmin.from("notifications").insert({
+              user_id: p.manager_id,
+              type: "sod_team_digest",
+              title: `${p.display_name} has no tasks today`,
+              body: `${p.display_name} has 0 tasks on their plate for today. Please assign tasks if needed.`,
+              dedupe_key: managerDedupeKey,
+            });
+          }
+
           if (p.manager_id && profileById.has(p.manager_id)) {
             const arr = managerRollup.get(p.manager_id) ?? [];
+            const taskListStr = mine.length > 0 ? `\n${mine.slice(0, 5).map(fmtLine).join("\n")}` : "";
             arr.push(
-              `${p.display_name}: ${mine.length} task${mine.length === 1 ? "" : "s"}${high ? ` (${high} high)` : ""}${blocked ? ` (${blocked} blocked)` : ""}\n${mine.slice(0, 5).map(fmtLine).join("\n")}`,
+              `${p.display_name}: ${mine.length} task${mine.length === 1 ? "" : "s"}${high ? ` (${high} high)` : ""}${blocked ? ` (${blocked} blocked)` : ""}${taskListStr}`,
             );
             managerRollup.set(p.manager_id, arr);
           }

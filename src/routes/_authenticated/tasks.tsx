@@ -16,8 +16,9 @@ import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { downloadCSV, toCSV } from "@/lib/csv";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
-  validateSearch: (search: Record<string, unknown>): { highlightId?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { highlightId?: string; create?: boolean } => ({
     highlightId: typeof search.highlightId === "string" ? search.highlightId : undefined,
+    create: search.create === true || search.create === "true" || undefined,
   }),
   component: TasksPage,
 });
@@ -26,7 +27,7 @@ const ALL = "__all";
 
 function TasksPage() {
   const { user, isManager } = useAuth();
-  const { highlightId } = Route.useSearch();
+  const { highlightId, create } = Route.useSearch();
   const navigate = useNavigate({ from: "/tasks" });
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -111,7 +112,21 @@ function TasksPage() {
       }, 2500);
       return () => clearTimeout(t);
     }
-  }, [highlightId, filtered]);
+  }, [highlightId, filtered, navigate]);
+
+  // Open the create dialog if query parameter `create` is true
+  useEffect(() => {
+    if (create) {
+      setDialogOpen(true);
+      navigate({
+        search: (prev) => {
+          const { create: _, ...rest } = prev;
+          return rest;
+        },
+        replace: true,
+      });
+    }
+  }, [create, navigate]);
 
   if (!user) return null;
 

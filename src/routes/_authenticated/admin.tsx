@@ -41,13 +41,17 @@ function AdminPage() {
   const [userToDelete, setUserToDelete] = useState<Profile | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Local draft state for edits
+  const [editedManagers, setEditedManagers] = useState<Record<string, string | null>>({});
+  const [editedRoles, setEditedRoles] = useState<Record<string, AppRole>>({});
+
   const deleteUserFn = useServerFn(deleteUser);
 
   const load = async () => {
     setLoading(true);
     try {
       const [{ data: p }, { data: r }] = await Promise.all([
-        supabase.from("profiles").select("id,display_name,email,avatar_url"),
+        supabase.from("profiles").select("id,display_name,email,avatar_url,manager_id"),
         supabase.from("user_roles").select("user_id,role"),
       ]);
       setProfiles((p ?? []) as Profile[]);
@@ -69,12 +73,47 @@ function AdminPage() {
     load();
   }, []);
 
-  const changeRole = async (userId: string, newRole: AppRole) => {
-    await supabase.from("user_roles").delete().eq("user_id", userId);
-    const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: newRole } as never);
-    if (error) return toast.error(error.message);
-    toast.success("Role updated");
-    load();
+  const saveChanges = async (userId: string) => {
+    const updatedManagerId = editedManagers[userId];
+    const updatedRole = editedRoles[userId];
+
+    setLoading(true);
+    try {
+      // Save manager if edited
+      if (updatedManagerId !== undefined) {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ manager_id: updatedManagerId } as never)
+          .eq("id", userId);
+        if (error) throw error;
+        setEditedManagers(prev => {
+          const { [userId]: _, ...rest } = prev;
+          return rest;
+        });
+      }
+
+      // Save role if edited
+      if (updatedRole !== undefined) {
+        const { error: deleteError } = await supabase.from("user_roles").delete().eq("user_id", userId);
+        if (deleteError) throw deleteError;
+
+        const { error } = await supabase
+          .from("user_roles")
+          .insert({ user_id: userId, role: updatedRole } as never);
+        if (error) throw error;
+        setEditedRoles(prev => {
+          const { [userId]: _, ...rest } = prev;
+          return rest;
+        });
+      }
+
+      toast.success("Changes saved successfully");
+      load();
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to save changes");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -101,7 +140,7 @@ function AdminPage() {
   });
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Admin · Users & Roles</h1>
         <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
@@ -121,40 +160,105 @@ function AdminPage() {
       </div>
 
       <Card className="p-4 border-border/50 bg-card/60 backdrop-blur-sm shadow-md">
+        {/* Table Header */}
+        {filteredProfiles.length > 0 && (
+          <div className="hidden md:grid grid-cols-[1fr_200px_160px_100px] gap-4 px-3 py-2 border-b border-border/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            <div>User / Email</div>
+            <div>Manager</div>
+            <div>Role</div>
+            <div className="text-right">Actions</div>
+          </div>
+        )}
+
         <div className="space-y-3">
           {filteredProfiles.length === 0 ? (
             <div className="text-center py-6 text-sm text-muted-foreground">
               {profiles.length === 0 ? "No users found." : "No users match your search query."}
             </div>
           ) : (
-            filteredProfiles.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-4 border-b border-border/40 pb-3 last:border-0 last:pb-0">
-                <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-sm text-foreground truncate">{p.display_name}</div>
-                  <div className="text-xs text-muted-foreground truncate">{p.email}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Select value={rolesMap[p.id] ?? "member"} onValueChange={(v) => changeRole(p.id, v as AppRole)} disabled={p.id === user?.id}>
-                    <SelectTrigger className="h-8 w-28 text-xs bg-background/50 border-border/60"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="member">Member</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {p.id !== user?.id && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      onClick={() => setUserToDelete(p)}
+            filteredProfiles.map((p) => {
+              const currentManager = editedManagers[p.id] !== undefined ? editedManagers[p.id] : (p.manager_id ?? null);
+              const currentRole = editedRoles[p.id] !== undefined ? editedRoles[p.id] : (rolesMap[p.id] ?? "member");
+              const hasChanges = (editedManagers[p.id] !== undefined && editedManagers[p.id] !== (p.manager_id ?? null)) || 
+                                  (editedRoles[p.id] !== undefined && editedRoles[p.id] !== (rolesMap[p.id] ?? "member"));
+
+              return (
+                <div key={p.id} className="grid grid-cols-1 md:grid-cols-[1fr_200px_160px_100px] items-center gap-2 md:gap-4 py-3 border-b border-border/40 last:border-0 last:pb-0">
+                  {/* User/Email Column */}
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm text-foreground truncate">{p.display_name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{p.email}</div>
+                  </div>
+
+                  {/* Manager Column */}
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground md:hidden block mb-1">Manager</label>
+                    <Select
+                      value={currentManager ?? "__none"}
+                      onValueChange={(v) => {
+                        setEditedManagers(prev => ({ ...prev, [p.id]: v === "__none" ? null : v }));
+                      }}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                      <SelectTrigger className="h-8 w-full md:w-44 text-xs bg-background/50 border-border/60">
+                        <SelectValue placeholder="Manager" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none">No Manager</SelectItem>
+                        {profiles
+                          .filter((m) => m.id !== p.id)
+                          .map((m) => (
+                            <SelectItem key={m.id} value={m.id}>
+                              {m.display_name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Role Column */}
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground md:hidden block mb-1">Role</label>
+                    <Select 
+                      value={currentRole} 
+                      onValueChange={(v) => {
+                        setEditedRoles(prev => ({ ...prev, [p.id]: v as AppRole }));
+                      }} 
+                      disabled={p.id === user?.id}
+                    >
+                      <SelectTrigger className="h-8 w-full md:w-32 text-xs bg-background/50 border-border/60"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="member">Member</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Actions / Save Column */}
+                  <div className="flex items-center justify-between md:justify-end gap-1.5 pt-2 md:pt-0">
+                    {hasChanges && (
+                      <Button
+                        size="sm"
+                        onClick={() => saveChanges(p.id)}
+                        className="h-8 px-3 text-xs font-medium"
+                      >
+                        Save
+                      </Button>
+                    )}
+                    {p.id !== user?.id && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors ml-auto md:ml-0"
+                        onClick={() => setUserToDelete(p)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </Card>
