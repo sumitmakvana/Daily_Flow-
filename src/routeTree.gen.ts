@@ -35,6 +35,7 @@ import { Route as AuthenticatedEodRouteImport } from './routes/_authenticated/eo
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedConfigureRouteImport } from './routes/_authenticated/configure'
 import { Route as AuthenticatedCommandRouteImport } from './routes/_authenticated/command'
+import { Route as AuthenticatedCalendarRouteImport } from './routes/_authenticated/calendar'
 import { Route as AuthenticatedBlockersRouteImport } from './routes/_authenticated/blockers'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
@@ -186,6 +187,11 @@ const AuthenticatedCommandRoute = AuthenticatedCommandRouteImport.update({
   path: '/command',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedCalendarRoute = AuthenticatedCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedBlockersRoute = AuthenticatedBlockersRouteImport.update({
   id: '/blockers',
   path: '/blockers',
@@ -298,6 +304,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/blockers': typeof AuthenticatedBlockersRoute
+  '/calendar': typeof AuthenticatedCalendarRoute
   '/command': typeof AuthenticatedCommandRoute
   '/configure': typeof AuthenticatedConfigureRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -343,6 +350,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/blockers': typeof AuthenticatedBlockersRoute
+  '/calendar': typeof AuthenticatedCalendarRoute
   '/command': typeof AuthenticatedCommandRoute
   '/configure': typeof AuthenticatedConfigureRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -390,6 +398,7 @@ export interface FileRoutesById {
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/blockers': typeof AuthenticatedBlockersRoute
+  '/_authenticated/calendar': typeof AuthenticatedCalendarRoute
   '/_authenticated/command': typeof AuthenticatedCommandRoute
   '/_authenticated/configure': typeof AuthenticatedConfigureRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -437,6 +446,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/blockers'
+    | '/calendar'
     | '/command'
     | '/configure'
     | '/dashboard'
@@ -482,6 +492,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/blockers'
+    | '/calendar'
     | '/command'
     | '/configure'
     | '/dashboard'
@@ -528,6 +539,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin'
     | '/_authenticated/analytics'
     | '/_authenticated/blockers'
+    | '/_authenticated/calendar'
     | '/_authenticated/command'
     | '/_authenticated/configure'
     | '/_authenticated/dashboard'
@@ -771,6 +783,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCommandRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/calendar': {
+      id: '/_authenticated/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof AuthenticatedCalendarRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/blockers': {
       id: '/_authenticated/blockers'
       path: '/blockers'
@@ -921,6 +940,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedBlockersRoute: typeof AuthenticatedBlockersRoute
+  AuthenticatedCalendarRoute: typeof AuthenticatedCalendarRoute
   AuthenticatedCommandRoute: typeof AuthenticatedCommandRoute
   AuthenticatedConfigureRoute: typeof AuthenticatedConfigureRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -950,6 +970,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedBlockersRoute: AuthenticatedBlockersRoute,
+  AuthenticatedCalendarRoute: AuthenticatedCalendarRoute,
   AuthenticatedCommandRoute: AuthenticatedCommandRoute,
   AuthenticatedConfigureRoute: AuthenticatedConfigureRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,

@@ -20,6 +20,7 @@ import {
 import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task, type WorkItemType } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getLocalHoliday, fetchIndianHolidays, type Holiday } from "@/lib/format";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { workItemTypesService } from "@/services/work-item-types";
 import { dynamicFieldsService, type WorkItemFieldDef } from "@/services/dynamic-fields";
@@ -44,6 +45,16 @@ export function TaskFormDialog({
   const [types, setTypes] = useState<WorkItemType[]>([]);
   const [form, setForm] = useState<Partial<Task>>(initial ?? { priority: "Medium", status: "To Do", custom_fields: {} });
   const [fieldDefs, setFieldDefs] = useState<WorkItemFieldDef[]>([]);
+  const [apiHolidays, setApiHolidays] = useState<Record<string, Holiday>>({});
+
+  useEffect(() => {
+    if (open && form.due_date) {
+      const year = new Date(form.due_date).getFullYear();
+      if (!isNaN(year)) {
+        fetchIndianHolidays(year).then(setApiHolidays).catch(() => {});
+      }
+    }
+  }, [form.due_date, open]);
 
   useEffect(() => {
     setForm(initial ?? { priority: "Medium", status: "To Do", custom_fields: {} });
@@ -210,6 +221,18 @@ export function TaskFormDialog({
                 }}
                 className="cursor-pointer"
               />
+              {form.due_date && (() => {
+                const holiday = getLocalHoliday(form.due_date, apiHolidays);
+                if (holiday) {
+                  return (
+                    <div className="mt-1 text-[10px] font-medium text-amber-600 bg-amber-500/10 px-2 py-1 rounded flex items-center gap-1">
+                      <span>{holiday.emoji}</span>
+                      <span>Note: Selected date is a holiday ({holiday.name})</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
             <div>
               <Label>Planned hrs</Label>

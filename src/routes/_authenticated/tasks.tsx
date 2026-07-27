@@ -10,10 +10,21 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Upload, Download, User, Users } from "lucide-react";
+import { Plus, Search, Upload, Download, User, Users, Trash2, Calendar, ArrowUpDown } from "lucide-react";
 import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task } from "@/lib/types";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { downloadCSV, toCSV } from "@/lib/csv";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { tasksService } from "@/services/tasks";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
   validateSearch: (search: Record<string, unknown>): { highlightId?: string; create?: boolean } => ({
@@ -40,13 +51,21 @@ function TasksPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
+  // New UI feature states
+  const [activeTab, setActiveTab] = useState<string>("my_tasks");
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [dateFilter, setDateFilter] = useState<string>(ALL);
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [confirmDeleteAllText, setConfirmDeleteAllText] = useState("");
+
   // Highlight state — React state (not classList) so Tailwind v4 includes the classes
   const [activeHighlight, setActiveHighlight] = useState<string | null>(null);
 
   const nameOf = (id: string | null) => (id ? profiles.find((p) => p.id === id)?.display_name ?? "" : "");
 
   const exportCSV = () => {
-    const rows = filtered.map((t) => ({
+    const rows = sorted.map((t) => ({
       task_code: t.task_code,
       task_name: t.task_name,
       client: t.client ?? "",
@@ -80,24 +99,137 @@ function TasksPage() {
   useEffect(() => { load(); }, []);
   useRealtimeTasks(load, "tasks-page-rt");
 
-  // Base filtered list (no sorting yet)
-  const filtered = useMemo(() => tasks.filter((t) => {
-    if (status !== ALL && t.status !== status) return false;
-    if (priority !== ALL && t.priority !== priority) return false;
-    if (assignee !== ALL && t.assigned_to !== assignee) return false;
-    if (q && !`${t.task_code} ${t.task_name} ${t.client ?? ""} ${t.project_name ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
-    return true;
-  }), [tasks, q, status, priority, assignee]);
+  // Selection handlers
+  const handleToggleSelect = (id: string) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedTaskIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Are you sure you want to delete the ${selectedTaskIds.size} selected tasks?`)) return;
+    try {
+      const ids = Array.from(selectedTaskIds);
+      await Promise.all(ids.map((id) => tasksService.delete(id)));
+      toast.success(`Successfully deleted ${ids.length} tasks`);
+      setSelectedTaskIds(new Set());
+      load();
+    } catch (err) {
+      toast.error("Failed to delete tasks: " + (err as Error).message);
+    }
+  };
+
+  const handleBulkComplete = async () => {
+    try {
+      const ids = Array.from(selectedTaskIds);
+      const tasksToUpdate = tasks.filter((t) => selectedTaskIds.has(t.id));
+      await Promise.all(tasksToUpdate.map((t) => tasksService.setStatus(t, "Completed", user?.id || "")));
+      toast.success(`Successfully completed ${tasksToUpdate.length} tasks`);
+      setSelectedTaskIds(new Set());
+      load();
+    } catch (err) {
+      toast.error("Failed to update tasks: " + (err as Error).message);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    try {
+      await Promise.all(tasks.map((t) => tasksService.delete(t.id)));
+      toast.success("All tasks deleted successfully");
+      setConfirmDeleteAllText("");
+      setDeleteAllOpen(false);
+      setSelectedTaskIds(new Set());
+      load();
+    } catch (err) {
+      toast.error("Failed to delete tasks: " + (err as Error).message);
+    }
+  };
+
+  // Base filtered list with date filters
+  const filtered = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    
+    const tomorrow = new Date();
+    tomorrow.setDate(now.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    
+    const startOfWeek = new Date();
+    startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)); // Monday
+    const startOfWeekStr = startOfWeek.toISOString().slice(0, 10);
+    const endOfWeek = new Date();
+    endOfWeek.setDate(startOfWeek.getDate() + 6); // Sunday
+    const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+
+    return tasks.filter((t) => {
+      if (status !== ALL && t.status !== status) return false;
+      if (priority !== ALL && t.priority !== priority) return false;
+      if (assignee !== ALL && t.assigned_to !== assignee) return false;
+      if (q && !`${t.task_code} ${t.task_name} ${t.client ?? ""} ${t.project_name ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
+      
+      // Date filters
+      if (dateFilter === "today" && t.due_date !== todayStr) return false;
+      if (dateFilter === "tomorrow" && t.due_date !== tomorrowStr) return false;
+      if (dateFilter === "this_week") {
+        if (!t.due_date || t.due_date < startOfWeekStr || t.due_date > endOfWeekStr) return false;
+      }
+      if (dateFilter === "overdue") {
+        if (!t.due_date || t.due_date >= todayStr || t.status === "Completed") return false;
+      }
+      if (dateFilter === "no_due_date" && t.due_date) return false;
+
+      return true;
+    });
+  }, [tasks, q, status, priority, assignee, dateFilter]);
+
+  // Sort tasks
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "newest") {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      if (sortBy === "oldest") {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      if (sortBy === "due_soon") {
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      }
+      if (sortBy === "due_late") {
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(b.due_date).getTime() - new Date(a.due_date).getTime();
+      }
+      return 0;
+    });
+  }, [filtered, sortBy]);
 
   // Split into two sections: my tasks vs team tasks
   const myTasks = useMemo(
-    () => filtered.filter((t) => t.assigned_to === user?.id),
-    [filtered, user?.id]
+    () => sorted.filter((t) => t.assigned_to === user?.id),
+    [sorted, user?.id]
   );
   const teamTasks = useMemo(
-    () => filtered.filter((t) => t.assigned_to !== user?.id),
-    [filtered, user?.id]
+    () => sorted.filter((t) => t.assigned_to !== user?.id),
+    [sorted, user?.id]
   );
+
+  const currentTabTasks = useMemo(() => {
+    if (activeTab === "my_tasks") return myTasks;
+    if (activeTab === "team_tasks") return teamTasks;
+    return sorted;
+  }, [activeTab, myTasks, teamTasks, sorted]);
 
   // Scroll + highlight task when coming from a notification click
   useEffect(() => {
@@ -148,12 +280,14 @@ function TasksPage() {
         userId={user.id}
         canManage={isManager}
         onChanged={load}
+        selected={selectedTaskIds.has(t.id)}
+        onSelectToggle={() => handleToggleSelect(t.id)}
       />
     </div>
   );
 
   return (
-    <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 space-y-4">
+    <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 space-y-4 pb-24">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Tasks</h1>
@@ -163,6 +297,9 @@ function TasksPage() {
           </Button>
           <Button size="sm" variant="ghost" className="h-8" onClick={exportCSV} title="Export filtered tasks">
             <Download className="h-3.5 w-3.5 mr-1" /> Export
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteAllOpen(true)} title="Delete all tasks">
+            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete All
           </Button>
           <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4 mr-1" /> New task</Button>
         </div>
@@ -195,41 +332,190 @@ function TasksPage() {
             {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}
           </SelectContent>
         </Select>
+        
+        {/* Date Filter */}
+        <Select value={dateFilter} onValueChange={setDateFilter}>
+          <SelectTrigger className="h-8 w-32 text-xs">
+            <div className="flex items-center gap-1">
+              <Calendar className="h-3 w-3 shrink-0" />
+              <SelectValue placeholder="Date" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Dates</SelectItem>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="tomorrow">Tomorrow</SelectItem>
+            <SelectItem value="this_week">This Week</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
+            <SelectItem value="no_due_date">No Due Date</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Sort Select */}
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="h-8 w-36 text-xs">
+            <div className="flex items-center gap-1">
+              <ArrowUpDown className="h-3 w-3 shrink-0" />
+              <SelectValue placeholder="Sort By" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest Created</SelectItem>
+            <SelectItem value="oldest">Oldest Created</SelectItem>
+            <SelectItem value="due_soon">Due Date (Soonest)</SelectItem>
+            <SelectItem value="due_late">Due Date (Latest)</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* My Tasks Section */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <User className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold text-primary">My Tasks</h2>
-          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{myTasks.length}</span>
+      {/* Tabs Layout */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-1">
+          <TabsList className="bg-muted/80">
+            <TabsTrigger value="my_tasks" className="text-xs">My Tasks ({myTasks.length})</TabsTrigger>
+            <TabsTrigger value="team_tasks" className="text-xs">Team Tasks ({teamTasks.length})</TabsTrigger>
+            <TabsTrigger value="all_tasks" className="text-xs">All Tasks ({sorted.length})</TabsTrigger>
+          </TabsList>
+
+          {/* Select All Checkbox */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mr-1">
+            <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors select-none">
+              <input
+                type="checkbox"
+                checked={currentTabTasks.length > 0 && currentTabTasks.every(t => selectedTaskIds.has(t.id))}
+                ref={el => {
+                  if (el) {
+                    const someSelected = currentTabTasks.some(t => selectedTaskIds.has(t.id));
+                    const allSelected = currentTabTasks.every(t => selectedTaskIds.has(t.id));
+                    el.indeterminate = someSelected && !allSelected;
+                  }
+                }}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  const newSelection = new Set(selectedTaskIds);
+                  currentTabTasks.forEach(t => {
+                    if (checked) {
+                      newSelection.add(t.id);
+                    } else {
+                      newSelection.delete(t.id);
+                    }
+                  });
+                  setSelectedTaskIds(newSelection);
+                }}
+                className="h-3.5 w-3.5 rounded border-muted-foreground/30 text-primary accent-primary cursor-pointer"
+              />
+              Select All
+            </label>
+          </div>
         </div>
-        {myTasks.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            {myTasks.map(renderTaskCard)}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground italic pl-6">No tasks assigned to you.</p>
-        )}
-      </div>
 
-      {/* Team Tasks Section */}
-      {teamTasks.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 pt-2 border-t border-border">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold text-muted-foreground">Team Tasks</h2>
-            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{teamTasks.length}</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            {teamTasks.map(renderTaskCard)}
+        <TabsContent value="my_tasks" className="mt-0">
+          {myTasks.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {myTasks.map(renderTaskCard)}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic py-8 text-center bg-muted/5 rounded-lg border border-dashed border-border">
+              No tasks assigned to you.
+            </p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="team_tasks" className="mt-0">
+          {teamTasks.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {teamTasks.map(renderTaskCard)}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic py-8 text-center bg-muted/5 rounded-lg border border-dashed border-border">
+              No team tasks found.
+            </p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="all_tasks" className="mt-0">
+          {sorted.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {sorted.map(renderTaskCard)}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic py-8 text-center bg-muted/5 rounded-lg border border-dashed border-border">
+              No tasks match the filters.
+            </p>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Bulk action sticky floating bar */}
+      {selectedTaskIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-popover text-popover-foreground border border-border shadow-2xl rounded-full px-5 py-3 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <span className="text-xs font-medium">
+            {selectedTaskIds.size} {selectedTaskIds.size === 1 ? "task" : "tasks"} selected
+          </span>
+          <div className="flex items-center gap-1.5 border-l border-border pl-4">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs px-2.5 rounded-full cursor-pointer hover:bg-muted"
+              onClick={handleBulkComplete}
+            >
+              Mark Completed
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs px-2.5 rounded-full cursor-pointer"
+              onClick={handleBulkDelete}
+            >
+              Delete Selected
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs px-2.5 rounded-full text-muted-foreground hover:text-foreground cursor-pointer hover:bg-muted"
+              onClick={handleClearSelection}
+            >
+              Clear
+            </Button>
           </div>
         </div>
       )}
 
-      {filtered.length === 0 && (
-        <p className="text-sm text-muted-foreground italic">No tasks match.</p>
-      )}
+      {/* Delete All Confirm Dialog */}
+      <AlertDialog open={deleteAllOpen} onOpenChange={setDeleteAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete All Tasks?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will permanently delete all tasks in the system. This cannot be undone.
+              To confirm this action, please type <strong className="text-foreground font-semibold">DELETE ALL</strong> below:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <Input
+              placeholder="Type DELETE ALL"
+              value={confirmDeleteAllText}
+              onChange={(e) => setConfirmDeleteAllText(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <AlertDialogFooter>
+            <Button variant="ghost" onClick={() => {
+              setDeleteAllOpen(false);
+              setConfirmDeleteAllText("");
+            }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={confirmDeleteAllText !== "DELETE ALL"}
+              onClick={handleDeleteAll}
+            >
+              Delete All Tasks
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <TaskFormDialog open={dialogOpen} onOpenChange={setDialogOpen} userId={user.id} onSaved={load} />
       <CSVImportDialog open={importOpen} onOpenChange={setImportOpen} profiles={profiles} userId={user.id} isManager={isManager} onDone={load} />

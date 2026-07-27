@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { TASK_PRIORITIES, TASK_STATUSES, type Profile } from "@/lib/types";
+import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task } from "@/lib/types";
 import { tasksService } from "@/services/tasks";
 import { 
   Upload, 
@@ -218,7 +218,7 @@ export function CSVImportDialog({
   onDone: () => void;
   isManager?: boolean;
 }) {
-  const [step, setStep] = useState<Step>("upload");
+   const [step, setStep] = useState<Step>("upload");
   const [fileName, setFileName] = useState<string>("");
   const [rawRows, setRawRows] = useState<string[][]>([]);
   const [headerIndex, setHeaderIndex] = useState<number>(0);
@@ -228,6 +228,8 @@ export function CSVImportDialog({
   const [userMapping, setUserMapping] = useState<Record<string, string>>({});
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [existingTasks, setExistingTasks] = useState<any[]>([]);
+  const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update" | "new">("skip");
 
   // Load emails once opened to help users map names to actual system user accounts
   useEffect(() => {
@@ -238,6 +240,7 @@ export function CSVImportDialog({
       setColumnMapping({});
       setUniqueNames([]);
       setUserMapping({});
+      setDuplicateStrategy("skip");
       
       const fetchEmails = async () => {
         const { data } = await supabase.from("profile_emails" as never).select("id,email");
@@ -250,6 +253,14 @@ export function CSVImportDialog({
         }
       };
       fetchEmails();
+
+      const fetchExistingTasks = async () => {
+        const { data } = await supabase.from("tasks").select("id, task_code, task_name, assigned_to, due_date, version");
+        if (data) {
+          setExistingTasks(data);
+        }
+      };
+      fetchExistingTasks();
     }
   }, [open]);
 
@@ -427,6 +438,31 @@ export function CSVImportDialog({
     });
   };
 
+  const findDuplicateTask = (task: any) => {
+    return existingTasks.find(et => {
+      // 1. If both have task_code, compare task_code (case-insensitive)
+      if (task.task_code && et.task_code) {
+        return task.task_code.trim().toLowerCase() === et.task_code.trim().toLowerCase();
+      }
+      
+      // 2. If no task_code, check for matching task_name, assigned_to, and due_date
+      const nameMatch = (task.task_name || "").trim().toLowerCase() === (et.task_name || "").trim().toLowerCase();
+      const assigneeMatch = task.assigned_to === et.assigned_to;
+      const dateMatch = (task.due_date || null) === (et.due_date || null);
+      
+      return nameMatch && assigneeMatch && dateMatch;
+    });
+  };
+
+  const previewTasks = useMemo(() => {
+    return step === "preview" ? getMappedTasks() : [];
+  }, [step, rawRows, columnMapping, userMapping, headerIndex, existingTasks]);
+
+  const duplicateCount = useMemo(() => {
+    if (step !== "preview") return 0;
+    return previewTasks.filter(t => findDuplicateTask(t) !== undefined).length;
+  }, [previewTasks, existingTasks]);
+
   const doImport = async () => {
     const payload = getMappedTasks();
     console.log("doImport debug: userId =", userId, "isManager =", isManager);
@@ -436,10 +472,23 @@ export function CSVImportDialog({
 
     try {
       let inserted = 0;
+      let updated = 0;
+      let skipped = 0;
       let rejected = 0;
 
       const promises = payload.map(async (task) => {
         try {
+          const duplicateOf = findDuplicateTask(task);
+          if (duplicateOf) {
+            if (duplicateStrategy === "skip") {
+              skipped++;
+              return;
+            } else if (duplicateStrategy === "update") {
+              await tasksService.update(duplicateOf as Task, task as Partial<Task>, userId);
+              updated++;
+              return;
+            }
+          }
           await tasksService.create(task as any, userId);
           inserted++;
         } catch (err) {
@@ -450,10 +499,16 @@ export function CSVImportDialog({
 
       await Promise.all(promises);
 
+      let msg = "Import completed.";
+      if (inserted > 0) msg += ` Created ${inserted} new tasks.`;
+      if (updated > 0) msg += ` Updated ${updated} tasks.`;
+      if (skipped > 0) msg += ` Skipped ${skipped} duplicates.`;
+      if (rejected > 0) msg += ` Failed to import ${rejected} tasks.`;
+
       if (rejected > 0) {
-        toast.warning(`Imported ${inserted} tasks, rejected ${rejected} (Permission denied or invalid fields)`);
+        toast.warning(msg);
       } else {
-        toast.success(`Successfully imported ${inserted} tasks!`);
+        toast.success(msg);
       }
       onOpenChange(false);
       onDone();
@@ -463,8 +518,6 @@ export function CSVImportDialog({
       setBusy(false);
     }
   };
-
-  const previewTasks = step === "preview" ? getMappedTasks() : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -674,6 +727,59 @@ export function CSVImportDialog({
                 </div>
               </div>
 
+              {/* Duplicate Strategy Option Card UI */}
+              <div className="bg-muted/40 p-3.5 rounded-xl border border-border space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 text-primary" />
+                    Duplicate Tasks Strategy
+                  </div>
+                  {duplicateCount > 0 && (
+                    <span className="bg-yellow-500/15 text-yellow-600 dark:text-yellow-500 px-2 py-0.5 rounded text-[10px] font-semibold">
+                      {duplicateCount} duplicates detected
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateStrategy("skip")}
+                    className={`px-2.5 py-2 rounded-lg border text-xs font-medium transition-all text-center flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                      duplicateStrategy === "skip"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
+                    }`}
+                  >
+                    <span className="font-semibold text-foreground">Skip Duplicates</span>
+                    <span className="text-[9px] text-muted-foreground leading-none">Skip duplicate rows</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateStrategy("update")}
+                    className={`px-2.5 py-2 rounded-lg border text-xs font-medium transition-all text-center flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                      duplicateStrategy === "update"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
+                    }`}
+                  >
+                    <span className="font-semibold text-foreground">Overwrite</span>
+                    <span className="text-[9px] text-muted-foreground leading-none">Update existing tasks</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDuplicateStrategy("new")}
+                    className={`px-2.5 py-2 rounded-lg border text-xs font-medium transition-all text-center flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                      duplicateStrategy === "new"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
+                    }`}
+                  >
+                    <span className="font-semibold text-foreground">Import All</span>
+                    <span className="text-[9px] text-muted-foreground leading-none">Create new duplicate tasks</span>
+                  </button>
+                </div>
+              </div>
+
               {!isManager && (
                 <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-600 p-3 rounded-lg flex items-start gap-2.5 text-xs">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -699,10 +805,18 @@ export function CSVImportDialog({
                   <tbody className="divide-y divide-border bg-card">
                     {previewTasks.slice(0, 100).map((task, idx) => {
                       const assigneeProfile = profiles.find(p => p.id === task.assigned_to);
+                      const duplicateOf = findDuplicateTask(task);
                       return (
-                        <tr key={idx} className="hover:bg-muted/5">
+                        <tr key={idx} className={`hover:bg-muted/5 ${duplicateOf ? "bg-yellow-500/5" : ""}`}>
                           <td className="px-2 py-2 font-medium truncate" title={task.task_name}>
-                            {task.task_name}
+                            <div className="flex items-center gap-1.5">
+                              {duplicateOf && (
+                                <span className="shrink-0 bg-yellow-500/15 text-yellow-700 dark:text-yellow-500 px-1 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider">
+                                  Dup
+                                </span>
+                              )}
+                              <span className="truncate">{task.task_name}</span>
+                            </div>
                           </td>
                           <td className="px-2 py-2 text-muted-foreground truncate">
                             {assigneeProfile?.display_name || "—"}

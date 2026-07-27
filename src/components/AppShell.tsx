@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ListChecks, LayoutDashboard, AlertOctagon, BarChart3, Bell, LogOut, Activity, Sun, CalendarRange, Grid3x3, Settings, ShieldAlert, Gauge, Sparkles, Brain, Download, Sunrise, TrendingUp, Menu, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { HolidayBanner } from "@/components/HolidayBanner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth, signOut } from "@/hooks/use-auth";
@@ -28,6 +29,7 @@ import noesisLogo from "@/components/ui/noesis_analytics_logo.svg";
 const memberNav = [
   { to: "/my-day", icon: Sunrise, label: "My Day" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
+  { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod-tasks", icon: Sun, label: "EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
   { to: "/notifications", icon: Bell, label: "Inbox" },
@@ -42,6 +44,7 @@ const managerNav = [
   { to: "/planning-suggestions", icon: Sparkles, label: "Suggestions" },
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
+  { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/planning", icon: CalendarRange, label: "Planning" },
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
@@ -54,6 +57,7 @@ const managerNav = [
 const primaryManagerNav = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
+  { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/planning", icon: CalendarRange, label: "Planning" },
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
@@ -85,10 +89,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const mobileBottomNav = isManager ? [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/tasks", icon: ListChecks, label: "Tasks" },
+    { to: "/calendar", icon: CalendarRange, label: "Calendar" },
     { to: "/eod", icon: Sun, label: "EOD" },
   ] : [
     { to: "/my-day", icon: Sunrise, label: "My Day" },
     { to: "/tasks", icon: ListChecks, label: "Tasks" },
+    { to: "/calendar", icon: CalendarRange, label: "Calendar" },
     { to: "/eod-tasks", icon: Sun, label: "EOD" },
   ];
 
@@ -284,11 +290,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 pb-16 md:pb-0">{children}</main>
+      <main className="flex-1 pb-16 md:pb-0">
+        <HolidayBanner />
+        {children}
+      </main>
 
       {/* Mobile bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur md:hidden">
-        <div className="grid grid-cols-4 h-14">
+        <div className="grid grid-cols-5 h-14">
           {mobileBottomNav.map((n) => {
             const active = location.pathname === n.to || location.pathname.startsWith(n.to + "/");
             return (
