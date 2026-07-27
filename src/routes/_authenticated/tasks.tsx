@@ -42,7 +42,7 @@ function TasksPage() {
   // Highlight state — React state (not classList) so Tailwind v4 includes the classes
   const [activeHighlight, setActiveHighlight] = useState<string | null>(null);
 
-  const emailOf = (id: string | null) => (id ? emails[id] ?? "" : "");
+  const nameOf = (id: string | null) => (id ? profiles.find((p) => p.id === id)?.display_name ?? "" : "");
 
   const exportCSV = () => {
     const rows = filtered.map((t) => ({
@@ -52,15 +52,15 @@ function TasksPage() {
       project_name: t.project_name ?? "",
       priority: t.priority,
       status: t.status,
-      assigned_to_email: emailOf(t.assigned_to),
-      reviewer_email: emailOf(t.reviewer),
+      assigned_to: nameOf(t.assigned_to),
+      reviewer: nameOf(t.reviewer),
       due_date: t.due_date ?? "",
       planned_hours: t.planned_hours ?? "",
       actual_hours: t.actual_hours ?? "",
       sprint_week: t.sprint_week ?? "",
       remarks: t.remarks ?? "",
     }));
-    const cols = ["task_code","task_name","client","project_name","priority","status","assigned_to_email","reviewer_email","due_date","planned_hours","actual_hours","sprint_week","remarks"];
+    const cols = ["task_code","task_name","client","project_name","priority","status","assigned_to","reviewer","due_date","planned_hours","actual_hours","sprint_week","remarks"];
     downloadCSV(`tasks-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows, cols));
   };
 
