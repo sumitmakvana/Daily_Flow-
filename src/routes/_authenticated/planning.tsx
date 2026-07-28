@@ -16,6 +16,7 @@ import { carryForwardService } from "@/services/carry-forward";
 import { workloadService, utilTone } from "@/services/workload";
 import { toast } from "sonner";
 import { Calendar, User as UserIcon, Flag, ArrowRightCircle, X } from "lucide-react";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 
 export const Route = createFileRoute("/_authenticated/planning")({
   component: PlanningPage,
@@ -38,6 +39,7 @@ function PlanningPage() {
     setSelected(new Set());
   };
   useEffect(() => { load(); }, []);
+  useRealtimeTasks(load, "planning-rt");
 
   const groups = useMemo(() => {
     const m = new Map<string, { label: string; key: string; tasks: Task[] }>();

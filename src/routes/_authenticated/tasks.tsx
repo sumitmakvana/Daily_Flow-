@@ -231,6 +231,19 @@ function TasksPage() {
     return sorted;
   }, [activeTab, myTasks, teamTasks, sorted]);
 
+  // Switch tab automatically if we have a highlightId from My Day/Notification
+  useEffect(() => {
+    if (!highlightId || tasks.length === 0) return;
+    const targetTask = tasks.find((t) => t.id === highlightId);
+    if (targetTask) {
+      if (targetTask.assigned_to === user?.id) {
+        setActiveTab("my_tasks");
+      } else {
+        setActiveTab("team_tasks");
+      }
+    }
+  }, [highlightId, tasks, user?.id]);
+
   // Scroll + highlight task when coming from a notification click
   useEffect(() => {
     if (!highlightId || filtered.length === 0) return;
@@ -244,7 +257,7 @@ function TasksPage() {
       }, 2500);
       return () => clearTimeout(t);
     }
-  }, [highlightId, filtered, navigate]);
+  }, [highlightId, filtered, navigate, activeTab]);
 
   // Open the create dialog if query parameter `create` is true
   useEffect(() => {
