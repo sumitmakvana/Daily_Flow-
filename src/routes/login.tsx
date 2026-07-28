@@ -8,10 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
+import { Loader2, Mail, Lock, ArrowRight } from "lucide-react";
 import noesisLogo from "@/components/ui/noesis_analytics_logo.svg";
 
 const loginSearchSchema = z.object({
   redirect: z.string().optional(),
+  mode: z.enum(["signin", "signup"]).optional(),
 });
 
 export const Route = createFileRoute("/login")({
@@ -34,87 +36,170 @@ async function resolveLanding(fallback?: string): Promise<string> {
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { redirect } = Route.useSearch();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { redirect, mode } = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [redirectingToSignUp, setRedirectingToSignUp] = useState(false);
+
+  const handleSignUpRedirect = async () => {
+    setRedirectingToSignUp(true);
+    try {
+      await auth.signUp({});
+    } catch (e: any) {
+      toast.error(e.message || "Failed to redirect to registration.");
+      setRedirectingToSignUp(false);
+    }
+  };
 
   useEffect(() => {
+    let active = true;
     auth.getSession().then(async ({ data }) => {
+      if (!active) return;
       if (data.session) {
         const to = await resolveLanding(redirect);
         window.location.replace(to);
+      } else if (mode === "signup") {
+        handleSignUpRedirect();
       }
     });
-  }, [redirect]);
+    return () => {
+      active = false;
+    };
+  }, [redirect, mode]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      if (mode === "signup") {
-        const { error } = await auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin, data: { display_name: name || email.split("@")[0] } },
-        });
-        if (error) throw error;
-        toast.success("Account created. You can sign in now.");
-        setMode("signin");
-      } else {
-        const { error } = await auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        const to = await resolveLanding(redirect);
-        window.location.replace(to);
-      }
-    } catch (e) {
-      toast.error((e as Error).message);
+      const { error } = await auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      const to = await resolveLanding(redirect);
+      window.location.replace(to);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to sign in. Please check your credentials.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm p-6">
-        <div className="flex flex-col items-center mb-6">
-          <img src={noesisLogo} alt="Noesis Analytics" className="h-12 w-auto mb-2" />
-          <p className="text-xs text-muted-foreground">Daily execution for operational teams</p>
+    <div className="min-h-screen relative flex items-center justify-center bg-background p-4 overflow-hidden">
+      {/* Background glowing effects */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--primary)/0.04,transparent_65%)] pointer-events-none" />
+      <div 
+        className="absolute inset-0 pointer-events-none opacity-[0.02]" 
+        style={{
+          backgroundImage: `radial-gradient(var(--foreground) 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
+      
+      <Card className="w-full max-w-sm p-8 bg-card/60 backdrop-blur-lg border border-border/80 shadow-2xl relative z-10">
+        <div className="flex flex-col items-center mb-8">
+          <div className="relative mb-3">
+            <div className="absolute -inset-1 rounded-full bg-primary/20 blur-md opacity-75 transition duration-1000" />
+            <img src={noesisLogo} alt="Noesis Analytics" className="h-12 w-auto relative" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Welcome Back</h2>
+          <p className="text-xs text-muted-foreground mt-1">Daily execution for operational teams</p>
         </div>
-        <form onSubmit={submit} className="space-y-3">
-          {mode === "signup" && (
-            <div>
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+
+        {redirectingToSignUp ? (
+          <div className="flex flex-col items-center justify-center py-10 space-y-4 animate-in fade-in zoom-in duration-200">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="space-y-1 text-center">
+              <p className="text-sm font-medium text-foreground">Redirecting to registration...</p>
+              <p className="text-xs text-muted-foreground">Opening secure sign-up on Keycloak</p>
             </div>
-          )}
-          <div>
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </div>
-          <div>
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "signin" ? "current-password" : "new-password"} />
-          </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "..." : mode === "signin" ? "Sign in" : "Create account"}
-          </Button>
-        </form>
-        <button
-          type="button"
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          className="mt-4 text-xs text-muted-foreground hover:text-foreground w-full text-center"
-        >
-          {mode === "signin" ? "No account? Sign up" : "Have an account? Sign in"}
-        </button>
-        <p className="mt-4 text-[11px] text-muted-foreground text-center">
-          First user to sign up becomes admin.
-        </p>
+        ) : (
+          <>
+            <form onSubmit={submit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Email Address
+                </Label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-muted-foreground/75">
+                    <Mail className="h-4 w-4" />
+                  </span>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    className="pl-10 bg-background/50 border-border/80 focus:border-primary/80 focus:ring-1 focus:ring-primary/80 transition-all duration-200"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Password
+                </Label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-muted-foreground/75">
+                    <Lock className="h-4 w-4" />
+                  </span>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    className="pl-10 bg-background/50 border-border/80 focus:border-primary/80 focus:ring-1 focus:ring-primary/80 transition-all duration-200"
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 rounded-md shadow-lg shadow-primary/20 transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer"
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    Sign in
+                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6 flex flex-col items-center space-y-4">
+              <button
+                type="button"
+                onClick={handleSignUpRedirect}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 underline underline-offset-4 cursor-pointer"
+              >
+                No account? Sign up
+              </button>
+              
+              <div className="w-full flex items-center justify-center gap-2">
+                <div className="h-px bg-border flex-1" />
+                <span className="text-[10px] text-muted-foreground/60 uppercase tracking-widest font-mono">Info</span>
+                <div className="h-px bg-border flex-1" />
+              </div>
+
+              <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+                First user to sign up becomes admin.
+              </p>
+            </div>
+          </>
+        )}
         <button type="button" onClick={() => navigate({ to: "/" })} className="hidden" />
         <Link to="/" className="hidden" />
       </Card>
     </div>
   );
 }
+
