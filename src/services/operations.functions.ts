@@ -11,12 +11,12 @@ export const getWorkSettingsFn = createServerFn({ method: "GET" })
     const row = await withUser(context.userId, async (client) => {
       try {
         const res = await client.query(
-          `SELECT id, workdays, daily_capacity_hours, sla_default_days, morning_digest_time, evening_digest_time
+          `SELECT id, workdays, daily_capacity_hours, sla_default_days, morning_digest_time, evening_digest_time, no_tasks_reminder_interval
              FROM public.work_settings WHERE id = 1`,
         );
         return res.rows[0] ?? null;
       } catch (err) {
-        // Fallback if morning_digest_time or evening_digest_time columns do not exist yet in database
+        // Fallback if morning_digest_time, evening_digest_time or no_tasks_reminder_interval columns do not exist yet in database
         const res = await client.query(
           `SELECT id, workdays, daily_capacity_hours, sla_default_days
              FROM public.work_settings WHERE id = 1`,
@@ -25,6 +25,7 @@ export const getWorkSettingsFn = createServerFn({ method: "GET" })
         if (data) {
           data.morning_digest_time = "11:00";
           data.evening_digest_time = "18:00";
+          data.no_tasks_reminder_interval = 20;
         }
         return data;
       }

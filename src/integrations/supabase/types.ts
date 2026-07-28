@@ -2073,6 +2073,7 @@ export type Database = {
           workdays: number[]
           morning_digest_time: string
           evening_digest_time: string
+          no_tasks_reminder_interval: number
         }
         Insert: {
           daily_capacity_hours?: number
@@ -2082,6 +2083,7 @@ export type Database = {
           workdays?: number[]
           morning_digest_time?: string
           evening_digest_time?: string
+          no_tasks_reminder_interval?: number
         }
         Update: {
           daily_capacity_hours?: number
@@ -2091,6 +2093,7 @@ export type Database = {
           workdays?: number[]
           morning_digest_time?: string
           evening_digest_time?: string
+          no_tasks_reminder_interval?: number
         }
         Relationships: []
       }
