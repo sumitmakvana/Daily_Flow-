@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 
 function TimeDropdownPicker({
   value,
@@ -74,14 +75,29 @@ function OpsSettings() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [holidays, setHolidays] = useState<HolidayCalendar[]>([]);
   const [settings, setSettings] = useState<WorkSettings | null>(null);
+  const [serverSettings, setServerSettings] = useState<WorkSettings | null>(null);
 
   const load = async () => {
     const [t, p, h, s] = await Promise.all([
       teamsService.list(), projectsService.list(), holidaysService.list(), workSettingsService.get(),
     ]);
-    setTeams(t); setProjects(p); setHolidays(h); setSettings(s);
+    setTeams(t);
+    setProjects(p);
+    setHolidays(h);
+    setServerSettings((prevServer) => {
+      if (!prevServer || JSON.stringify(prevServer) !== JSON.stringify(s)) {
+        setSettings((prevDraft) => {
+          if (!prevDraft || !prevServer || JSON.stringify(prevDraft) === JSON.stringify(prevServer)) {
+            return s;
+          }
+          return prevDraft;
+        });
+      }
+      return s;
+    });
   };
   useEffect(() => { load(); }, []);
+  useRealtimeTasks(load, "settings-ops-rt");
 
   if (!isManager) {
     return <div className="max-w-md mx-auto px-3 py-12 text-center text-sm text-muted-foreground">Managers only.</div>;
