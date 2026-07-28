@@ -57,12 +57,18 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         const plateByUser = new Map<string, NonNullable<typeof tasks>>();
         for (const t of tasks ?? []) {
           if (!t.assigned_to || !activeIds.has(t.assigned_to)) continue;
-          const dueMs = t.due_date ? new Date(t.due_date).getTime() : null;
           const completedToday =
             t.completed_at && t.completed_at.slice(0, 10) === today;
-          const onPlate =
-            (dueMs !== null && dueMs <= todayMs) || dueMs === null || completedToday;
-          if (!onPlate) continue;
+          
+          if (t.status === "Completed") {
+            // Only include completed tasks if they were completed TODAY
+            if (!completedToday) continue;
+          } else {
+            // For active tasks, they must be due today/past or have no due date
+            const dueMs = t.due_date ? new Date(t.due_date).getTime() : null;
+            const onPlate = (dueMs !== null && dueMs <= todayMs) || dueMs === null;
+            if (!onPlate) continue;
+          }
           const arr = plateByUser.get(t.assigned_to) ?? [];
           arr.push(t);
           plateByUser.set(t.assigned_to, arr);
