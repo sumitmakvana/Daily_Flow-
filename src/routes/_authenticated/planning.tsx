@@ -115,12 +115,23 @@ function PlanningPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-3">
-        <div className="space-y-3">
-          {groups.map((g) => (
+      <div className="space-y-3">
+        {groups.map((g) => {
+          const u = groupBy === "member" ? utils.get(g.key) : null;
+          const hours = u?.planned_hours ?? 0;
+          const tone = utilTone(hours);
+          return (
             <Card key={g.key} className="p-3">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold">{g.label} <span className="text-muted-foreground font-normal">· {g.tasks.length}</span></h2>
+                <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                  {g.label}
+                  <span className="text-muted-foreground font-normal">· {g.tasks.length}</span>
+                </h2>
+                {groupBy === "member" && g.key !== "__unassigned" && (
+                  <span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium ${tone.className}`}>
+                    Capacity: {hours}h
+                  </span>
+                )}
               </div>
               {g.tasks.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">No active tasks.</p>
@@ -154,26 +165,8 @@ function PlanningPage() {
                 </ul>
               )}
             </Card>
-          ))}
-        </div>
-
-        <aside className="hidden lg:block">
-          <Card className="p-3 sticky top-16 space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Capacity</h3>
-            {profiles.map((p) => {
-              const u = utils.get(p.id);
-              const tone = utilTone(u?.planned_hours ?? 0);
-              return (
-                <div key={p.id} className="flex items-center justify-between text-xs">
-                  <span className="truncate">{p.display_name}</span>
-                  <span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] ${tone.className}`}>
-                    {u?.planned_hours ?? 0}h
-                  </span>
-                </div>
-              );
-            })}
-          </Card>
-        </aside>
+          );
+        })}
       </div>
 
       {selected.size > 0 && (
