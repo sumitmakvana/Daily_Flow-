@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { AppRole, Profile } from "@/lib/types";
 import { toast } from "sonner";
-import { deleteUser } from "@/lib/admin-actions";
+import { deleteUser, updateUserAdminSettings } from "@/lib/admin-actions";
 import { todayISO } from "@/lib/format";
 import { fetchAllAnnouncements, createAnnouncement, deleteAnnouncement } from "@/services/announcements.functions";
 
@@ -64,6 +64,7 @@ function AdminPage() {
   const [editedRoles, setEditedRoles] = useState<Record<string, AppRole>>({});
 
   const deleteUserFn = useServerFn(deleteUser);
+  const updateUserAdminSettingsFn = useServerFn(updateUserAdminSettings);
   const fetchAllAnnouncementsFn = useServerFn(fetchAllAnnouncements);
   const createAnnouncementFn = useServerFn(createAnnouncement);
   const deleteAnnouncementFn = useServerFn(deleteAnnouncement);
@@ -113,28 +114,21 @@ function AdminPage() {
 
     setLoading(true);
     try {
-      // Save manager if edited
+      await updateUserAdminSettingsFn({
+        data: {
+          targetUserId: userId,
+          managerId: updatedManagerId !== undefined ? updatedManagerId : undefined,
+          role: updatedRole !== undefined ? updatedRole : undefined,
+        }
+      });
+
       if (updatedManagerId !== undefined) {
-        const { error } = await supabase
-          .from("profiles")
-          .update({ manager_id: updatedManagerId } as never)
-          .eq("id", userId);
-        if (error) throw error;
         setEditedManagers(prev => {
           const { [userId]: _, ...rest } = prev;
           return rest;
         });
       }
-
-      // Save role if edited
       if (updatedRole !== undefined) {
-        const { error: deleteError } = await supabase.from("user_roles").delete().eq("user_id", userId);
-        if (deleteError) throw deleteError;
-
-        const { error } = await supabase
-          .from("user_roles")
-          .insert({ user_id: userId, role: updatedRole } as never);
-        if (error) throw error;
         setEditedRoles(prev => {
           const { [userId]: _, ...rest } = prev;
           return rest;

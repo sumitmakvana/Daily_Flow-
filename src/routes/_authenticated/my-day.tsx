@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { Progress } from "@/components/ui/progress";
 import { getMyDay, type MyDayItem } from "@/lib/my-day.functions";
 import { AlertOctagon, AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Clock, Flame, GripVertical, Inbox, RotateCcw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/my-day")({
   component: MyDayPage,
@@ -16,6 +19,32 @@ export const Route = createFileRoute("/_authenticated/my-day")({
 function MyDayPage() {
   const router = useRouter();
   const fetchMyDay = useServerFn(getMyDay);
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<{ display_name: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const loadProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (data) {
+          setProfile(data);
+        } else {
+          setProfile({
+            display_name: user.user_metadata?.display_name || user.user_metadata?.full_name || null,
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to load profile in MyDayPage:", err);
+      }
+    };
+    loadProfile();
+  }, [user]);
+
   const q = useQuery({
     queryKey: ["my-day"],
     queryFn: () => fetchMyDay(),
@@ -37,9 +66,15 @@ function MyDayPage() {
   }
 
   const d = q.data;
+
   const greeting = (() => {
     const h = new Date().getHours();
-    return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+    const timeGreeting = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+    if (profile?.display_name) {
+      const firstName = profile.display_name.trim().split(" ")[0];
+      return `${timeGreeting}, ${firstName}`;
+    }
+    return timeGreeting;
   })();
 
   const utilPct = Math.min(100, Math.round((d.workload.planned_hours / Math.max(1, d.workload.capacity_hours)) * 100));

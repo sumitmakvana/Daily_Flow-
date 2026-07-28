@@ -123,8 +123,21 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
               dedupe_key: dedupeKey,
             });
 
-            if (!error) sentUsers += 1;
-            else if (error.code === "23505") {
+            if (!error) {
+              sentUsers += 1;
+
+              // Also notify their manager if they have one assigned
+              if (p.manager_id) {
+                const managerDedupeKey = `MGR_NO_TASKS_REMINDER_${today}_${h}_${slot}_${p.id}_${p.manager_id}`;
+                await supabaseAdmin.from("notifications").insert({
+                  user_id: p.manager_id,
+                  type: "sod_digest",
+                  title: `Team Alert: 0 tasks on ${p.display_name}'s plate`,
+                  body: `${p.display_name} has no tasks on their plate today. Click here to assign tasks.`,
+                  dedupe_key: managerDedupeKey,
+                });
+              }
+            } else if (error.code === "23505") {
               // already sent in this slot
             } else {
               failed += 1;
