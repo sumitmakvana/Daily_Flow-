@@ -11,6 +11,7 @@ import { eodService } from "@/services/eod";
 import { workloadService, utilTone } from "@/services/workload";
 import { carryForwardService } from "@/services/carry-forward";
 import { toast } from "sonner";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 
 export const Route = createFileRoute("/_authenticated/eod")({
   component: EodBoardPage,
@@ -34,6 +35,7 @@ function EodBoardPage() {
     setTasks((t ?? []) as Task[]);
   };
   useEffect(() => { load(); }, []);
+  useRealtimeTasks(load, "eod-board-rt");
 
   if (!user) return null;
 

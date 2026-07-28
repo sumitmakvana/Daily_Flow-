@@ -100,7 +100,8 @@ function ExecutivePage() {
         },
       }),
     enabled: !!filters,
-    staleTime: 30_000,
+    staleTime: 1000,
+    refetchInterval: 5000,
   });
 
   const scopeLabel = useMemo(() => {

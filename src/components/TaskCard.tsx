@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,6 +67,7 @@ export function TaskCard({
   const [blockOpen, setBlockOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+
   const overdue = isOverdue(task.due_date, task.status);
   const isOwner = task.assigned_to === userId;
   const canAct = isOwner || canManage;

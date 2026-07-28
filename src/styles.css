@@ -139,3 +139,14 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   margin-right: 4px; /* prevents the icon from being cut off at the right edge */
 }
 
+/* Disable spin buttons for input type number to ensure clean dark-mode UI */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield; /* Firefox */
+}
+
+

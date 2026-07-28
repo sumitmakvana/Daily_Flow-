@@ -411,6 +411,7 @@ function AdminPage() {
                       <SelectItem value="tricolor">Tricolor (Patriotic & Chakra 🇮🇳)</SelectItem>
                       <SelectItem value="holi">Holi (Colors Splash 🎨)</SelectItem>
                       <SelectItem value="christmas">Christmas (Red/Green & Tree 🎄)</SelectItem>
+                      <SelectItem value="monsoon">Monsoon (Teal/Blue & Cloud 🌧️)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -436,7 +437,7 @@ function AdminPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Custom Image URL (Optional)</label>
                   <Input
@@ -444,6 +445,51 @@ function AdminPage() {
                     value={annImageUrl}
                     onChange={(e) => setAnnImageUrl(e.target.value)}
                   />
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    <span className="text-[10px] text-muted-foreground mr-1 self-center">Quick presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => setAnnImageUrl("https://images.unsplash.com/photo-1513151233558-d860c5398176?w=300&auto=format&fit=crop&q=60")}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground border border-border/40 cursor-pointer"
+                    >
+                      🎉 Confetti
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnnImageUrl("https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=300&auto=format&fit=crop&q=60")}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground border border-border/40 cursor-pointer"
+                    >
+                      ✨ Sparklers
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnnImageUrl("https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=300&auto=format&fit=crop&q=60")}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground border border-border/40 cursor-pointer"
+                    >
+                      🌧️ Rain
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnnImageUrl("https://images.unsplash.com/photo-1605647540924-852290f6b0d5?w=300&auto=format&fit=crop&q=60")}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground border border-border/40 cursor-pointer"
+                    >
+                      🪔 Diwali Lamps
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnnImageUrl("https://images.unsplash.com/photo-1598463289996-0e34c9c1b790?w=300&auto=format&fit=crop&q=60")}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground border border-border/40 cursor-pointer"
+                    >
+                      🪁 Kites
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnnImageUrl("")}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="flex items-center gap-2 pt-4">

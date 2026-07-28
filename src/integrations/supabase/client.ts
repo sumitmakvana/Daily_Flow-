@@ -85,10 +85,28 @@ export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>,
     }
     if (prop === "channel") {
       return (channelName: string) => {
+        let intervalId: any = null;
+        let callback: (() => void) | null = null;
+
         const mockChannel = {
-          on: () => mockChannel,
-          subscribe: () => mockChannel,
-          unsubscribe: () => {},
+          on: (event: string, filterObj: any, cb: () => void) => {
+            callback = cb;
+            return mockChannel;
+          },
+          subscribe: () => {
+            if (callback) {
+              intervalId = setInterval(() => {
+                if (callback) callback();
+              }, 4000);
+            }
+            return mockChannel;
+          },
+          unsubscribe: () => {
+            if (intervalId) {
+              clearInterval(intervalId);
+              intervalId = null;
+            }
+          },
           presenceState: () => ({}),
           send: async () => ({ status: "ok" }),
           track: async () => ({ status: "ok" }),
@@ -98,7 +116,11 @@ export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>,
       };
     }
     if (prop === "removeChannel") {
-      return () => {};
+      return (channel: any) => {
+        if (channel && typeof channel.unsubscribe === "function") {
+          channel.unsubscribe();
+        }
+      };
     }
     if (!_supabase) _supabase = createSupabaseClient();
     return Reflect.get(_supabase, prop, receiver);

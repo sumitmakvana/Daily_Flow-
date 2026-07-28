@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import {
   CheckCircle2,
   Loader2,
@@ -77,6 +78,7 @@ function EodTasksPage() {
   useEffect(() => {
     reload();
   }, []);
+  useRealtimeTasks(reload, "eod-tasks-rt");
 
   const submittedCount = useMemo(() => rows.filter((r) => r.submission).length, [rows]);
 

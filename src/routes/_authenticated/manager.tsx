@@ -19,8 +19,9 @@ function ManagerPage() {
   const q = useQuery({
     queryKey: ["manager-command"],
     queryFn: () => fetchCmd(),
-    staleTime: 30_000,
+    staleTime: 1000,
     refetchOnWindowFocus: true,
+    refetchInterval: 5000,
   });
 
   if (q.isLoading) {

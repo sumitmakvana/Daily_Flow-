@@ -19,8 +19,9 @@ function MyDayPage() {
   const q = useQuery({
     queryKey: ["my-day"],
     queryFn: () => fetchMyDay(),
-    staleTime: 30_000,
+    staleTime: 1000,
     refetchOnWindowFocus: true,
+    refetchInterval: 5000,
   });
 
   if (q.isLoading) {
@@ -128,12 +129,18 @@ function MyDayPage() {
           ) : (
             <ul className="divide-y divide-border">
               {d.approvals_pending.map((a) => (
-                <li key={a.request_id} className="flex items-center gap-2 px-3 py-2.5 min-h-12 active:bg-accent/50">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate">{a.work_item_code} · {a.work_item_name}</div>
-                    <div className="text-[11px] text-muted-foreground truncate">Step: {a.step_name}</div>
-                  </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">Review</Badge>
+                <li key={a.request_id}>
+                  <Link
+                    to="/tasks"
+                    search={{ highlightId: a.work_item_id }}
+                    className="flex items-center gap-2 px-3 py-2.5 min-h-12 hover:bg-accent/30 active:bg-accent/50 transition-colors w-full text-left"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{a.work_item_code} · {a.work_item_name}</div>
+                      <div className="text-[11px] text-muted-foreground truncate">Step: {a.step_name}</div>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 text-[10px]">Review</Badge>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -164,7 +171,7 @@ function MyDayPage() {
 
 function PriorityRow({ rank, item }: { rank: number; item: MyDayItem }) {
   return (
-    <Link to="/tasks" className="flex items-stretch gap-2 px-3 py-2.5 min-h-14 active:bg-accent/50 hover:bg-accent/30 transition-colors">
+    <Link to="/tasks" search={{ highlightId: item.id }} className="flex items-stretch gap-2 px-3 py-2.5 min-h-14 active:bg-accent/50 hover:bg-accent/30 transition-colors">
       <div className="flex flex-col items-center justify-center w-7 shrink-0">
         <div className={cn(
           "h-7 w-7 grid place-items-center rounded-full text-xs font-bold",
@@ -206,10 +213,16 @@ function RiskGroup({ label, items, tone }: { label: string; items: MyDayItem[]; 
       </div>
       <ul className="space-y-1">
         {items.map((i) => (
-          <li key={i.id} className="flex items-center gap-2 text-xs min-h-9 px-2 py-1 rounded-md bg-muted/30">
-            <span className="font-mono text-[10px] text-muted-foreground shrink-0">{i.task_code}</span>
-            <span className="truncate flex-1">{i.task_name}</span>
-            {i.due_date && <span className="text-[10px] text-muted-foreground shrink-0">{i.due_date}</span>}
+          <li key={i.id}>
+            <Link
+              to="/tasks"
+              search={{ highlightId: i.id }}
+              className="flex items-center gap-2 text-xs min-h-9 px-2 py-1 rounded-md bg-muted/30 hover:bg-accent/30 active:bg-accent/50 transition-colors w-full text-left"
+            >
+              <span className="font-mono text-[10px] text-muted-foreground shrink-0">{i.task_code}</span>
+              <span className="truncate flex-1">{i.task_name}</span>
+              {i.due_date && <span className="text-[10px] text-muted-foreground shrink-0">{i.due_date}</span>}
+            </Link>
           </li>
         ))}
       </ul>
@@ -224,10 +237,16 @@ function CarrySection({ label, items, accent }: { label: string; items: MyDayIte
       <div className={cn("text-[11px] uppercase tracking-wide font-semibold mb-1.5", accent ? "text-priority-high" : "text-muted-foreground")}>{label} ({items.length})</div>
       <ul className="space-y-1">
         {items.map((i) => (
-          <li key={i.id} className="flex items-center gap-2 text-xs min-h-9 px-2 py-1 rounded-md bg-muted/30">
-            <span className="font-mono text-[10px] text-muted-foreground shrink-0">{i.task_code}</span>
-            <span className="truncate flex-1">{i.task_name}</span>
-            <Badge variant={accent ? "destructive" : "outline"} className="text-[9px] h-4 px-1 shrink-0">CF×{i.carry_forward_count}</Badge>
+          <li key={i.id}>
+            <Link
+              to="/tasks"
+              search={{ highlightId: i.id }}
+              className="flex items-center gap-2 text-xs min-h-9 px-2 py-1 rounded-md bg-muted/30 hover:bg-accent/30 active:bg-accent/50 transition-colors w-full text-left"
+            >
+              <span className="font-mono text-[10px] text-muted-foreground shrink-0">{i.task_code}</span>
+              <span className="truncate flex-1">{i.task_name}</span>
+              <Badge variant={accent ? "destructive" : "outline"} className="text-[9px] h-4 px-1 shrink-0">CF×{i.carry_forward_count}</Badge>
+            </Link>
           </li>
         ))}
       </ul>

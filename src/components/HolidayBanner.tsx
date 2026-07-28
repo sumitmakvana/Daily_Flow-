@@ -33,14 +33,9 @@ export function HolidayBanner() {
 
         if (dbBanners && dbBanners.length > 0) {
           const activeAnn = dbBanners[0] as Announcement;
-          
-          // Check if this specific custom announcement was dismissed today
-          const dismissKey = `dismiss_ann_${todayStr}_${activeAnn.id}`;
-          if (localStorage.getItem(dismissKey) !== "true") {
-            setCustomAnnouncement(activeAnn);
-            setIsVisible(true);
-            return; // Exit early: custom announcements override automatic holidays
-          }
+          setCustomAnnouncement(activeAnn);
+          setIsVisible(true);
+          return; // Exit early: custom announcements override automatic holidays
         }
       } catch (err) {
         console.warn("Failed to fetch custom announcements:", err);
@@ -51,20 +46,14 @@ export function HolidayBanner() {
         const apiHolidays = await fetchIndianHolidays(year);
         const currentHoliday = getLocalHoliday(todayStr, apiHolidays);
         if (currentHoliday && currentHoliday.isHoliday) {
-          const dismissKey = `dismiss_holiday_${todayStr}_${currentHoliday.name}`;
-          if (localStorage.getItem(dismissKey) !== "true") {
-            setHoliday(currentHoliday);
-            setIsVisible(true);
-          }
+          setHoliday(currentHoliday);
+          setIsVisible(true);
         }
       } catch (e) {
         const currentHoliday = getLocalHoliday(todayStr, {});
         if (currentHoliday && currentHoliday.isHoliday) {
-          const dismissKey = `dismiss_holiday_${todayStr}_${currentHoliday.name}`;
-          if (localStorage.getItem(dismissKey) !== "true") {
-            setHoliday(currentHoliday);
-            setIsVisible(true);
-          }
+          setHoliday(currentHoliday);
+          setIsVisible(true);
         }
       }
     }
@@ -76,12 +65,6 @@ export function HolidayBanner() {
 
   const handleDismiss = () => {
     setIsVisible(false);
-    const todayStr = todayISO();
-    if (customAnnouncement) {
-      localStorage.setItem(`dismiss_ann_${todayStr}_${customAnnouncement.id}`, "true");
-    } else if (holiday) {
-      localStorage.setItem(`dismiss_holiday_${todayStr}_${holiday.name}`, "true");
-    }
   };
 
   // Render variables mapping
@@ -179,6 +162,16 @@ export function HolidayBanner() {
         <svg className="w-14 h-14" viewBox="0 0 100 100" fill="none" stroke="#fff" strokeWidth="2.5">
           <path d="M50,15 L78,55 L65,55 L83,80 L17,80 L35,55 L22,55 Z" fill="#15803d" />
           <rect x="45" y="80" width="10" height="12" fill="#78350f" stroke="none" />
+        </svg>
+      );
+    } else if (themeKey.includes("monsoon") || themeKey.includes("rain")) {
+      themeClass = "from-cyan-700 via-sky-600 to-blue-700 text-white shadow-[0_4px_20px_rgba(14,165,233,0.25)]";
+      graphicElement = (
+        <svg className="w-14 h-14" viewBox="0 0 100 100" fill="none">
+          <path d="M30,65 C20,65 15,55 22,47 C18,35 32,25 45,30 C52,20 70,22 75,35 C85,35 88,48 78,57 C82,65 70,65 65,65 Z" fill="#e2e8f0" stroke="#fff" strokeWidth="2" />
+          <line x1="38" y1="70" x2="34" y2="82" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round" className="animate-pulse" style={{ animationDuration: '0.8s' }} />
+          <line x1="50" y1="73" x2="46" y2="85" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round" className="animate-pulse" style={{ animationDuration: '1.2s' }} />
+          <line x1="62" y1="70" x2="58" y2="82" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round" className="animate-pulse" style={{ animationDuration: '1s' }} />
         </svg>
       );
     }
@@ -283,7 +276,42 @@ export function HolidayBanner() {
       {/* Decorative pulse glow */}
       <div className="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white/30 via-transparent to-transparent" />
       
-      <div className="flex-1 flex items-center justify-center gap-4 sm:gap-6 text-left max-w-5xl mx-auto">
+      {/* Live Rain effect for monsoon theme */}
+      {(customAnnouncement?.theme_color.toLowerCase().includes("monsoon") || 
+        customAnnouncement?.theme_color.toLowerCase().includes("rain")) && (
+        <>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes rain-fall {
+              0% { transform: translateY(-30px) translateX(0) rotate(15deg); opacity: 0; }
+              20% { opacity: 0.6; }
+              80% { opacity: 0.6; }
+              100% { transform: translateY(110px) translateX(-20px) rotate(15deg); opacity: 0; }
+            }
+            .raindrop-live {
+              position: absolute;
+              width: 1.5px;
+              height: 15px;
+              background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(224,242,254,0.8));
+              animation: rain-fall linear infinite;
+              pointer-events: none;
+            }
+          `}} />
+          <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-40 z-0">
+            <div className="raindrop-live" style={{ left: '5%', top: '-10px', animationDelay: '0s', animationDuration: '0.8s' }} />
+            <div className="raindrop-live" style={{ left: '15%', top: '-10px', animationDelay: '0.3s', animationDuration: '1.2s' }} />
+            <div className="raindrop-live" style={{ left: '25%', top: '-10px', animationDelay: '0.1s', animationDuration: '0.9s' }} />
+            <div className="raindrop-live" style={{ left: '35%', top: '-10px', animationDelay: '0.6s', animationDuration: '1.1s' }} />
+            <div className="raindrop-live" style={{ left: '45%', top: '-10px', animationDelay: '0.2s', animationDuration: '0.7s' }} />
+            <div className="raindrop-live" style={{ left: '55%', top: '-10px', animationDelay: '0.4s', animationDuration: '1s' }} />
+            <div className="raindrop-live" style={{ left: '65%', top: '-10px', animationDelay: '0.15s', animationDuration: '0.85s' }} />
+            <div className="raindrop-live" style={{ left: '75%', top: '-10px', animationDelay: '0.7s', animationDuration: '1.3s' }} />
+            <div className="raindrop-live" style={{ left: '85%', top: '-10px', animationDelay: '0.35s', animationDuration: '0.95s' }} />
+            <div className="raindrop-live" style={{ left: '95%', top: '-10px', animationDelay: '0.5s', animationDuration: '1.05s' }} />
+          </div>
+        </>
+      )}
+
+      <div className="flex-1 flex items-center justify-center gap-4 sm:gap-6 text-left max-w-5xl mx-auto z-10 relative">
         <div className="flex-shrink-0 drop-shadow-md">
           {customImageUrl ? (
             <img src={customImageUrl} alt={holiday?.name || customAnnouncement?.title} className="w-16 h-12 object-cover rounded-md border border-white/20" />
@@ -303,7 +331,7 @@ export function HolidayBanner() {
 
       <button
         onClick={handleDismiss}
-        className={`flex-shrink-0 rounded-full p-1.5 transition-colors cursor-pointer ml-4 ${isTricolor ? 'text-blue-950 hover:bg-black/5' : 'text-white/80 hover:text-white hover:bg-white/10'}`}
+        className={`flex-shrink-0 rounded-full p-1.5 transition-colors cursor-pointer ml-4 z-10 relative ${isTricolor ? 'text-blue-950 hover:bg-black/5' : 'text-white/80 hover:text-white hover:bg-white/10'}`}
         title="Dismiss"
       >
         <X className="h-4 w-4" />
