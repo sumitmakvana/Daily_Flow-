@@ -206,6 +206,7 @@ export interface WorkSettings {
   sla_default_days: number;
   morning_digest_time: string;
   evening_digest_time: string;
+  no_tasks_reminder_interval: number;
 }
 
 export interface UserStreak {

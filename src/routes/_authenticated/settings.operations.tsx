@@ -165,6 +165,24 @@ function OpsSettings() {
             />
           </div>
         </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">No Tasks Reminder Interval</Label>
+          <Select
+            value={String(settings.no_tasks_reminder_interval ?? 20)}
+            onValueChange={(val) => setSettings({ ...settings, no_tasks_reminder_interval: Number(val) })}
+          >
+            <SelectTrigger className="w-full bg-background text-foreground [color-scheme:dark] mt-1">
+              <SelectValue placeholder="Select interval" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="0">Disabled</SelectItem>
+              <SelectItem value="10">Every 10 minutes</SelectItem>
+              <SelectItem value="20">Every 20 minutes</SelectItem>
+              <SelectItem value="30">Every 30 minutes</SelectItem>
+              <SelectItem value="60">Every hour</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div>
           <Label className="text-xs">Workdays (1=Mon … 7=Sun)</Label>
           <div className="flex gap-1 mt-1">
@@ -191,6 +209,7 @@ function OpsSettings() {
             workdays: settings.workdays,
             morning_digest_time: settings.morning_digest_time ?? "11:00",
             evening_digest_time: settings.evening_digest_time ?? "18:00",
+            no_tasks_reminder_interval: settings.no_tasks_reminder_interval ?? 20,
           });
           toast.success("Settings saved");
         }}>Save</Button>

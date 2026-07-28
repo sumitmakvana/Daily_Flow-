@@ -35,7 +35,7 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
           minute: "2-digit",
         });
 
-        const [{ data: profiles }, { data: tasks }, { data: prefs }, { data: settings }] = await Promise.all([
+        const [{ data: profiles }, { data: tasks }, { data: prefs }, { data: settings }, { data: activeReminders }] = await Promise.all([
           supabaseAdmin
             .from("profiles")
             .select("id, display_name, manager_id, is_active")
@@ -44,13 +44,28 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
             .from("tasks")
             .select("id, task_code, task_name, assigned_to, status, priority, due_date"),
           supabaseAdmin.from("notification_prefs").select("user_id, digest_enabled"),
-          supabaseAdmin.from("work_settings").select("morning_digest_time, evening_digest_time").eq("id", 1).maybeSingle(),
+          supabaseAdmin.from("work_settings").select("morning_digest_time, evening_digest_time, no_tasks_reminder_interval").eq("id", 1).maybeSingle(),
+          supabaseAdmin
+            .from("notifications")
+            .select("user_id")
+            .eq("title", "Reminder: 0 tasks on plate")
+            .is("read_at", null),
         ]);
 
         const url = new URL(request.url);
         const force = url.searchParams.get("force") === "true";
         const morningTime = settings?.morning_digest_time ?? "11:00";
         const eveningTime = settings?.evening_digest_time ?? "18:00";
+        const interval = settings?.no_tasks_reminder_interval ?? 20;
+
+        // If reminder is disabled, skip sending (unless forced)
+        if (interval <= 0 && !force) {
+          return Response.json({
+            ok: true,
+            skipped: true,
+            reason: "No-tasks reminder is disabled in settings",
+          });
+        }
 
         // Check if current time is within working hours (morning time to evening time)
         if ((kolkataTime < morningTime || kolkataTime >= eveningTime) && !force) {
@@ -65,6 +80,9 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
           (prefs ?? []).filter((p) => p.digest_enabled === false).map((p) => p.user_id),
         );
         const activeIds = new Set((profiles ?? []).map((p) => p.id));
+        const activeReminderUserIds = new Set(
+          (activeReminders ?? []).map((r) => r.user_id),
+        );
 
         const plateByUser = new Map<string, NonNullable<typeof tasks>>();
         for (const t of tasks ?? []) {
@@ -83,15 +101,19 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
 
         const h = parseInt(currentHour, 10);
         const m = parseInt(currentMinute, 10);
-        const slot = Math.floor(m / 20); // 20-minute bucket (0, 1, 2)
+        const slotInterval = interval > 0 ? interval : 20; // fallback to 20 if disabled but forced
+        const slot = Math.floor(m / slotInterval); 
 
         for (const p of profiles ?? []) {
           const mine = plateByUser.get(p.id) ?? [];
           // Only notify if they have absolutely 0 tasks on plate
           if (mine.length > 0) continue;
 
+          // If the user already has an active, unread 0-tasks reminder, do not send another one
+          if (activeReminderUserIds.has(p.id)) continue;
+
           if (!optedOut.has(p.id)) {
-            // Deduplication key changes every 20 minutes to prevent sending multiple per slot
+            // Deduplication key changes every X minutes based on interval to prevent sending multiple per slot
             const dedupeKey = `NO_TASKS_REMINDER_${today}_${h}_${slot}_${p.id}`;
             const { error } = await supabaseAdmin.from("notifications").insert({
               user_id: p.id,
