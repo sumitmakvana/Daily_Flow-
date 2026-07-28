@@ -83,6 +83,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [unread, setUnread] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profile, setProfile] = useState<{ display_name: string | null; email: string | null; avatar_url: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+
+    const loadProfile = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("display_name, email, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!error && data) {
+          setProfile(data);
+        } else {
+          setProfile({
+            display_name: user.user_metadata?.display_name || user.user_metadata?.full_name || null,
+            email: user.email || null,
+            avatar_url: user.user_metadata?.avatar_url || null,
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to load profile in AppShell:", err);
+      }
+    };
+
+    loadProfile();
+  }, [user]);
 
   const nav = isManager ? managerNav : memberNav;
 
@@ -278,6 +310,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Badge>
               )}
             </Link>
+            {profile && (
+              <div className="hidden md:flex items-center gap-2 px-2 py-1 mr-1 border-r border-border max-w-[180px]">
+                {profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.display_name ?? ""}
+                    className="h-6 w-6 rounded-full border border-border shrink-0 object-cover"
+                  />
+                ) : (
+                  <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold border border-primary/20 shrink-0 select-none">
+                    {(profile.display_name || profile.email || "U").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex flex-col text-left overflow-hidden select-none">
+                  <span className="text-xs font-semibold truncate leading-none mb-0.5" title={profile.display_name || profile.email || ""}>
+                    {profile.display_name || profile.email}
+                  </span>
+                  {profile.display_name && profile.email && (
+                    <span className="text-[9px] text-muted-foreground truncate leading-none" title={profile.email}>
+                      {profile.email}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             <Link to="/settings/notifications" className="hidden md:inline-flex">
               <Button variant="ghost" size="icon" className="h-8 w-8" title="Notification settings">
                 <Settings className="h-4 w-4" />
@@ -332,8 +389,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Mobile Drawer (Sheet) */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
         <SheetContent side="right" className="w-72 p-0 flex flex-col h-full bg-background border-l border-border">
-          <div className="p-4 border-b border-border/60 flex items-center justify-between">
-            <img src={noesisLogo} alt="Noesis Analytics" className="h-6 w-auto" />
+          <div className="p-4 border-b border-border/60 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <img src={noesisLogo} alt="Noesis Analytics" className="h-6 w-auto" />
+            </div>
+            {profile && (
+              <div className="flex items-center gap-3 pt-2">
+                {profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.display_name ?? ""}
+                    className="h-9 w-9 rounded-full border border-border object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold border border-primary/20 shrink-0 select-none">
+                    {(profile.display_name || profile.email || "U").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex flex-col min-w-0 select-none">
+                  <span className="text-sm font-semibold truncate leading-tight">
+                    {profile.display_name || profile.email}
+                  </span>
+                  {profile.display_name && profile.email && (
+                    <span className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
+                      {profile.email}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="flex-1 overflow-y-auto px-2 py-4 space-y-6">

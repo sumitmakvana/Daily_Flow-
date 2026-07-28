@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { z } from "zod";
 
 export const deleteUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -257,4 +258,64 @@ export const deleteUser = createServerFn({ method: "POST" })
     }
 
     return { success: true };
+  });
+
+export const updateUserAdminSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: {
+    targetUserId: string;
+    managerId?: string | null;
+    role?: "admin" | "manager" | "member" | null;
+  }) => z.object({
+    targetUserId: z.string(),
+    managerId: z.string().nullable().optional(),
+    role: z.enum(["admin", "manager", "member"]).nullable().optional(),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { getPool } = await import("@/integrations/postgres/client.server");
+    const pool = getPool();
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // Verify caller is admin
+      const callerCheck = await client.query(
+        `SELECT 1 FROM public.user_roles WHERE user_id = $1 AND role = 'admin'`,
+        [context.userId]
+      );
+      if (callerCheck.rowCount === 0) {
+        throw new Error("Unauthorized: Only admins can manage roles and managers");
+      }
+
+      // Update manager if provided
+      if (data.managerId !== undefined) {
+        await client.query(
+          `UPDATE public.profiles SET manager_id = $1 WHERE id = $2`,
+          [data.managerId, data.targetUserId]
+        );
+      }
+
+      // Update role if provided
+      if (data.role !== undefined && data.role !== null) {
+        // Delete existing roles
+        await client.query(
+          `DELETE FROM public.user_roles WHERE user_id = $1`,
+          [data.targetUserId]
+        );
+        // Insert new role
+        await client.query(
+          `INSERT INTO public.user_roles (user_id, role) VALUES ($1, $2)`,
+          [data.targetUserId, data.role]
+        );
+      }
+
+      await client.query("COMMIT");
+      return { success: true };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   });
