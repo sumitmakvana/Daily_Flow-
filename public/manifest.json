@@ -1,6 +1,6 @@
 {
-  "name": "Neosis Analytics",
-  "short_name": "Neosis",
+  "name": "Operon",
+  "short_name": "Operon",
   "description": "Lightweight execution, analytics, and workload management for operational teams.",
   "start_url": "/",
   "display": "standalone",

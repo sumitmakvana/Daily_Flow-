@@ -99,8 +99,13 @@ export async function fetchIndianHolidays(year: number): Promise<Record<string, 
         else if (lowerName.includes("christmas")) emoji = "🎄";
         else if (lowerName.includes("gandhi")) emoji = "👓";
         else if (lowerName.includes("sankranti") || lowerName.includes("uttarayan")) emoji = "🪁";
-        else if (lowerName.includes("eid") || lowerName.includes("ramadan")) emoji = "🌙";
+        else if (lowerName.includes("eid") || lowerName.includes("ramadan") || lowerName.includes("bakrid")) emoji = "🌙";
         else if (lowerName.includes("good friday")) emoji = "✝️";
+        else if (lowerName.includes("raksha") || lowerName.includes("rakhi")) emoji = "🌸";
+        else if (lowerName.includes("janmashtami") || lowerName.includes("krishna")) emoji = "🪈";
+        else if (lowerName.includes("shivratri")) emoji = "🔱";
+        else if (lowerName.includes("ganesh")) emoji = "🐘";
+        else if (lowerName.includes("dussehra") || lowerName.includes("dasara") || lowerName.includes("navratri")) emoji = "🏹";
         
         apiHolidays[dateStr] = {
           name: item.localName || item.name,
@@ -161,10 +166,28 @@ export function getLocalHoliday(
     "05-01": { name: "Gujarat Day", emoji: "🦁", isHoliday: true },
   };
 
-  // Variable Gujarati and Indian holidays (if not captured by the API or as reliable backup)
+  // Variable Gujarati and Indian holidays (covering Google Calendar + local cultural holidays)
   const variableGujarati: Record<string, Holiday> = {
+    // 2025
+    "2025-02-26": { name: "Maha Shivratri", emoji: "🔱", isHoliday: true },
+    "2025-03-14": { name: "Holi", emoji: "🎨", isHoliday: true },
+    "2025-03-15": { name: "Dhuleti", emoji: "🎨", isHoliday: true },
+    "2025-04-06": { name: "Ram Navami", emoji: "🏹", isHoliday: true },
+    "2025-08-09": { name: "Raksha Bandhan", emoji: "🌸", isHoliday: true },
+    "2025-08-16": { name: "Janmashtami", emoji: "🪈", isHoliday: true },
+    "2025-08-27": { name: "Ganesh Chaturthi", emoji: "🐘", isHoliday: true },
+    "2025-10-02": { name: "Dussehra", emoji: "🏹", isHoliday: true },
+    "2025-10-20": { name: "Diwali", emoji: "🪔", isHoliday: true },
+    "2025-10-22": { name: "Gujarati New Year", emoji: "🪔", isHoliday: true },
+    "2025-10-23": { name: "Bhai Dooj", emoji: "🌸", isHoliday: true },
+
     // 2026
+    "2026-02-15": { name: "Maha Shivratri", emoji: "🔱", isHoliday: true },
     "2026-03-03": { name: "Holi", emoji: "🎨", isHoliday: true },
+    "2026-03-04": { name: "Dhuleti", emoji: "🎨", isHoliday: true },
+    "2026-03-27": { name: "Ram Navami", emoji: "🏹", isHoliday: true },
+    "2026-08-28": { name: "Raksha Bandhan", emoji: "🌸", isHoliday: true },
+    "2026-09-04": { name: "Janmashtami", emoji: "🪈", isHoliday: true },
     "2026-09-14": { name: "Ganesh Chaturthi", emoji: "🐘", isHoliday: true },
     "2026-10-20": { name: "Dussehra", emoji: "🏹", isHoliday: true },
     "2026-11-08": { name: "Diwali", emoji: "🪔", isHoliday: true },
@@ -172,7 +195,12 @@ export function getLocalHoliday(
     "2026-11-10": { name: "Bhai Dooj", emoji: "🌸", isHoliday: true },
     
     // 2027
+    "2027-03-06": { name: "Maha Shivratri", emoji: "🔱", isHoliday: true },
     "2027-03-22": { name: "Holi", emoji: "🎨", isHoliday: true },
+    "2027-03-23": { name: "Dhuleti", emoji: "🎨", isHoliday: true },
+    "2027-04-15": { name: "Ram Navami", emoji: "🏹", isHoliday: true },
+    "2027-08-17": { name: "Raksha Bandhan", emoji: "🌸", isHoliday: true },
+    "2027-08-25": { name: "Janmashtami", emoji: "🪈", isHoliday: true },
     "2027-09-04": { name: "Ganesh Chaturthi", emoji: "🐘", isHoliday: true },
     "2027-10-09": { name: "Dussehra", emoji: "🏹", isHoliday: true },
     "2027-10-29": { name: "Diwali", emoji: "🪔", isHoliday: true },
@@ -180,7 +208,12 @@ export function getLocalHoliday(
     "2027-10-31": { name: "Bhai Dooj", emoji: "🌸", isHoliday: true },
     
     // 2028
+    "2028-02-24": { name: "Maha Shivratri", emoji: "🔱", isHoliday: true },
     "2028-03-10": { name: "Holi", emoji: "🎨", isHoliday: true },
+    "2028-03-11": { name: "Dhuleti", emoji: "🎨", isHoliday: true },
+    "2028-04-03": { name: "Ram Navami", emoji: "🏹", isHoliday: true },
+    "2028-08-05": { name: "Raksha Bandhan", emoji: "🌸", isHoliday: true },
+    "2028-08-13": { name: "Janmashtami", emoji: "🪈", isHoliday: true },
     "2028-09-22": { name: "Ganesh Chaturthi", emoji: "🐘", isHoliday: true },
     "2028-09-28": { name: "Dussehra", emoji: "🏹", isHoliday: true },
     "2028-10-17": { name: "Diwali", emoji: "🪔", isHoliday: true },
