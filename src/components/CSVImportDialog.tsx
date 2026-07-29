@@ -20,6 +20,8 @@ import {
   Settings, 
   Loader2 
 } from "lucide-react";
+import * as XLSX from "xlsx";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const DB_FIELDS = [
   { key: "task_name", label: "Task Name", required: true, keywords: ["task", "plan", "what i'll work on", "morning plan", "name", "summary", "todo", "title"] },
@@ -218,7 +220,7 @@ export function CSVImportDialog({
   onDone: () => void;
   isManager?: boolean;
 }) {
-   const [step, setStep] = useState<Step>("upload");
+  const [step, setStep] = useState<Step>("upload");
   const [fileName, setFileName] = useState<string>("");
   const [rawRows, setRawRows] = useState<string[][]>([]);
   const [headerIndex, setHeaderIndex] = useState<number>(0);
@@ -230,6 +232,55 @@ export function CSVImportDialog({
   const [busy, setBusy] = useState(false);
   const [existingTasks, setExistingTasks] = useState<any[]>([]);
   const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update" | "new">("skip");
+  
+  // Custom states for leaves/assigner/reviewer/tabs/pagination
+  const [previewTab, setPreviewTab] = useState<"tasks" | "leaves">("tasks");
+  const [defaultCreatedBy, setDefaultCreatedBy] = useState<string>(userId);
+  const [defaultReviewer, setDefaultReviewer] = useState<string>("");
+  const [tasksPage, setTasksPage] = useState(1);
+  const [leavesPage, setLeavesPage] = useState(1);
+  const tasksPageSize = 25;
+  const leavesPageSize = 25;
+
+  useEffect(() => {
+    if (step === "preview") {
+      setTasksPage(1);
+      setLeavesPage(1);
+    }
+  }, [step]);
+
+  const renderPagination = (currentPage: number, totalPages: number, onPageChange: (p: number) => void) => {
+    if (totalPages <= 1) return null;
+    return (
+      <div className="flex items-center justify-between border-t border-border px-4 py-2 bg-muted/40 text-[10px] sm:text-xs shrink-0 select-none">
+        <span className="text-muted-foreground font-medium">
+          Page <strong className="text-foreground">{currentPage}</strong> of <strong className="text-foreground">{totalPages}</strong>
+        </span>
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+            className="h-6 px-2 text-[10px] cursor-pointer"
+          >
+            Previous
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage === totalPages}
+            className="h-6 px-2 text-[10px] cursor-pointer"
+          >
+            Next
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   // Load emails once opened to help users map names to actual system user accounts
   useEffect(() => {
@@ -241,6 +292,9 @@ export function CSVImportDialog({
       setUniqueNames([]);
       setUserMapping({});
       setDuplicateStrategy("skip");
+      setPreviewTab("tasks");
+      setDefaultCreatedBy(userId);
+      setDefaultReviewer("");
       
       const fetchEmails = async () => {
         const { data } = await supabase.from("profile_emails" as never).select("id,email");
@@ -270,27 +324,43 @@ export function CSVImportDialog({
     setFileName(f.name);
     
     try {
-      const text = await f.text();
-      const parsed = parseRawCSV(text);
-      if (parsed.length === 0) {
-        toast.error("The CSV file is empty.");
-        return;
-      }
-      setRawRows(parsed);
-      
-      // Auto detect headers
-      const detected = detectHeaderRow(parsed);
-      setHeaderIndex(detected);
-      const csvHeaders = parsed[detected] || [];
-      setHeaders(csvHeaders);
-      
-      // Auto suggest mapping
-      const mapping = suggestMapping(csvHeaders);
-      setColumnMapping(mapping);
-      
-      setStep("mapping");
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const parsed = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, raw: false, defval: "" });
+          
+          const cleanedRows = parsed
+            .map(row => Array.isArray(row) ? row.map(cell => String(cell ?? "").trim()) : [])
+            .filter(row => row.some(cell => cell.length > 0));
+
+          if (cleanedRows.length === 0) {
+            toast.error("The file is empty or invalid.");
+            return;
+          }
+          setRawRows(cleanedRows);
+          
+          // Auto detect headers
+          const detected = detectHeaderRow(cleanedRows);
+          setHeaderIndex(detected);
+          const csvHeaders = cleanedRows[detected] || [];
+          setHeaders(csvHeaders);
+          
+          // Auto suggest mapping
+          const mapping = suggestMapping(csvHeaders);
+          setColumnMapping(mapping);
+          
+          setStep("mapping");
+        } catch (err) {
+          toast.error("Failed to parse file: " + (err as Error).message);
+        }
+      };
+      reader.readAsArrayBuffer(f);
     } catch (err) {
-      toast.error("Failed to parse CSV file: " + (err as Error).message);
+      toast.error("Failed to read file: " + (err as Error).message);
     }
   };
 
@@ -376,9 +446,62 @@ export function CSVImportDialog({
     });
   };
 
-  const getMappedTasks = () => {
+  const isLeaveValue = (val: string) => {
+    const norm = val.toLowerCase().trim();
+    return norm === "on leave" || norm === "on-leave" || norm === "leave" || norm === "absent";
+  };
+
+  const detectMultipleTasks = (val: string): boolean => {
+    if (!val) return false;
+
+    const lines = val.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return false;
+
+    // Check for numbered list (1... and 2...)
+    const hasOne = lines.some(l => /^(1[\)\.]|\[1\])/.test(l));
+    const hasTwo = lines.some(l => /^(2[\)\.]|\[2\])/.test(l));
+    if (hasOne && hasTwo) return true;
+
+    // Check for bullet list (at least two lines starting with bullet character)
+    const bulletCount = lines.filter(l => /^[-*•☐]\s+/.test(l)).length;
+    if (bulletCount >= 2) return true;
+
+    return false;
+  };
+
+  const splitCellValues = (val: string, taskDelimiter: boolean = false): string[] => {
+    if (!val) return [];
+    val = val.trim();
+
+    if (taskDelimiter) {
+      // For tasks, split only if strict numbering/bullet patterns are matched
+      if (detectMultipleTasks(val)) {
+        const lines = val.split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+        // Clean up list markers
+        return lines.map(p => p.replace(/^(?:\d+[\)\.]|[-*•☐])\s*/, "").trim()).filter(Boolean);
+      }
+      // Otherwise, return as a single task
+      return [val];
+    } else {
+      // For projects/clients, split by newline or pipe '|' or comma ','
+      let parts = val.split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+      if (parts.length === 1) {
+        if (val.includes("|")) {
+          parts = val.split("|").map(p => p.trim()).filter(Boolean);
+        } else if (val.includes(",")) {
+          parts = val.split(",").map(p => p.trim()).filter(Boolean);
+        }
+      }
+      return parts;
+    }
+  };
+
+  const getMappedTasksAndLeaves = () => {
     const dataRows = getDataRows();
-    return dataRows.map(row => {
+    const tasks: any[] = [];
+    const leaves: any[] = [];
+
+    dataRows.forEach(row => {
       const getValue = (fieldKey: string): string => {
         const colName = columnMapping[fieldKey];
         if (!colName) return "";
@@ -387,16 +510,39 @@ export function CSVImportDialog({
         return (row[colIdx] ?? "").trim();
       };
 
+      const rawProjectName = getValue("project_name");
+      const projectNames = splitCellValues(rawProjectName, false);
+
+      const rawTaskName = getValue("task_name");
+      if (!rawTaskName) {
+        return;
+      }
+
+      const taskNames = splitCellValues(rawTaskName, true);
+      if (taskNames.length === 0) {
+        return;
+      }
+
+      const rawClient = getValue("client");
+      const clients = splitCellValues(rawClient, false);
+
       const rawAssignee = getValue("assigned_to");
       let assigned_to = rawAssignee ? (userMapping[rawAssignee] || null) : null;
-      if (!isManager && assigned_to !== userId) {
-        assigned_to = null;
+
+      // Handle leave rows
+      if (taskNames.some(tn => isLeaveValue(tn))) {
+        leaves.push({
+          date: parseCSVDate(getValue("due_date")),
+          employeeName: rawAssignee || "Unknown",
+          assignedToId: assigned_to,
+          type: taskNames.find(tn => isLeaveValue(tn)) || "On Leave"
+        });
+        return;
       }
 
       const rawReviewer = getValue("reviewer");
       let reviewer = null;
       if (rawReviewer) {
-        // Resolve reviewer by email, map name, or fuzzy match
         if (rawReviewer.includes("@")) {
           const match = profiles.find(p => emails[p.id]?.toLowerCase() === rawReviewer.toLowerCase());
           reviewer = match ? match.id : null;
@@ -404,8 +550,8 @@ export function CSVImportDialog({
           reviewer = userMapping[rawReviewer] || suggestProfileMatch(rawReviewer, profiles) || null;
         }
       }
-      if (!isManager && reviewer !== userId) {
-        reviewer = null;
+      if (!reviewer && defaultReviewer) {
+        reviewer = defaultReviewer;
       }
 
       const statusVal = getValue("status");
@@ -419,23 +565,43 @@ export function CSVImportDialog({
         else if (pNorm.includes("low") || pNorm === "3") priority = "Low";
       }
 
-      return {
-        task_code: getValue("task_code") || undefined,
-        task_name: getValue("task_name") || "(untitled)",
-        client: getValue("client") || null,
-        project_name: getValue("project_name") || null,
-        priority,
-        status,
-        assigned_to,
-        reviewer,
-        due_date: parseCSVDate(getValue("due_date")),
-        planned_hours: getValue("planned_hours") ? Number(getValue("planned_hours")) : 0,
-        sprint_week: getValue("sprint_week") || null,
-        remarks: getValue("remarks") || null,
-        created_by: userId,
-        updated_by: userId,
-      };
+      taskNames.forEach((taskName, idx) => {
+        // Match project by index
+        let project_name = null;
+        if (taskNames.length === 1) {
+          project_name = rawProjectName || null;
+        } else if (projectNames.length > 0) {
+          project_name = projectNames[idx] || projectNames[projectNames.length - 1];
+        }
+
+        // Match client by index
+        let client = null;
+        if (taskNames.length === 1) {
+          client = rawClient || null;
+        } else if (clients.length > 0) {
+          client = clients[idx] || clients[clients.length - 1];
+        }
+
+        tasks.push({
+          task_code: getValue("task_code") || undefined,
+          task_name: taskName,
+          client,
+          project_name,
+          priority,
+          status,
+          assigned_to,
+          reviewer,
+          due_date: parseCSVDate(getValue("due_date")),
+          planned_hours: getValue("planned_hours") ? Number(getValue("planned_hours")) : 0,
+          sprint_week: getValue("sprint_week") || null,
+          remarks: getValue("remarks") || null,
+          created_by: defaultCreatedBy || userId,
+          updated_by: userId,
+        });
+      });
     });
+
+    return { tasks, leaves };
   };
 
   const findDuplicateTask = (task: any) => {
@@ -454,17 +620,29 @@ export function CSVImportDialog({
     });
   };
 
-  const previewTasks = useMemo(() => {
-    return step === "preview" ? getMappedTasks() : [];
-  }, [step, rawRows, columnMapping, userMapping, headerIndex, existingTasks]);
+  const { previewTasks, previewLeaves } = useMemo(() => {
+    if (step !== "preview") return { previewTasks: [], previewLeaves: [] };
+    const { tasks, leaves } = getMappedTasksAndLeaves();
+    return { previewTasks: tasks, previewLeaves: leaves };
+  }, [step, rawRows, columnMapping, userMapping, headerIndex, existingTasks, defaultCreatedBy, defaultReviewer]);
 
   const duplicateCount = useMemo(() => {
     if (step !== "preview") return 0;
     return previewTasks.filter(t => findDuplicateTask(t) !== undefined).length;
   }, [previewTasks, existingTasks]);
 
+  const totalTasksPages = Math.ceil(previewTasks.length / tasksPageSize);
+  const paginatedTasks = useMemo(() => {
+    return previewTasks.slice((tasksPage - 1) * tasksPageSize, tasksPage * tasksPageSize);
+  }, [previewTasks, tasksPage, tasksPageSize]);
+
+  const totalLeavesPages = Math.ceil(previewLeaves.length / leavesPageSize);
+  const paginatedLeaves = useMemo(() => {
+    return previewLeaves.slice((leavesPage - 1) * leavesPageSize, leavesPage * leavesPageSize);
+  }, [previewLeaves, leavesPage, leavesPageSize]);
+
   const doImport = async () => {
-    const payload = getMappedTasks();
+    const { tasks: payload } = getMappedTasksAndLeaves();
     console.log("doImport debug: userId =", userId, "isManager =", isManager);
     console.log("doImport debug: payload =", payload);
     if (!payload.length) return;
@@ -487,6 +665,8 @@ export function CSVImportDialog({
               await tasksService.update(duplicateOf as Task, task as Partial<Task>, userId);
               updated++;
               return;
+            } else if (duplicateStrategy === "new") {
+              task.task_name = `${task.task_name} (Duplicate)`;
             }
           }
           await tasksService.create(task as any, userId);
@@ -521,7 +701,7 @@ export function CSVImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col p-6 overflow-hidden">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-6 overflow-hidden">
         
         {/* Wizard Header */}
         <DialogHeader className="pb-4 border-b border-border">
@@ -564,11 +744,11 @@ export function CSVImportDialog({
                 <Upload className="h-10 w-10 text-muted-foreground animate-pulse" />
                 <div>
                   <p className="text-sm font-medium">Drag & drop your daily tracker CSV file here</p>
-                  <p className="text-xs text-muted-foreground mt-1">Accepts .csv format (UTF-8 encoding)</p>
+                  <p className="text-xs text-muted-foreground mt-1">Accepts CSV and Excel (.xlsx, .xls) formats</p>
                 </div>
                 <input 
                   type="file" 
-                  accept=".csv,text/csv" 
+                  accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" 
                   onChange={onFileSelected} 
                   className="absolute inset-0 opacity-0 cursor-pointer z-50 w-full h-full"
                 />
@@ -669,11 +849,11 @@ export function CSVImportDialog({
               </div>
 
               {!isManager && (
-                <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-600 p-3 rounded-lg flex items-start gap-2.5 text-xs">
+                <div className="bg-primary/10 border border-primary/20 text-primary p-3 rounded-lg flex items-start gap-2.5 text-xs">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-semibold block">Member Import Restriction</span>
-                    <span>Because you are a team member (not a manager), you can only import tasks assigned to yourself. Tasks mapped to other members will automatically be imported as <strong>Unassigned</strong>.</span>
+                    <span className="font-semibold block">Importing Assignments</span>
+                    <span>Tasks will be imported and assigned directly to the mapped team profiles.</span>
                   </div>
                 </div>
               )}
@@ -781,77 +961,204 @@ export function CSVImportDialog({
               </div>
 
               {!isManager && (
-                <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-600 p-3 rounded-lg flex items-start gap-2.5 text-xs">
+                <div className="bg-primary/10 border border-primary/20 text-primary p-3 rounded-lg flex items-start gap-2.5 text-xs">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-semibold block">Preview notice for Member Role</span>
-                    <span>Tasks belonging to other employees will be imported as <strong>Unassigned</strong>, while tasks belonging to you will remain assigned to you.</span>
+                    <span className="font-semibold block">Preview Assignment</span>
+                    <span>Tasks will be imported and assigned directly to the mapped team profiles.</span>
                   </div>
                 </div>
               )}
 
-              <div className="border border-border rounded-lg overflow-hidden max-h-[350px] overflow-y-auto bg-card">
-                <table className="w-full table-fixed text-[11px]">
-                  <thead className="bg-muted sticky top-0 z-10">
-                    <tr className="border-b border-border bg-muted">
-                      <th className="text-left px-2 py-2 font-semibold w-[35%] sticky top-0 bg-muted/95 backdrop-blur-sm">Task Name</th>
-                      <th className="text-left px-2 py-2 font-semibold w-[15%] sticky top-0 bg-muted/95 backdrop-blur-sm">Assignee</th>
-                      <th className="text-left px-2 py-2 font-semibold w-[12%] sticky top-0 bg-muted/95 backdrop-blur-sm">Client</th>
-                      <th className="text-left px-2 py-2 font-semibold w-[15%] sticky top-0 bg-muted/95 backdrop-blur-sm">Project</th>
-                      <th className="text-left px-2 py-2 font-semibold w-[11%] sticky top-0 bg-muted/95 backdrop-blur-sm">Status</th>
-                      <th className="text-left px-2 py-2 font-semibold w-[12%] sticky top-0 bg-muted/95 backdrop-blur-sm">Due Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border bg-card">
-                    {previewTasks.slice(0, 100).map((task, idx) => {
-                      const assigneeProfile = profiles.find(p => p.id === task.assigned_to);
-                      const duplicateOf = findDuplicateTask(task);
-                      return (
-                        <tr key={idx} className={`hover:bg-muted/5 ${duplicateOf ? "bg-yellow-500/5" : ""}`}>
-                          <td className="px-2 py-2 font-medium truncate" title={task.task_name}>
-                            <div className="flex items-center gap-1.5">
-                              {duplicateOf && (
-                                <span className="shrink-0 bg-yellow-500/15 text-yellow-700 dark:text-yellow-500 px-1 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider">
-                                  Dup
-                                </span>
-                              )}
-                              <span className="truncate">{task.task_name}</span>
-                            </div>
-                          </td>
-                          <td className="px-2 py-2 text-muted-foreground truncate">
-                            {assigneeProfile?.display_name || "—"}
-                          </td>
-                          <td className="px-2 py-2 text-muted-foreground truncate">
-                            {task.client || "—"}
-                          </td>
-                          <td className="px-2 py-2 text-muted-foreground truncate">
-                            {task.project_name || "—"}
-                          </td>
-                          <td className="px-2 py-2">
-                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                              task.status === "Completed" ? "bg-green-500/10 text-green-600" :
-                              task.status === "In Progress" ? "bg-blue-500/10 text-blue-600" :
-                              "bg-muted text-muted-foreground"
-                            }`}>
-                              {task.status}
-                            </span>
-                          </td>
-                          <td className="px-2 py-2 text-muted-foreground">
-                            {task.due_date || "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {previewTasks.length > 100 && (
-                      <tr>
-                        <td colSpan={6} className="text-center py-2 text-muted-foreground font-medium bg-muted/10">
-                          ... and {previewTasks.length - 100} more tasks
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              {/* Import settings: Default Assigner and Default Reviewer */}
+              <div className="grid grid-cols-2 gap-4 bg-muted/40 p-3.5 rounded-xl border border-border">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Default Assigner (Created By)</label>
+                  <select
+                    value={defaultCreatedBy}
+                    onChange={(e) => setDefaultCreatedBy(e.target.value)}
+                    className="w-full bg-background border border-border rounded px-2.5 py-1.5 outline-none text-xs focus:ring-1 focus:ring-primary focus:border-primary"
+                  >
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Default Reviewer</label>
+                  <select
+                    value={defaultReviewer}
+                    onChange={(e) => setDefaultReviewer(e.target.value)}
+                    className="w-full bg-background border border-border rounded px-2.5 py-1.5 outline-none text-xs focus:ring-1 focus:ring-primary focus:border-primary"
+                  >
+                    <option value="">(None)</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {/* Tabs selector */}
+              <div className="flex gap-2 border-b border-border pb-1">
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab("tasks")}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    previewTab === "tasks"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                  }`}
+                >
+                  Tasks to Import ({previewTasks.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab("leaves")}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    previewTab === "leaves"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                  }`}
+                >
+                  Leaves / Absent ({previewLeaves.length})
+                </button>
+              </div>
+
+              {previewTab === "tasks" ? (
+                <div className="border border-border rounded-lg overflow-hidden bg-card flex flex-col">
+                  <div className="max-h-[400px] overflow-y-auto">
+                    <table className="w-full table-fixed text-[11px]">
+                      <thead className="bg-muted sticky top-0 z-10">
+                        <tr className="border-b border-border bg-muted">
+                          <th className="text-left px-2 py-2 font-semibold w-[25%] sticky top-0 bg-muted/95 backdrop-blur-sm">Task Name</th>
+                          <th className="text-left px-2 py-2 font-semibold w-[15%] sticky top-0 bg-muted/95 backdrop-blur-sm">Assignee</th>
+                          <th className="text-left px-2 py-2 font-semibold w-[15%] sticky top-0 bg-muted/95 backdrop-blur-sm">Assigned By</th>
+                          <th className="text-left px-2 py-2 font-semibold w-[12%] sticky top-0 bg-muted/95 backdrop-blur-sm">Client</th>
+                          <th className="text-left px-2 py-2 font-semibold w-[13%] sticky top-0 bg-muted/95 backdrop-blur-sm">Project</th>
+                          <th className="text-left px-2 py-2 font-semibold w-[10%] sticky top-0 bg-muted/95 backdrop-blur-sm">Status</th>
+                          <th className="text-left px-2 py-2 font-semibold w-[10%] sticky top-0 bg-muted/95 backdrop-blur-sm">Due Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border bg-card">
+                        {paginatedTasks.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 text-muted-foreground font-medium bg-muted/5">
+                              No tasks found to import.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedTasks.map((task, idx) => {
+                            const assigneeProfile = profiles.find(p => p.id === task.assigned_to);
+                            const assignerProfile = profiles.find(p => p.id === task.created_by);
+                            const duplicateOf = findDuplicateTask(task);
+                            return (
+                              <tr key={idx} className={`hover:bg-muted/5 ${duplicateOf ? "bg-yellow-500/5" : ""}`}>
+                                <td className="px-2 py-2 font-medium truncate" title={task.task_name}>
+                                  <div className="flex items-center gap-1.5">
+                                    {duplicateOf && (
+                                      <span className="shrink-0 bg-yellow-500/15 text-yellow-700 dark:text-yellow-500 px-1 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider">
+                                        Dup
+                                      </span>
+                                    )}
+                                    <span className="truncate">{task.task_name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-2 py-2 text-muted-foreground truncate">
+                                  {assigneeProfile?.display_name || "—"}
+                                </td>
+                                <td className="px-2 py-2 text-muted-foreground truncate">
+                                  {assignerProfile?.display_name || "—"}
+                                </td>
+                                <td className="px-2 py-2 text-muted-foreground truncate">
+                                  {task.client || "—"}
+                                </td>
+                                 <td className="px-2 py-2 text-muted-foreground truncate">
+                                   <div className="flex items-center gap-1.5">
+                                     <span className="truncate">{task.project_name || "—"}</span>
+                                     {task.project_name?.includes("|") && (
+                                       <TooltipProvider delayDuration={100}>
+                                         <Tooltip>
+                                           <TooltipTrigger asChild>
+                                             <span className="shrink-0 text-amber-500 cursor-help select-none font-bold text-xs">
+                                               ⚠️
+                                             </span>
+                                           </TooltipTrigger>
+                                           <TooltipContent className="bg-amber-600 text-white border-none text-[10px] font-semibold py-1 px-2 rounded-md shadow-md">
+                                             Split Needed
+                                           </TooltipContent>
+                                         </Tooltip>
+                                       </TooltipProvider>
+                                     )}
+                                   </div>
+                                 </td>
+                                <td className="px-2 py-2">
+                                  <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                    task.status === "Completed" ? "bg-green-500/10 text-green-600" :
+                                    task.status === "In Progress" ? "bg-blue-500/10 text-blue-600" :
+                                    "bg-muted text-muted-foreground"
+                                  }`}>
+                                    {task.status}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-2 text-muted-foreground">
+                                  {task.due_date || "—"}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderPagination(tasksPage, totalTasksPages, setTasksPage)}
+                </div>
+              ) : (
+                <div className="border border-border rounded-lg overflow-hidden bg-card flex flex-col">
+                  <div className="max-h-[400px] overflow-y-auto">
+                    <table className="w-full table-fixed text-[11px]">
+                      <thead className="bg-muted sticky top-0 z-10">
+                        <tr className="border-b border-border bg-muted">
+                          <th className="text-left px-2 py-2 font-semibold w-[40%] sticky top-0 bg-muted/95 backdrop-blur-sm">Employee Name</th>
+                          <th className="text-left px-2 py-2 font-semibold w-[30%] sticky top-0 bg-muted/95 backdrop-blur-sm">Date</th>
+                          <th className="text-left px-2 py-2 font-semibold w-[30%] sticky top-0 bg-muted/95 backdrop-blur-sm">Plan / Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border bg-card">
+                        {paginatedLeaves.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="text-center py-8 text-muted-foreground font-medium bg-muted/5">
+                              No leave records found in this sheet.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedLeaves.map((leave, idx) => {
+                            const assigneeProfile = profiles.find(p => p.id === leave.assignedToId);
+                            return (
+                              <tr key={idx} className="hover:bg-muted/5">
+                                <td className="px-2 py-2 font-medium truncate" title={leave.employeeName}>
+                                  {assigneeProfile?.display_name || leave.employeeName}
+                                </td>
+                                <td className="px-2 py-2 text-muted-foreground">
+                                  {leave.date || "—"}
+                                </td>
+                                <td className="px-2 py-2 text-destructive font-semibold">
+                                  {leave.type}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderPagination(leavesPage, totalLeavesPages, setLeavesPage)}
+                </div>
+              )}
             </div>
           )}
 

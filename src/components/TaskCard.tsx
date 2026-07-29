@@ -126,8 +126,15 @@ export function TaskCard({
               </div>
               <div className="mt-0.5 font-medium leading-tight truncate">{task.task_name}</div>
               {!compact && (task.client || task.project_name) && (
-                <div className="mt-1 text-xs text-muted-foreground truncate">
-                  {task.client}{task.client && task.project_name ? " · " : ""}{task.project_name}
+                <div className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-1">
+                  <span>
+                    {task.client}{task.client && task.project_name ? " · " : ""}{task.project_name}
+                  </span>
+                  {task.project_name?.includes("|") && (
+                    <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-500 ring-1 ring-inset ring-amber-500/20">
+                      ⚠️ Needs Split
+                    </span>
+                  )}
                 </div>
               )}
             </div>

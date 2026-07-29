@@ -124,13 +124,13 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{initial ? "Edit task" : "New task"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label>Task name</Label>
+            <Label>Task name <span className="text-destructive">*</span></Label>
             <Input
               value={form.task_name ?? ""}
               onChange={(e) => setForm({ ...form, task_name: e.target.value })}
