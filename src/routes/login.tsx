@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Mail, Lock, ArrowRight } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
 import noesisLogo from "@/components/ui/noesis_analytics_logo.svg";
 
 const loginSearchSchema = z.object({
@@ -41,6 +41,7 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [redirectingToSignUp, setRedirectingToSignUp] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSignUpRedirect = async () => {
     setRedirectingToSignUp(true);
@@ -147,15 +148,26 @@ function LoginPage() {
                   </span>
                   <Input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     required
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="current-password"
                     placeholder="••••••••"
-                    className="pl-10 bg-background/50 border-border/80 focus:border-primary/80 focus:ring-1 focus:ring-primary/80 transition-all duration-200"
+                    className="pl-10 pr-10 bg-background/50 border-border/80 focus:border-primary/80 focus:ring-1 focus:ring-primary/80 transition-all duration-200"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
               </div>
 

@@ -25,7 +25,7 @@ export function BlockerDialog({
   const [reason, setReason] = useState("");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Mark {taskCode} blocked</DialogTitle>
           <DialogDescription>
@@ -33,7 +33,7 @@ export function BlockerDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="reason">Blocker reason</Label>
+          <Label htmlFor="reason">Blocker reason <span className="text-destructive">*</span></Label>
           <Textarea
             id="reason"
             value={reason}

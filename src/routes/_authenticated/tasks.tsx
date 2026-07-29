@@ -142,6 +142,44 @@ function TasksPage() {
     }
   };
 
+  const handleBulkReassign = async (newAssigneeId: string) => {
+    if (!newAssigneeId) return;
+    try {
+      const tasksToUpdate = tasks.filter((t) => selectedTaskIds.has(t.id));
+      await Promise.all(
+        tasksToUpdate.map((t) =>
+          tasksService.update(t, { assigned_to: newAssigneeId === "unassigned" ? null : newAssigneeId }, user?.id || "")
+        )
+      );
+      toast.success(`Successfully reassigned ${tasksToUpdate.length} tasks`);
+      setSelectedTaskIds(new Set());
+      load();
+    } catch (err) {
+      toast.error("Failed to reassign tasks: " + (err as Error).message);
+    }
+  };
+
+  const handleBulkUpdateProject = async () => {
+    const defaultVal = tasks.find(t => selectedTaskIds.has(t.id))?.project_name ?? "";
+    const newProject = prompt("Enter new project name for selected tasks:", defaultVal);
+    if (newProject === null) return; // user cancelled
+    
+    try {
+      const tasksToUpdate = tasks.filter((t) => selectedTaskIds.has(t.id));
+      await Promise.all(
+        tasksToUpdate.map((t) =>
+          tasksService.update(t, { project_name: newProject.trim() || null }, user?.id || "")
+        )
+      );
+      toast.success(`Successfully updated project for ${tasksToUpdate.length} tasks`);
+      setSelectedTaskIds(new Set());
+      load();
+    } catch (err) {
+      toast.error("Failed to update project: " + (err as Error).message);
+    }
+  };
+
+
   const handleDeleteAll = async () => {
     try {
       await Promise.all(tasks.map((t) => tasksService.delete(t.id)));
@@ -302,96 +340,100 @@ function TasksPage() {
   return (
     <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 space-y-4 pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-xl font-semibold">Tasks</h1>
-        <div className="flex items-center gap-1.5">
-          <Button size="sm" variant="ghost" className="h-8" onClick={() => setImportOpen(true)} title="Import CSV">
+        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+          <Button size="sm" variant="ghost" className="h-8 flex-1 sm:flex-none" onClick={() => setImportOpen(true)} title="Import CSV">
             <Upload className="h-3.5 w-3.5 mr-1" /> Import
           </Button>
-          <Button size="sm" variant="ghost" className="h-8" onClick={exportCSV} title="Export filtered tasks">
+          <Button size="sm" variant="ghost" className="h-8 flex-1 sm:flex-none" onClick={exportCSV} title="Export filtered tasks">
             <Download className="h-3.5 w-3.5 mr-1" /> Export
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteAllOpen(true)} title="Delete all tasks">
+          <Button size="sm" variant="ghost" className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive flex-1 sm:flex-none" onClick={() => setDeleteAllOpen(true)} title="Delete all tasks">
             <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete All
           </Button>
-          <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4 mr-1" /> New task</Button>
+          <Button size="sm" className="h-8 w-full sm:w-auto" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> New task
+          </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[180px]">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative w-full sm:flex-1 sm:min-w-[180px]">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input className="pl-7 h-8 text-sm" placeholder="Search tasks" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input className="pl-7 h-8 text-sm w-full" placeholder="Search tasks" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All status</SelectItem>
-            {TASK_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={priority} onValueChange={setPriority}>
-          <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All priority</SelectItem>
-            {TASK_PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={assignee} onValueChange={setAssignee}>
-          <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Assignee" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All assignees</SelectItem>
-            {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        
-        {/* Date Filter */}
-        <Select value={dateFilter} onValueChange={setDateFilter}>
-          <SelectTrigger className="h-8 w-32 text-xs">
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3 shrink-0" />
-              <SelectValue placeholder="Date" />
-            </div>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Dates</SelectItem>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="tomorrow">Tomorrow</SelectItem>
-            <SelectItem value="this_week">This Week</SelectItem>
-            <SelectItem value="overdue">Overdue</SelectItem>
-            <SelectItem value="no_due_date">No Due Date</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="grid grid-cols-2 gap-1.5 w-full sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-2">
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="h-8 w-full sm:w-32 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All status</SelectItem>
+              {TASK_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={priority} onValueChange={setPriority}>
+            <SelectTrigger className="h-8 w-full sm:w-32 text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All priority</SelectItem>
+              {TASK_PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={assignee} onValueChange={setAssignee}>
+            <SelectTrigger className="h-8 w-full sm:w-36 text-xs"><SelectValue placeholder="Assignee" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All assignees</SelectItem>
+              {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          
+          {/* Date Filter */}
+          <Select value={dateFilter} onValueChange={setDateFilter}>
+            <SelectTrigger className="h-8 w-full sm:w-32 text-xs">
+              <div className="flex items-center gap-1">
+                <Calendar className="h-3 w-3 shrink-0" />
+                <SelectValue placeholder="Date" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All Dates</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="tomorrow">Tomorrow</SelectItem>
+              <SelectItem value="this_week">This Week</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="no_due_date">No Due Date</SelectItem>
+            </SelectContent>
+          </Select>
 
-        {/* Sort Select */}
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="h-8 w-36 text-xs">
-            <div className="flex items-center gap-1">
-              <ArrowUpDown className="h-3 w-3 shrink-0" />
-              <SelectValue placeholder="Sort By" />
-            </div>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">Newest Created</SelectItem>
-            <SelectItem value="oldest">Oldest Created</SelectItem>
-            <SelectItem value="due_soon">Due Date (Soonest)</SelectItem>
-            <SelectItem value="due_late">Due Date (Latest)</SelectItem>
-          </SelectContent>
-        </Select>
+          {/* Sort Select */}
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="h-8 w-full sm:w-36 text-xs col-span-2 sm:col-span-1">
+              <div className="flex items-center gap-1">
+                <ArrowUpDown className="h-3 w-3 shrink-0" />
+                <SelectValue placeholder="Sort By" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest Created</SelectItem>
+              <SelectItem value="oldest">Oldest Created</SelectItem>
+              <SelectItem value="due_soon">Due Date (Soonest)</SelectItem>
+              <SelectItem value="due_late">Due Date (Latest)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Tabs Layout */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <div className="flex items-center justify-between border-b border-border pb-1">
-          <TabsList className="bg-muted/80">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-border pb-2 gap-2">
+          <TabsList className="bg-muted/80 w-full sm:w-auto grid grid-cols-3 sm:flex">
             <TabsTrigger value="my_tasks" className="text-xs">My Tasks ({myTasks.length})</TabsTrigger>
             <TabsTrigger value="team_tasks" className="text-xs">Team Tasks ({teamTasks.length})</TabsTrigger>
             <TabsTrigger value="all_tasks" className="text-xs">All Tasks ({sorted.length})</TabsTrigger>
           </TabsList>
 
           {/* Select All Checkbox */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mr-1">
+          <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground mr-1 self-end sm:self-auto select-none">
             <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors select-none">
               <input
                 type="checkbox"
@@ -461,15 +503,39 @@ function TasksPage() {
 
       {/* Bulk action sticky floating bar */}
       {selectedTaskIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-popover text-popover-foreground border border-border shadow-2xl rounded-full px-5 py-3 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <span className="text-xs font-medium">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-popover text-popover-foreground border border-border shadow-2xl rounded-xl sm:rounded-full px-4 py-2.5 sm:px-5 sm:py-3 flex flex-col sm:flex-row items-center gap-2 sm:gap-4 max-w-[92vw] w-max select-none animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <span className="text-xs font-medium shrink-0">
             {selectedTaskIds.size} {selectedTaskIds.size === 1 ? "task" : "tasks"} selected
           </span>
-          <div className="flex items-center gap-1.5 border-l border-border pl-4">
+          <div className="flex flex-wrap items-center gap-1.5 border-t sm:border-t-0 sm:border-l border-border pt-2 sm:pt-0 sm:pl-4 w-full sm:w-auto justify-center">
+            <Select onValueChange={handleBulkReassign}>
+              <SelectTrigger className="h-7 text-[10px] sm:text-xs px-2.5 rounded-full border border-input bg-background w-28 sm:w-32 cursor-pointer shadow-none">
+                <SelectValue placeholder="Reassign..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {profiles.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.display_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px] sm:text-xs px-2.5 rounded-full cursor-pointer hover:bg-muted bg-background"
+              onClick={handleBulkUpdateProject}
+            >
+              Set Project
+            </Button>
+
+
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 text-xs px-2.5 rounded-full cursor-pointer hover:bg-muted"
+              className="h-7 text-[10px] sm:text-xs px-2.5 rounded-full cursor-pointer hover:bg-muted text-green-600 dark:text-green-500 hover:text-green-700 hover:bg-green-500/10"
               onClick={handleBulkComplete}
             >
               Mark Completed
@@ -477,15 +543,15 @@ function TasksPage() {
             <Button
               size="sm"
               variant="destructive"
-              className="h-7 text-xs px-2.5 rounded-full cursor-pointer"
+              className="h-7 text-[10px] sm:text-xs px-2.5 rounded-full cursor-pointer"
               onClick={handleBulkDelete}
             >
-              Delete Selected
+              Delete
             </Button>
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 text-xs px-2.5 rounded-full text-muted-foreground hover:text-foreground cursor-pointer hover:bg-muted"
+              className="h-7 text-[10px] sm:text-xs px-2.5 rounded-full text-muted-foreground hover:text-foreground cursor-pointer hover:bg-muted"
               onClick={handleClearSelection}
             >
               Clear
