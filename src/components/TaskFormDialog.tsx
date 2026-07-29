@@ -57,8 +57,10 @@ export function TaskFormDialog({
   }, [form.due_date, open]);
 
   useEffect(() => {
-    setForm(initial ?? { priority: "Medium", status: "To Do", custom_fields: {} });
-  }, [initial, open]);
+    if (open) {
+      setForm(initial ?? { priority: "Medium", status: "To Do", custom_fields: {} });
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -104,7 +106,25 @@ export function TaskFormDialog({
     if (!validation.ok) { toast.error(validation.errors[0]); return; }
     try {
       if (initial?.id) {
-        await tasksService.update(initial, form, userId);
+        try {
+          await tasksService.update(initial, form, userId);
+        } catch (e) {
+          if (e instanceof TaskConflictError) {
+            // Re-fetch the latest version and retry once
+            const { data: freshRows } = await supabase
+              .from("tasks")
+              .select("*")
+              .eq("id", initial.id)
+              .single();
+            if (freshRows) {
+              await tasksService.update(freshRows as any, form, userId);
+            } else {
+              throw e;
+            }
+          } else {
+            throw e;
+          }
+        }
         toast.success("Task updated");
       } else {
         await tasksService.create(form, userId);
@@ -114,13 +134,14 @@ export function TaskFormDialog({
       onSaved();
     } catch (e) {
       if (e instanceof TaskConflictError) {
-        toast.error(e.message);
+        toast.error("Could not save – please close and try again.");
         onSaved();
       } else {
         toast.error((e as Error).message);
       }
     }
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

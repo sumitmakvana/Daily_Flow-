@@ -38,6 +38,7 @@ import type { Profile, Task, TaskStatus, WorkItemType } from "@/lib/types";
 import { formatDate, isOverdue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 export function TaskCard({
@@ -71,6 +72,7 @@ export function TaskCard({
   const overdue = isOverdue(task.due_date, task.status);
   const isOwner = task.assigned_to === userId;
   const canAct = isOwner || canManage;
+  const needsSplit = !!task.project_name?.includes("|");
 
   const handleError = (e: unknown) => {
     if (e instanceof TaskConflictError) {
@@ -103,7 +105,11 @@ export function TaskCard({
 
   return (
     <>
-      <Card className={cn("p-3 bg-card hover:bg-accent/30 transition-colors flex gap-3 items-start", overdue && "border-priority-high/40")}>
+      <Card className={cn(
+        "p-3 bg-card hover:bg-accent/30 transition-colors flex gap-3 items-start",
+        overdue && "border-priority-high/40",
+        needsSplit && "border-amber-500/80 bg-amber-500/[0.06] ring-1 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+      )}>
         {onSelectToggle && (
           <div className="pt-1.5 shrink-0 flex items-center justify-center">
             <input
@@ -131,9 +137,18 @@ export function TaskCard({
                     {task.client}{task.client && task.project_name ? " · " : ""}{task.project_name}
                   </span>
                   {task.project_name?.includes("|") && (
-                    <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-500 ring-1 ring-inset ring-amber-500/20">
-                      ⚠️ Needs Split
-                    </span>
+                    <TooltipProvider delayDuration={100}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="shrink-0 text-amber-500 cursor-help select-none font-bold text-xs">
+                            ⚠️
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-amber-600 text-white border-none text-[10px] font-semibold py-1 px-2 rounded-md shadow-md">
+                          Needs Split
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
                 </div>
               )}

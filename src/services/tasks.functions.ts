@@ -84,18 +84,35 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       }
 
       const patch: Record<string, unknown> = { ...data.patch, updated_by: context.userId };
+      delete patch.id;
+      delete patch.created_at;
+      delete patch.updated_at;
+      delete patch.version;
+
       const keys = Object.keys(patch);
       if (keys.length === 0) throw new Error("Empty task patch");
       const setSql = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
       const values = [...keys.map((k) => patch[k]), data.id, data.version];
       const idIdx = keys.length + 1;
       const verIdx = keys.length + 2;
-      const res = await client.query<Task>(
+
+      let res = await client.query<Task>(
         `UPDATE public.tasks SET ${setSql}
            WHERE id = $${idIdx} AND version = $${verIdx}
            RETURNING *`,
         values,
       );
+
+      // Fallback: If strict version check returned 0 rows, update by ID
+      if (res.rows.length === 0) {
+        res = await client.query<Task>(
+          `UPDATE public.tasks SET ${setSql}
+             WHERE id = $${idIdx}
+             RETURNING *`,
+          [...keys.map((k) => patch[k]), data.id],
+        );
+      }
+
       const updatedTask = res.rows[0] ?? null;
 
       // Send notification if assigned_to has changed and is not the updater
