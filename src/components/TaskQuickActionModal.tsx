@@ -98,7 +98,7 @@ export function TaskQuickActionModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md p-4 space-y-4">
+        <DialogContent className="w-[calc(100vw-24px)] sm:max-w-md p-4 space-y-4 max-h-[85vh] overflow-y-auto rounded-2xl">
           <DialogHeader className="pb-2 border-b border-border/60">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <span className="font-mono text-xs text-muted-foreground font-semibold">

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,14 @@ import { TaskFormDialog } from "@/components/TaskFormDialog";
 import type { Task } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/my-day")({
+  validateSearch: (search: Record<string, unknown>): { taskId?: string } => ({
+    taskId: typeof search.taskId === "string" ? search.taskId : undefined,
+  }),
   component: MyDayPage,
 });
 
 function MyDayPage() {
+  const { taskId } = Route.useSearch();
   const router = useRouter();
   const fetchMyDay = useServerFn(getMyDay);
   const { user } = useAuth();
@@ -28,13 +32,14 @@ function MyDayPage() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [quickModalOpen, setQuickModalOpen] = useState(false);
   const [fullFormOpen, setFullFormOpen] = useState(false);
+  const handledTaskIdRef = useRef<string | null>(null);
 
-  const handleTaskClick = async (taskId: string) => {
+  const handleTaskClick = async (id: string) => {
     try {
       const { data, error } = await supabase
         .from("tasks")
         .select("*")
-        .eq("id", taskId)
+        .eq("id", id)
         .maybeSingle();
       if (error || !data) return;
       setSelectedTask(data as Task);
@@ -43,6 +48,13 @@ function MyDayPage() {
       console.warn("Failed to load task for quick modal:", err);
     }
   };
+
+  useEffect(() => {
+    if (taskId && handledTaskIdRef.current !== taskId) {
+      handledTaskIdRef.current = taskId;
+      handleTaskClick(taskId);
+    }
+  }, [taskId]);
 
   useEffect(() => {
     if (!user) return;
@@ -234,7 +246,16 @@ function MyDayPage() {
       <TaskQuickActionModal
         task={selectedTask}
         open={quickModalOpen}
-        onOpenChange={setQuickModalOpen}
+        onOpenChange={(open) => {
+          setQuickModalOpen(open);
+          if (!open) {
+            setSelectedTask(null);
+            if (taskId) {
+              handledTaskIdRef.current = null;
+              router.navigate({ to: "/my-day", search: {}, replace: true });
+            }
+          }
+        }}
         userId={user?.id ?? ""}
         onChanged={() => q.refetch()}
         onOpenFullEdit={() => setFullFormOpen(true)}
