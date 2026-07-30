@@ -48,6 +48,7 @@ const managerNav = [
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/planning", icon: CalendarRange, label: "Planning" },
   { to: "/eod", icon: Sun, label: "EOD" },
+  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
   { to: "/heatmap", icon: Grid3x3, label: "Heatmap" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
@@ -59,7 +60,7 @@ const primaryManagerNav = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
-  { to: "/planning", icon: CalendarRange, label: "Planning" },
+  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
 ];

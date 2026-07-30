@@ -1,18 +1,24 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card } from "@/components/ui/card";
+import { Card, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
 import type { Profile, Task } from "@/lib/types";
+import { useAuth } from "@/hooks/use-auth";
+import { ShieldAlert, Sunrise } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
 });
 
 function ReportsPage() {
+  const { isManager, isAdmin } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+
   useEffect(() => {
+    if (!isManager && !isAdmin) return;
     (async () => {
       const [{ data: t }, { data: p }] = await Promise.all([
         supabase.from("tasks").select("*"),
@@ -21,7 +27,7 @@ function ReportsPage() {
       setTasks((t ?? []) as Task[]);
       setProfiles((p ?? []) as Profile[]);
     })();
-  }, []);
+  }, [isManager, isAdmin]);
 
   const planVsActual = useMemo(() => profiles.map((p) => {
     const own = tasks.filter((t) => t.assigned_to === p.id);
@@ -54,6 +60,29 @@ function ReportsPage() {
     });
     return Object.entries(buckets).map(([k, v]) => ({ bucket: k, count: v }));
   }, [tasks]);
+
+  if (!isManager && !isAdmin) {
+    return (
+      <div className="max-w-md mx-auto py-16 px-4 text-center space-y-4">
+        <Card className="p-6 border border-border/80 shadow-xl space-y-3">
+          <div className="h-12 w-12 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 grid place-items-center mx-auto">
+            <ShieldAlert className="h-6 w-6" />
+          </div>
+          <CardTitle className="text-lg font-bold">Manager Access Required</CardTitle>
+          <CardDescription className="text-xs text-muted-foreground leading-relaxed">
+            The Reports dashboard is restricted to Managers and Admins to review team velocity and workload distribution.
+          </CardDescription>
+          <div className="pt-2">
+            <Button asChild size="sm" className="w-full">
+              <Link to="/my-day" className="gap-2">
+                <Sunrise className="h-4 w-4" /> Go to My Day
+              </Link>
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-3 md:px-4 py-4 space-y-4">
