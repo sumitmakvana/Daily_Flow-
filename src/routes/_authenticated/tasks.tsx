@@ -36,6 +36,63 @@ export const Route = createFileRoute("/_authenticated/tasks")({
 
 const ALL = "__all";
 
+function getTaskDayLabel(isoDate: string | null | undefined): { key: string; label: string; dateObj: Date | null } {
+  if (!isoDate) {
+    return { key: "999_no_date", label: "No Due Date", dateObj: null };
+  }
+
+  const d = new Date(isoDate.length === 10 ? `${isoDate}T00:00:00` : isoDate);
+  const now = new Date();
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 3600 * 24));
+
+  if (diffDays === 0) {
+    return { key: "0_today", label: "Today", dateObj: target };
+  }
+  if (diffDays === 1) {
+    return { key: "1_yesterday", label: "Yesterday", dateObj: target };
+  }
+  if (diffDays === -1) {
+    return { key: "-1_tomorrow", label: "Tomorrow", dateObj: target };
+  }
+
+  const formatted = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
+  const dateKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+  return { key: dateKey, label: formatted, dateObj: target };
+}
+
+function groupTasksByWhatsAppDay(taskList: Task[]) {
+  const map = new Map<string, { label: string; dateObj: Date | null; tasks: Task[] }>();
+
+  for (const t of taskList) {
+    const dateStr = t.due_date ? t.due_date : t.created_at ? t.created_at.slice(0, 10) : null;
+    const info = getTaskDayLabel(dateStr);
+
+    if (!map.has(info.key)) {
+      map.set(info.key, { label: info.label, dateObj: info.dateObj, tasks: [] });
+    }
+    map.get(info.key)!.tasks.push(t);
+  }
+
+  return Array.from(map.entries())
+    .map(([key, data]) => ({ key, ...data }))
+    .sort((a, b) => {
+      if (a.key === "0_today") return -1;
+      if (b.key === "0_today") return 1;
+      if (a.key === "-1_tomorrow") return -2;
+      if (b.key === "-1_tomorrow") return 2;
+      if (a.key === "1_yesterday") return 1;
+      if (b.key === "1_yesterday") return -1;
+      if (a.key === "999_no_date") return 1000;
+      if (b.key === "999_no_date") return -1000;
+      if (!a.dateObj) return 1;
+      if (!b.dateObj) return -1;
+      return b.dateObj.getTime() - a.dateObj.getTime();
+    });
+}
+
 function TasksPage() {
   const { user, isManager } = useAuth();
   const { highlightId, create } = Route.useSearch();
@@ -337,6 +394,37 @@ function TasksPage() {
     </div>
   );
 
+  const renderWhatsAppGroupedTasks = (taskList: Task[]) => {
+    const groups = groupTasksByWhatsAppDay(taskList);
+    if (groups.length === 0) return null;
+
+    return (
+      <div className="space-y-6">
+        {groups.map((group) => (
+          <div key={group.key} className="space-y-3">
+            {/* WhatsApp Chat Style Date Divider Header */}
+            <div className="flex items-center gap-3 my-3 select-none">
+              <div className="h-[1px] flex-1 bg-border/60" />
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/90 text-foreground text-xs font-semibold shadow-2xs border border-border/70">
+                <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span>{group.label}</span>
+                <span className="text-[10px] text-muted-foreground font-bold px-1.5 py-0.2 rounded-full bg-accent">
+                  {group.tasks.length}
+                </span>
+              </div>
+              <div className="h-[1px] flex-1 bg-border/60" />
+            </div>
+
+            {/* Task Grid under this Date */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {group.tasks.map(renderTaskCard)}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 space-y-4 pb-24">
       {/* Header */}
@@ -466,9 +554,7 @@ function TasksPage() {
 
         <TabsContent value="my_tasks" className="mt-0">
           {myTasks.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {myTasks.map(renderTaskCard)}
-            </div>
+            renderWhatsAppGroupedTasks(myTasks)
           ) : (
             <p className="text-sm text-muted-foreground italic py-8 text-center bg-muted/5 rounded-lg border border-dashed border-border">
               No tasks assigned to you.
@@ -478,9 +564,7 @@ function TasksPage() {
 
         <TabsContent value="team_tasks" className="mt-0">
           {teamTasks.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {teamTasks.map(renderTaskCard)}
-            </div>
+            renderWhatsAppGroupedTasks(teamTasks)
           ) : (
             <p className="text-sm text-muted-foreground italic py-8 text-center bg-muted/5 rounded-lg border border-dashed border-border">
               No team tasks found.
@@ -490,9 +574,7 @@ function TasksPage() {
 
         <TabsContent value="all_tasks" className="mt-0">
           {sorted.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {sorted.map(renderTaskCard)}
-            </div>
+            renderWhatsAppGroupedTasks(sorted)
           ) : (
             <p className="text-sm text-muted-foreground italic py-8 text-center bg-muted/5 rounded-lg border border-dashed border-border">
               No tasks match the filters.

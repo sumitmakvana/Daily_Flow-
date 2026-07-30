@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { StreakChip } from "@/components/StreakChip";
 import { NudgeCenter } from "@/components/NudgeCenter";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
+import { NotificationsModal } from "@/components/NotificationsModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +48,7 @@ const managerNav = [
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/planning", icon: CalendarRange, label: "Planning" },
   { to: "/eod", icon: Sun, label: "EOD" },
+  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
   { to: "/heatmap", icon: Grid3x3, label: "Heatmap" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
@@ -58,7 +60,7 @@ const primaryManagerNav = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
-  { to: "/planning", icon: CalendarRange, label: "Planning" },
+  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
 ];
@@ -83,6 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [unread, setUnread] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notifModalOpen, setNotifModalOpen] = useState(false);
   const [profile, setProfile] = useState<{ display_name: string | null; email: string | null; avatar_url: string | null } | null>(null);
 
   useEffect(() => {
@@ -300,16 +303,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <SyncStatusBadge />
             <StreakChip className="mr-1" />
             {user && <NudgeCenter userId={user.id} />}
-            <Link to="/notifications" className="relative hidden md:inline-flex">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Bell className="h-4 w-4" />
-              </Button>
+            <button
+              type="button"
+              onClick={() => setNotifModalOpen(true)}
+              className="relative flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
+              title="Notifications"
+            >
+              <Bell className="h-4 w-4" />
               {unread > 0 && (
                 <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] bg-primary text-primary-foreground">
                   {unread}
                 </Badge>
               )}
-            </Link>
+            </button>
             {profile && (
               <div className="hidden md:flex items-center gap-2 px-2 py-1 mr-1 border-r border-border max-w-[180px]">
                 {profile.avatar_url ? (
@@ -505,6 +511,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </SheetContent>
       </Sheet>
+
+      <NotificationsModal open={notifModalOpen} onOpenChange={setNotifModalOpen} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,16 +11,50 @@ import { AlertOctagon, AlertTriangle, CalendarClock, CheckCircle2, ClipboardChec
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { TaskQuickActionModal } from "@/components/TaskQuickActionModal";
+import { TaskFormDialog } from "@/components/TaskFormDialog";
+import type { Task } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/my-day")({
+  validateSearch: (search: Record<string, unknown>): { taskId?: string } => ({
+    taskId: typeof search.taskId === "string" ? search.taskId : undefined,
+  }),
   component: MyDayPage,
 });
 
 function MyDayPage() {
+  const { taskId } = Route.useSearch();
   const router = useRouter();
   const fetchMyDay = useServerFn(getMyDay);
   const { user } = useAuth();
   const [profile, setProfile] = useState<{ display_name: string | null } | null>(null);
+
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [quickModalOpen, setQuickModalOpen] = useState(false);
+  const [fullFormOpen, setFullFormOpen] = useState(false);
+  const handledTaskIdRef = useRef<string | null>(null);
+
+  const handleTaskClick = async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (error || !data) return;
+      setSelectedTask(data as Task);
+      setQuickModalOpen(true);
+    } catch (err) {
+      console.warn("Failed to load task for quick modal:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (taskId && handledTaskIdRef.current !== taskId) {
+      handledTaskIdRef.current = taskId;
+      handleTaskClick(taskId);
+    }
+  }, [taskId]);
 
   useEffect(() => {
     if (!user) return;
@@ -131,7 +165,14 @@ function MyDayPage() {
             <EmptyRow icon={<CheckCircle2 className="h-5 w-5" />} text="Nothing on your plate. Enjoy the calm." />
           ) : (
             <ol className="divide-y divide-border">
-              {d.priorities.map((item, idx) => <PriorityRow key={item.id} rank={idx + 1} item={item} />)}
+              {d.priorities.map((item, idx) => (
+                <PriorityRow
+                  key={item.id}
+                  rank={idx + 1}
+                  item={item}
+                  onTaskClick={handleTaskClick}
+                />
+              ))}
             </ol>
           )}
         </CardContent>
@@ -143,10 +184,10 @@ function MyDayPage() {
           <CardTitle className="text-sm flex items-center gap-1.5"><AlertTriangle className="h-4 w-4 text-priority-high" /> Risks</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <RiskGroup label="Overdue" tone="destructive" items={d.risks.overdue} />
-          <RiskGroup label="At risk" tone="warn" items={d.risks.at_risk} />
-          <RiskGroup label="High severity" tone="destructive" items={d.risks.high_severity} />
-          <RiskGroup label="Awaiting approval" tone="info" items={d.risks.approval_waiting} />
+          <RiskGroup label="Overdue" tone="destructive" items={d.risks.overdue} onTaskClick={handleTaskClick} />
+          <RiskGroup label="At risk" tone="warn" items={d.risks.at_risk} onTaskClick={handleTaskClick} />
+          <RiskGroup label="High severity" tone="destructive" items={d.risks.high_severity} onTaskClick={handleTaskClick} />
+          <RiskGroup label="Awaiting approval" tone="info" items={d.risks.approval_waiting} onTaskClick={handleTaskClick} />
           {d.risks.overdue.length + d.risks.at_risk.length + d.risks.high_severity.length + d.risks.approval_waiting.length === 0 && (
             <EmptyRow icon={<CheckCircle2 className="h-5 w-5" />} text="No risks right now." />
           )}
@@ -189,8 +230,8 @@ function MyDayPage() {
           <CardTitle className="text-sm flex items-center gap-1.5"><RotateCcw className="h-4 w-4 text-primary" /> Carry-forward</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <CarrySection label="Carried into today" items={d.carry_forward.today} />
-          <CarrySection label="Repeated (3+ times)" items={d.carry_forward.repeated} accent />
+          <CarrySection label="Carried into today" items={d.carry_forward.today} onTaskClick={handleTaskClick} />
+          <CarrySection label="Repeated (3+ times)" items={d.carry_forward.repeated} accent onTaskClick={handleTaskClick} />
           {d.carry_forward.today.length + d.carry_forward.repeated.length === 0 && (
             <EmptyRow icon={<CheckCircle2 className="h-5 w-5" />} text="Nothing carried over." />
           )}
@@ -200,13 +241,56 @@ function MyDayPage() {
       <p className="text-[10px] text-muted-foreground text-center pt-2 pb-4">
         Generated {new Date(d.meta.generated_at).toLocaleTimeString()} · Score considers priority, due date, risk, carry-forward, approvals.
       </p>
+
+      {/* In-Place Quick Action Mini Modal */}
+      <TaskQuickActionModal
+        task={selectedTask}
+        open={quickModalOpen}
+        onOpenChange={(open) => {
+          setQuickModalOpen(open);
+          if (!open) {
+            setSelectedTask(null);
+            if (taskId) {
+              handledTaskIdRef.current = null;
+              router.navigate({ to: "/my-day", search: {}, replace: true });
+            }
+          }
+        }}
+        userId={user?.id ?? ""}
+        onChanged={() => q.refetch()}
+        onOpenFullEdit={() => setFullFormOpen(true)}
+      />
+
+      {/* Full Task Form Dialog (if user chooses Edit Details) */}
+      <TaskFormDialog
+        open={fullFormOpen}
+        onOpenChange={setFullFormOpen}
+        initial={selectedTask}
+        userId={user?.id ?? ""}
+        onSaved={() => {
+          q.refetch();
+          handleTaskClick(selectedTask?.id ?? "");
+        }}
+      />
     </div>
   );
 }
 
-function PriorityRow({ rank, item }: { rank: number; item: MyDayItem }) {
+function PriorityRow({
+  rank,
+  item,
+  onTaskClick,
+}: {
+  rank: number;
+  item: MyDayItem;
+  onTaskClick?: (id: string) => void;
+}) {
   return (
-    <Link to="/tasks" search={{ highlightId: item.id }} className="flex items-stretch gap-2 px-3 py-2.5 min-h-14 active:bg-accent/50 hover:bg-accent/30 transition-colors">
+    <button
+      type="button"
+      onClick={() => onTaskClick?.(item.id)}
+      className="w-full text-left flex items-stretch gap-2 px-3 py-2.5 min-h-14 active:bg-accent/50 hover:bg-accent/30 transition-colors"
+    >
       <div className="flex flex-col items-center justify-center w-7 shrink-0">
         <div className={cn(
           "h-7 w-7 grid place-items-center rounded-full text-xs font-bold",
@@ -234,11 +318,21 @@ function PriorityRow({ rank, item }: { rank: number; item: MyDayItem }) {
         </div>
       </div>
       <GripVertical className="h-4 w-4 text-muted-foreground self-center shrink-0 opacity-40" />
-    </Link>
+    </button>
   );
 }
 
-function RiskGroup({ label, items, tone }: { label: string; items: MyDayItem[]; tone: "destructive" | "warn" | "info" }) {
+function RiskGroup({
+  label,
+  items,
+  tone,
+  onTaskClick,
+}: {
+  label: string;
+  items: MyDayItem[];
+  tone: "destructive" | "warn" | "info";
+  onTaskClick?: (id: string) => void;
+}) {
   if (items.length === 0) return null;
   const toneCls = tone === "destructive" ? "text-priority-high" : tone === "warn" ? "text-priority-medium" : "text-primary";
   return (
@@ -249,15 +343,15 @@ function RiskGroup({ label, items, tone }: { label: string; items: MyDayItem[]; 
       <ul className="space-y-1">
         {items.map((i) => (
           <li key={i.id}>
-            <Link
-              to="/tasks"
-              search={{ highlightId: i.id }}
+            <button
+              type="button"
+              onClick={() => onTaskClick?.(i.id)}
               className="flex items-center gap-2 text-xs min-h-9 px-2 py-1 rounded-md bg-muted/30 hover:bg-accent/30 active:bg-accent/50 transition-colors w-full text-left"
             >
               <span className="font-mono text-[10px] text-muted-foreground shrink-0">{i.task_code}</span>
               <span className="truncate flex-1">{i.task_name}</span>
               {i.due_date && <span className="text-[10px] text-muted-foreground shrink-0">{i.due_date}</span>}
-            </Link>
+            </button>
           </li>
         ))}
       </ul>
@@ -265,7 +359,17 @@ function RiskGroup({ label, items, tone }: { label: string; items: MyDayItem[]; 
   );
 }
 
-function CarrySection({ label, items, accent }: { label: string; items: MyDayItem[]; accent?: boolean }) {
+function CarrySection({
+  label,
+  items,
+  accent,
+  onTaskClick,
+}: {
+  label: string;
+  items: MyDayItem[];
+  accent?: boolean;
+  onTaskClick?: (id: string) => void;
+}) {
   if (items.length === 0) return null;
   return (
     <div>
@@ -273,15 +377,15 @@ function CarrySection({ label, items, accent }: { label: string; items: MyDayIte
       <ul className="space-y-1">
         {items.map((i) => (
           <li key={i.id}>
-            <Link
-              to="/tasks"
-              search={{ highlightId: i.id }}
+            <button
+              type="button"
+              onClick={() => onTaskClick?.(i.id)}
               className="flex items-center gap-2 text-xs min-h-9 px-2 py-1 rounded-md bg-muted/30 hover:bg-accent/30 active:bg-accent/50 transition-colors w-full text-left"
             >
               <span className="font-mono text-[10px] text-muted-foreground shrink-0">{i.task_code}</span>
               <span className="truncate flex-1">{i.task_name}</span>
               <Badge variant={accent ? "destructive" : "outline"} className="text-[9px] h-4 px-1 shrink-0">CF×{i.carry_forward_count}</Badge>
-            </Link>
+            </button>
           </li>
         ))}
       </ul>
