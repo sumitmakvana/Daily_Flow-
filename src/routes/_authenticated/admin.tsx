@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { deleteUser, updateUserAdminSettings } from "@/lib/admin-actions";
 import { todayISO } from "@/lib/format";
 import { fetchAllAnnouncements, createAnnouncement, deleteAnnouncement } from "@/services/announcements.functions";
+import { DemoFeedbackDashboard } from "@/components/DemoFeedbackDashboard";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async () => {
@@ -226,8 +227,9 @@ function AdminPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="users" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-muted/40 p-1 rounded-xl">
+      <Tabs defaultValue="feedback" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 bg-muted/40 p-1 rounded-xl">
+          <TabsTrigger value="feedback" className="text-xs font-bold py-2 cursor-pointer text-primary">⭐ App Guide Utility Feedback</TabsTrigger>
           <TabsTrigger value="users" className="text-xs font-semibold py-2 cursor-pointer">Users & Roles</TabsTrigger>
           <TabsTrigger value="announcements" className="text-xs font-semibold py-2 cursor-pointer">Holiday Banners & Custom Notices</TabsTrigger>
         </TabsList>
@@ -562,6 +564,10 @@ function AdminPage() {
               )}
             </div>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="feedback" className="mt-4">
+          <DemoFeedbackDashboard />
         </TabsContent>
       </Tabs>
 

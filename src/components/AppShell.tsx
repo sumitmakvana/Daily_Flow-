@@ -3,6 +3,7 @@ import { ListChecks, LayoutDashboard, AlertOctagon, BarChart3, Bell, LogOut, Act
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { HolidayBanner } from "@/components/HolidayBanner";
+import { AnnouncementNoticeBanner } from "@/components/AnnouncementNoticeBanner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth, signOut } from "@/hooks/use-auth";
@@ -66,6 +67,7 @@ const primaryManagerNav = [
 ];
 
 const secondaryManagerNav = [
+  { to: "/admin", icon: Sparkles, label: "⭐ App Feedback" },
   { to: "/command", icon: Activity, label: "Command" },
   { to: "/executive", icon: Gauge, label: "Exec" },
   { to: "/forecast", icon: TrendingUp, label: "Forecast" },
@@ -355,6 +357,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <main className="flex-1 pb-16 md:pb-0">
         <HolidayBanner />
+        <AnnouncementNoticeBanner />
         {children}
       </main>
 
