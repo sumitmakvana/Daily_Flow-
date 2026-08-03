@@ -82,15 +82,15 @@ export function TaskHistorySheet({
 
         {task && (
           <Tabs defaultValue="timeline" className="mt-4">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="timeline" className="text-xs">
-                <Activity className="h-3.5 w-3.5 mr-1" /> Activity
+            <TabsList className="grid w-full grid-cols-3 h-auto p-1 gap-1">
+              <TabsTrigger value="timeline" className="text-xs px-1 whitespace-nowrap">
+                <Activity className="h-3.5 w-3.5 mr-1 shrink-0" /> Activity
               </TabsTrigger>
-              <TabsTrigger value="comments" className="text-xs">
-                <MessageSquare className="h-3.5 w-3.5 mr-1" /> Comments
+              <TabsTrigger value="comments" className="text-xs px-1 whitespace-nowrap">
+                <MessageSquare className="h-3.5 w-3.5 mr-1 shrink-0" /> Comments
               </TabsTrigger>
-              <TabsTrigger value="files" className="text-xs">
-                <Paperclip className="h-3.5 w-3.5 mr-1" /> Files
+              <TabsTrigger value="files" className="text-xs px-1 whitespace-nowrap">
+                <Paperclip className="h-3.5 w-3.5 mr-1 shrink-0" /> Files
               </TabsTrigger>
             </TabsList>
 

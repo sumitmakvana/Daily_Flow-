@@ -211,9 +211,9 @@ function NewTypeWizard() {
       </div>
 
       <Tabs value={String(step)}>
-        <TabsList className="flex-wrap h-auto">
+        <TabsList className="flex overflow-x-auto w-full justify-start h-auto p-1 scrollbar-none gap-1 sm:flex-wrap">
           {STEPS.map((s, i) => (
-            <TabsTrigger key={s} value={String(i)} onClick={() => i <= step && setStep(i)} disabled={i > step}>
+            <TabsTrigger key={s} value={String(i)} onClick={() => i <= step && setStep(i)} disabled={i > step} className="shrink-0 text-xs px-3">
               {i + 1}. {s}
             </TabsTrigger>
           ))}

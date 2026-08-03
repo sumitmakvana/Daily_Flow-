@@ -23,7 +23,7 @@ export const getWorkSettingsFn = createServerFn({ method: "GET" })
         );
         const data = res.rows[0] ?? null;
         if (data) {
-          data.morning_digest_time = "11:00";
+          data.morning_digest_time = "10:00";
           data.evening_digest_time = "18:00";
           data.no_tasks_reminder_interval = 20;
         }

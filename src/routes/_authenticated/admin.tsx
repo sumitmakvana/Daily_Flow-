@@ -228,10 +228,10 @@ function AdminPage() {
       </div>
 
       <Tabs defaultValue="feedback" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-muted/40 p-1 rounded-xl">
-          <TabsTrigger value="feedback" className="text-xs font-bold py-2 cursor-pointer text-primary">⭐ App Guide Utility Feedback</TabsTrigger>
-          <TabsTrigger value="users" className="text-xs font-semibold py-2 cursor-pointer">Users & Roles</TabsTrigger>
-          <TabsTrigger value="announcements" className="text-xs font-semibold py-2 cursor-pointer">Holiday Banners & Custom Notices</TabsTrigger>
+        <TabsList className="flex overflow-x-auto w-full justify-start md:grid md:grid-cols-3 bg-muted/40 p-1 rounded-xl scrollbar-none gap-1 h-auto min-h-11">
+          <TabsTrigger value="feedback" className="text-xs font-bold py-2 cursor-pointer text-primary whitespace-nowrap shrink-0 md:shrink px-3">⭐ App Guide Utility Feedback</TabsTrigger>
+          <TabsTrigger value="users" className="text-xs font-semibold py-2 cursor-pointer whitespace-nowrap shrink-0 md:shrink px-3">Users & Roles</TabsTrigger>
+          <TabsTrigger value="announcements" className="text-xs font-semibold py-2 cursor-pointer whitespace-nowrap shrink-0 md:shrink px-3">Holiday Banners & Custom Notices</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="space-y-4 mt-4">

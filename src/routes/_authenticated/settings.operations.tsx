@@ -153,7 +153,7 @@ function OpsSettings() {
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Morning digest time</Label>
             <TimeDropdownPicker
-              value={settings.morning_digest_time ?? "11:00"}
+              value={settings.morning_digest_time ?? "10:00"}
               onChange={(val) => setSettings({ ...settings, morning_digest_time: val })}
             />
           </div>
@@ -207,7 +207,7 @@ function OpsSettings() {
             daily_capacity_hours: settings.daily_capacity_hours,
             sla_default_days: settings.sla_default_days,
             workdays: settings.workdays,
-            morning_digest_time: settings.morning_digest_time ?? "11:00",
+            morning_digest_time: settings.morning_digest_time ?? "10:00",
             evening_digest_time: settings.evening_digest_time ?? "18:00",
             no_tasks_reminder_interval: settings.no_tasks_reminder_interval ?? 20,
           });

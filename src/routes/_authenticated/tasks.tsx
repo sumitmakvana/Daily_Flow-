@@ -514,10 +514,10 @@ function TasksPage() {
       {/* Tabs Layout */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-border pb-2 gap-2">
-          <TabsList className="bg-muted/80 w-full sm:w-auto grid grid-cols-3 sm:flex">
-            <TabsTrigger value="my_tasks" className="text-xs">My Tasks ({myTasks.length})</TabsTrigger>
-            <TabsTrigger value="team_tasks" className="text-xs">Team Tasks ({teamTasks.length})</TabsTrigger>
-            <TabsTrigger value="all_tasks" className="text-xs">All Tasks ({sorted.length})</TabsTrigger>
+          <TabsList className="bg-muted/80 w-full sm:w-auto flex overflow-x-auto justify-start sm:inline-flex scrollbar-none gap-1 h-auto p-1">
+            <TabsTrigger value="my_tasks" className="text-xs shrink-0 whitespace-nowrap px-3">My Tasks ({myTasks.length})</TabsTrigger>
+            <TabsTrigger value="team_tasks" className="text-xs shrink-0 whitespace-nowrap px-3">Team Tasks ({teamTasks.length})</TabsTrigger>
+            <TabsTrigger value="all_tasks" className="text-xs shrink-0 whitespace-nowrap px-3">All Tasks ({sorted.length})</TabsTrigger>
           </TabsList>
 
           {/* Select All Checkbox */}
