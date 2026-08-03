@@ -40,7 +40,7 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
 
         const url = new URL(request.url);
         const force = url.searchParams.get("force") === "true";
-        const morningTime = settings?.morning_digest_time ?? "11:00";
+        const morningTime = settings?.morning_digest_time ?? "10:00";
         if (currentLocalTime !== morningTime && !force) {
           return Response.json({
             ok: true,

@@ -14,10 +14,10 @@ function ConfigureAutomationsPage() {
         </p>
       </header>
       <Tabs defaultValue="rules">
-        <TabsList>
-          <TabsTrigger value="rules">Rules</TabsTrigger>
-          <TabsTrigger value="runs">Runs</TabsTrigger>
-          <TabsTrigger value="health">Health</TabsTrigger>
+        <TabsList className="flex overflow-x-auto w-full sm:w-auto justify-start h-auto p-1 scrollbar-none gap-1">
+          <TabsTrigger value="rules" className="shrink-0 text-xs px-3">Rules</TabsTrigger>
+          <TabsTrigger value="runs" className="shrink-0 text-xs px-3">Runs</TabsTrigger>
+          <TabsTrigger value="health" className="shrink-0 text-xs px-3">Health</TabsTrigger>
         </TabsList>
         <TabsContent value="rules" className="mt-4"><RulesPanel /></TabsContent>
         <TabsContent value="runs" className="mt-4"><RunsTable /></TabsContent>

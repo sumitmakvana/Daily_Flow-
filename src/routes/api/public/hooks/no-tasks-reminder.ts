@@ -54,7 +54,7 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
 
         const url = new URL(request.url);
         const force = url.searchParams.get("force") === "true";
-        const morningTime = settings?.morning_digest_time ?? "11:00";
+        const morningTime = settings?.morning_digest_time ?? "10:00";
         const eveningTime = settings?.evening_digest_time ?? "18:00";
         const interval = settings?.no_tasks_reminder_interval ?? 20;
 

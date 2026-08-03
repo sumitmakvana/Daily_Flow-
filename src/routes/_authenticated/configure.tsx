@@ -49,17 +49,17 @@ function ConfigurePage() {
         </div>
       </div>
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="health">Health</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="types">Types</TabsTrigger>
-          <TabsTrigger value="statuses">Statuses</TabsTrigger>
-          <TabsTrigger value="workflow">Workflow</TabsTrigger>
-          <TabsTrigger value="fields">Fields</TabsTrigger>
-          <TabsTrigger value="roles">Roles</TabsTrigger>
-          <TabsTrigger value="approvals">Approvals</TabsTrigger>
-          <TabsTrigger value="versions">Versions</TabsTrigger>
-          <TabsTrigger value="io">Import / Export</TabsTrigger>
+        <TabsList className="flex overflow-x-auto w-full justify-start h-auto p-1 scrollbar-none gap-1 sm:flex-wrap">
+          <TabsTrigger value="health" className="shrink-0 text-xs px-3">Health</TabsTrigger>
+          <TabsTrigger value="templates" className="shrink-0 text-xs px-3">Templates</TabsTrigger>
+          <TabsTrigger value="types" className="shrink-0 text-xs px-3">Types</TabsTrigger>
+          <TabsTrigger value="statuses" className="shrink-0 text-xs px-3">Statuses</TabsTrigger>
+          <TabsTrigger value="workflow" className="shrink-0 text-xs px-3">Workflow</TabsTrigger>
+          <TabsTrigger value="fields" className="shrink-0 text-xs px-3">Fields</TabsTrigger>
+          <TabsTrigger value="roles" className="shrink-0 text-xs px-3">Roles</TabsTrigger>
+          <TabsTrigger value="approvals" className="shrink-0 text-xs px-3">Approvals</TabsTrigger>
+          <TabsTrigger value="versions" className="shrink-0 text-xs px-3">Versions</TabsTrigger>
+          <TabsTrigger value="io" className="shrink-0 text-xs px-3">Import / Export</TabsTrigger>
         </TabsList>
         <TabsContent value="health" className="mt-4"><HealthPanel onNavigate={setTab} /></TabsContent>
         <TabsContent value="templates" className="mt-4"><TemplatesPanel /></TabsContent>
