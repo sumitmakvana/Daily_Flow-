@@ -92,6 +92,11 @@ services:
       - BACKEND_MODE=self
       - PORT=8080
       - CRON_SECRET=${CRON_SECRET}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - EMAIL_FROM=${EMAIL_FROM}
     depends_on:
       postgres:
         condition: service_healthy
