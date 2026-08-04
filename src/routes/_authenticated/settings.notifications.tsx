@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { notifPrefsService } from "@/services/notif-prefs";
+import { dispatchEodTestEmailFn } from "@/services/notif-prefs.functions";
 import type { NotificationPrefs } from "@/lib/types";
 import { toast } from "sonner";
 import { Save, Send, CheckCircle2, Users, Mail, ShieldAlert } from "lucide-react";
@@ -261,18 +262,18 @@ function NotifPrefsPage() {
                   onClick={async () => {
                     try {
                       toast.info(`Sending EOD Email Report to ${customTargetEmail}...`);
-                      const targetUrl = `/api/public/hooks/evening-digest?force=true&target_email=${encodeURIComponent(customTargetEmail)}`;
-                      const res = await fetch(targetUrl, {
-                        method: "POST",
+                      const res = await dispatchEodTestEmailFn({
+                        data: { targetEmail: customTargetEmail },
                       });
-                      const json = await res.json();
-                      if (json.ok) {
-                        toast.success("EOD Email & PDF Report dispatched successfully!");
+                      if (res.ok) {
+                        toast.success(
+                          `EOD Email & PDF Report dispatched to ${res.sentTo.join(", ")}!`,
+                        );
                       } else {
-                        toast.error(json.reason || "Failed to dispatch email");
+                        toast.error(res.result?.error || "Failed to dispatch email");
                       }
                     } catch (err) {
-                      toast.error("Error triggering EOD Email dispatch");
+                      toast.error("Error triggering EOD Email dispatch: " + (err as Error).message);
                     }
                   }}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-8.5 gap-1.5 shadow-sm font-semibold"

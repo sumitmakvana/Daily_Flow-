@@ -3,6 +3,9 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser } from "@/integrations/postgres/query.server";
 import { getPool } from "@/integrations/postgres/client.server";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { generateEodHtmlReport } from "@/services/pdf-report.generator";
+import { sendEodEmail } from "@/services/email-dispatcher";
 import type { NotificationPrefs } from "@/lib/types";
 
 const PrefsSchema = z.object({
@@ -178,4 +181,126 @@ export const saveNotifPrefsFn = createServerFn({ method: "POST" })
       }
     });
     return row;
+  });
+
+export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: { targetEmail?: string }) =>
+    z.object({ targetEmail: z.string().optional() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const [{ data: profiles }, { data: tasks }] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("id, display_name, email, manager_id, is_active")
+        .eq("is_active", true),
+      supabaseAdmin
+        .from("tasks")
+        .select(
+          "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, blocker_reason, remarks",
+        ),
+    ]);
+
+    const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+    const plateByUser = new Map<string, typeof tasks>();
+    for (const t of tasks ?? []) {
+      if (!t.assigned_to) continue;
+      const arr = plateByUser.get(t.assigned_to) ?? [];
+      const isCompletedToday = t.completed_at && t.completed_at.slice(0, 10) === today;
+      const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= today;
+      if (isCompletedToday || (t.status !== "Completed" && isDueTodayOrPast)) {
+        arr.push(t);
+      }
+      plateByUser.set(t.assigned_to, arr);
+    }
+
+    let completedCount = 0;
+    let inProgressCount = 0;
+    let blockedCount = 0;
+    let pendingCount = 0;
+
+    const memberSummaries = (profiles ?? []).map((p) => {
+      const mine = plateByUser.get(p.id) ?? [];
+      const completed = mine.filter((t) => t.status === "Completed");
+      const inProgress = mine.filter((t) => t.status === "In Progress" || t.status === "In Review");
+      const blocked = mine.filter((t) => t.status === "Blocked" || t.status === "On Hold");
+      const pending = mine.filter((t) => t.status === "To Do");
+
+      completedCount += completed.length;
+      inProgressCount += inProgress.length;
+      blockedCount += blocked.length;
+      pendingCount += pending.length;
+
+      return {
+        name: p.display_name || "Team Member",
+        completedCount: completed.length,
+        inProgressCount: inProgress.length,
+        blockedCount: blocked.length,
+        pendingCount: pending.length,
+        tasks: [],
+      };
+    });
+
+    const totalCount = completedCount + inProgressCount + blockedCount + pendingCount;
+    const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    const blockedAlerts: Array<{
+      code: string;
+      name: string;
+      memberName: string;
+      reason: string;
+    }> = [];
+    for (const t of tasks ?? []) {
+      if (t.status === "Blocked" || t.status === "On Hold") {
+        const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= today;
+        if (isDueTodayOrPast) {
+          blockedAlerts.push({
+            code: t.task_code,
+            name: t.task_name,
+            memberName: profileById.get(t.assigned_to || "")?.display_name || "Unassigned",
+            reason:
+              (t as { blocker_reason?: string; remarks?: string }).blocker_reason ||
+              (t as { blocker_reason?: string; remarks?: string }).remarks ||
+              "No details provided",
+          });
+        }
+      }
+    }
+
+    const reportHtml = generateEodHtmlReport({
+      dateStr: today,
+      totalTasks: totalCount,
+      completedTasks: completedCount,
+      inProgressTasks: inProgressCount,
+      blockedTasks: blockedCount,
+      pendingTasks: pendingCount,
+      completionRate,
+      memberSummaries,
+      blockedAlerts,
+    });
+
+    const rawEmails = data.targetEmail || "sumitmakvana535@gmail.com";
+    const targetEmailList = Array.from(
+      new Set(
+        rawEmails
+          .split(",")
+          .map((e) => e.trim())
+          .filter(Boolean),
+      ),
+    );
+
+    const result = await sendEodEmail({
+      to: targetEmailList,
+      subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
+      html: reportHtml,
+      attachments: [
+        {
+          filename: `Team_EOD_Report_${today}.html`,
+          content: Buffer.from(reportHtml).toString("base64"),
+        },
+      ],
+    });
+
+    return { ok: result.success, sentTo: targetEmailList, result };
   });
