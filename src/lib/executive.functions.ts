@@ -12,15 +12,18 @@ const InputSchema = z.object({
 
 export const getExecSummary = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => InputSchema.parse(input))
+  .validator((input: unknown) => InputSchema.parse(input))
   .handler(async ({ data, context }) => {
-    const { data: rows, error } = await context.supabase.rpc("exec_summary" as never, {
-      _days: data.days,
-      _team: data.team ?? null,
-      _manager: data.manager ?? null,
-      _project: data.project ?? null,
-      _type: data.type ?? null,
-    } as never);
+    const { data: rows, error } = await context.supabase.rpc(
+      "exec_summary" as never,
+      {
+        _days: data.days,
+        _team: data.team ?? null,
+        _manager: data.manager ?? null,
+        _project: data.project ?? null,
+        _type: data.type ?? null,
+      } as never,
+    );
     if (error) throw new Error(error.message);
     return rows as unknown as ExecSummary;
   });
@@ -74,44 +77,92 @@ export type ExecScopeBootstrap = Awaited<ReturnType<typeof getExecScope>>;
 
 export interface ExecSummary {
   meta: {
-    days: number; today: string; range_start: string;
-    is_admin: boolean; visible_team_count: number; capacity: number; generated_at: string;
+    days: number;
+    today: string;
+    range_start: string;
+    is_admin: boolean;
+    visible_team_count: number;
+    capacity: number;
+    generated_at: string;
   };
   execution: {
-    planned_today: number; completed_today: number;
-    week_due: number; week_done: number;
-    prev_week_due: number; prev_week_done: number;
+    planned_today: number;
+    completed_today: number;
+    week_due: number;
+    week_done: number;
+    prev_week_due: number;
+    prev_week_done: number;
   };
   delivery: {
-    on_track: number; at_risk: number; delayed: number;
-    projects: Array<{ id: string; name: string; status: "on" | "risk" | "late"; overdue: number; blocked: number; total: number }>;
+    on_track: number;
+    at_risk: number;
+    delayed: number;
+    projects: Array<{
+      id: string;
+      name: string;
+      status: "on" | "risk" | "late";
+      overdue: number;
+      blocked: number;
+      total: number;
+    }>;
   };
   risk: {
-    blocked: number; high: number; sla_breaches: number; approvals_pending: number;
-    critical: Array<{ id: string; severity: string; summary: string; entity_type: string; entity_id: string }>;
+    blocked: number;
+    high: number;
+    sla_breaches: number;
+    approvals_pending: number;
+    critical: Array<{
+      id: string;
+      severity: string;
+      summary: string;
+      entity_type: string;
+      entity_id: string;
+    }>;
   };
   workload: { rows: Array<{ user_id: string; name: string | null; planned: number; pct: number }> };
   discipline: {
-    cf_today: number; cf_hot: number; eod_today: number; eod_users_range: number;
-    eod_total_members: number; blocked_3d: number;
+    cf_today: number;
+    cf_hot: number;
+    eod_today: number;
+    eod_users_range: number;
+    eod_total_members: number;
+    blocked_3d: number;
     cf_trend: Array<{ d: string; n: number }>;
   };
   automation: {
-    total_runs: number; today_runs: number; success_rate: number | null;
-    failed_24h: number; dead_24h: number; pending: number;
-    active_rules: number; auto_disabled_rules: number;
-    follow_ups: number; approvals_auto: number; escalations: number;
+    total_runs: number;
+    today_runs: number;
+    success_rate: number | null;
+    failed_24h: number;
+    dead_24h: number;
+    pending: number;
+    active_rules: number;
+    auto_disabled_rules: number;
+    follow_ups: number;
+    approvals_auto: number;
+    escalations: number;
     trend: Array<{ d: string; n: number }>;
   };
   adoption: {
-    dau: number; wau: number; eod_users: number; status_users: number; total_members: number;
+    dau: number;
+    wau: number;
+    eod_users: number;
+    status_users: number;
+    total_members: number;
     dau_trend: Array<{ d: string; n: number }>;
   };
   team_health: Array<{ team: string; manager: string; score: number }>;
-  manager_effectiveness: Array<{ manager: string; completion: number; overdue: number; appr: number }>;
+  manager_effectiveness: Array<{
+    manager: string;
+    completion: number;
+    overdue: number;
+    appr: number;
+  }>;
   insights_inputs: {
-    cf_last_7d: number; cf_prev_7d: number;
-    approvals_pending_now: number; approvals_pending_over_7d: number;
+    cf_last_7d: number;
+    cf_prev_7d: number;
+    approvals_pending_now: number;
+    approvals_pending_over_7d: number;
     team_overload: Array<{ name: string; pct: number }>;
   };
   filters: {

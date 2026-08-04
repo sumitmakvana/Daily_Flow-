@@ -3,20 +3,49 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  AlertOctagon, AlertTriangle, Bot, CheckCircle2, ClipboardCheck, Gauge,
-  ShieldAlert, Sparkles, TrendingDown, TrendingUp, Users, Activity, Building2,
+  AlertOctagon,
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  ClipboardCheck,
+  Gauge,
+  ShieldAlert,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  Activity,
+  Building2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { getExecSummary, getExecScope, type ExecSummary, type ExecScopeBootstrap } from "@/lib/executive.functions";
+import {
+  getExecSummary,
+  getExecScope,
+  type ExecSummary,
+  type ExecScopeBootstrap,
+} from "@/lib/executive.functions";
+import { EodTeamTrendWidget } from "@/components/EodTeamTrendWidget";
+import type { Task, Profile } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/executive")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (!data.user) return;
-    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", data.user.id);
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.user.id);
     const set = new Set((roles ?? []).map((r) => r.role));
     if (!set.has("admin") && !set.has("manager")) {
       throw redirect({ to: "/today" });
@@ -26,13 +55,16 @@ export const Route = createFileRoute("/_authenticated/executive")({
 });
 
 type RangeKey = "1" | "7" | "14" | "30" | "90";
-const RANGE_LABEL: Record<RangeKey, string> = { "1": "Today", "7": "7 days", "14": "14 days", "30": "30 days", "90": "90 days" };
+const RANGE_LABEL: Record<RangeKey, string> = {
+  "1": "Today",
+  "7": "7 days",
+  "14": "14 days",
+  "30": "30 days",
+  "90": "90 days",
+};
 
 /* ----- Scope (E0.1E) ----- */
-type Scope =
-  | { kind: "org" }
-  | { kind: "team"; id: string }
-  | { kind: "manager"; id: string };
+type Scope = { kind: "org" } | { kind: "team"; id: string } | { kind: "manager"; id: string };
 
 const SCOPE_STORAGE_KEY = "exec.scope.v1";
 
@@ -44,12 +76,18 @@ function readStoredScope(): Scope | null {
     const v = JSON.parse(raw);
     if (v?.kind === "org") return { kind: "org" };
     if ((v?.kind === "team" || v?.kind === "manager") && typeof v.id === "string") return v;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
 
 function persistScope(s: Scope) {
-  try { window.localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+  try {
+    window.localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
 }
 
 function deriveDefaultScope(boot: ExecScopeBootstrap): Scope {
@@ -77,17 +115,48 @@ function ExecutivePage() {
     staleTime: Infinity,
   });
 
+  const { data: eodTasks = [] } = useQuery({
+    queryKey: ["eod-widget-tasks"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("tasks")
+        .select(
+          "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, blocker_reason, remarks",
+        );
+      return (data ?? []) as Task[];
+    },
+    staleTime: 5000,
+  });
+
+  const { data: eodProfiles = [] } = useQuery({
+    queryKey: ["eod-widget-profiles"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url, manager_id");
+      return (data ?? []) as Profile[];
+    },
+    staleTime: 30000,
+  });
+
   // First-load default when no persisted scope.
   useEffect(() => {
     if (scope || !boot) return;
     setScopeState(deriveDefaultScope(boot));
   }, [boot, scope]);
 
-  const setScope = (next: Scope) => { setScopeState(next); persistScope(next); };
+  const setScope = (next: Scope) => {
+    setScopeState(next);
+    persistScope(next);
+  };
 
   const filters = scope ? scopeToFilters(scope) : null;
   const fetchSummary = useServerFn(getExecSummary);
-  const { data: summary, isLoading, error } = useQuery({
+  const {
+    data: summary,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["exec-summary", range, scope, projectId, typeFilter],
     queryFn: () =>
       fetchSummary({
@@ -119,10 +188,14 @@ function ExecutivePage() {
 
   if (isLoading || !summary || !boot || !scope) {
     return (
-      <div className="max-w-7xl mx-auto px-3 md:px-6 py-6 space-y-3">
+      <div className="max-w-7xl mx-auto px-3 md:px-6 py-6 space-y-4">
+        {/* Render EOD Trend Widget immediately */}
+        <EodTeamTrendWidget tasks={eodTasks} profiles={eodProfiles} />
         <div className="h-8 w-48 bg-muted animate-pulse rounded" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-24 bg-muted animate-pulse rounded" />)}
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-24 bg-muted animate-pulse rounded" />
+          ))}
         </div>
       </div>
     );
@@ -130,9 +203,12 @@ function ExecutivePage() {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-3 md:px-6 py-6">
+      <div className="max-w-7xl mx-auto px-3 md:px-6 py-6 space-y-4">
+        <EodTeamTrendWidget tasks={eodTasks} profiles={eodProfiles} />
         <Card className="p-4 border-priority-high/40">
-          <div className="font-semibold text-priority-high mb-1">Failed to load Executive Command Center</div>
+          <div className="font-semibold text-priority-high mb-1">
+            Failed to load Executive Command Center
+          </div>
           <div className="text-sm text-muted-foreground">{(error as Error).message}</div>
         </Card>
       </div>
@@ -150,20 +226,55 @@ function ExecutivePage() {
             </Badge>
             <span>· {RANGE_LABEL[range]}</span>
             {summary.meta.visible_team_count > 0 && (
-              <span className="hidden md:inline">· {summary.meta.visible_team_count} team(s) visible</span>
+              <span className="hidden md:inline">
+                · {summary.meta.visible_team_count} team(s) visible
+              </span>
             )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
-          <ScopeSelect scope={scope} boot={boot} teams={summary.filters.teams} managers={summary.filters.managers} onChange={setScope} />
-          <FilterSelect value={range} onChange={(v) => setRange(v as RangeKey)} label="Range"
-            options={[["1", "Today"], ["7", "7d"], ["14", "14d"], ["30", "30d"], ["90", "90d"]]} />
-          <FilterSelect value={projectId} onChange={setProjectId} label="Project"
-            options={[["all", "All projects"], ...summary.filters.projects.map((p) => [p.id, p.name] as [string, string])]} />
-          <FilterSelect value={typeFilter} onChange={setTypeFilter} label="Type"
-            options={[["all", "All types"], ...summary.filters.types.map((t) => [t.id, t.name] as [string, string])]} />
+          <ScopeSelect
+            scope={scope}
+            boot={boot}
+            teams={summary.filters.teams}
+            managers={summary.filters.managers}
+            onChange={setScope}
+          />
+          <FilterSelect
+            value={range}
+            onChange={(v) => setRange(v as RangeKey)}
+            label="Range"
+            options={[
+              ["1", "Today"],
+              ["7", "7d"],
+              ["14", "14d"],
+              ["30", "30d"],
+              ["90", "90d"],
+            ]}
+          />
+          <FilterSelect
+            value={projectId}
+            onChange={setProjectId}
+            label="Project"
+            options={[
+              ["all", "All projects"],
+              ...summary.filters.projects.map((p) => [p.id, p.name] as [string, string]),
+            ]}
+          />
+          <FilterSelect
+            value={typeFilter}
+            onChange={setTypeFilter}
+            label="Type"
+            options={[
+              ["all", "All types"],
+              ...summary.filters.types.map((t) => [t.id, t.name] as [string, string]),
+            ]}
+          />
         </div>
       </header>
+
+      {/* EOD Team Performance & Trends Widget */}
+      <EodTeamTrendWidget tasks={eodTasks} profiles={eodProfiles} />
 
       <ExecutionHealth s={summary} />
       <DeliveryHealth s={summary} />
@@ -194,7 +305,13 @@ function valueToScope(v: string): Scope {
   return { kind: "org" };
 }
 
-function ScopeSelect({ scope, boot, teams, managers, onChange }: {
+function ScopeSelect({
+  scope,
+  boot,
+  teams,
+  managers,
+  onChange,
+}: {
   scope: Scope;
   boot: ExecScopeBootstrap;
   teams: Array<{ id: string; name: string }>;
@@ -205,12 +322,16 @@ function ScopeSelect({ scope, boot, teams, managers, onChange }: {
   const canSeeOrg = boot.isAdmin;
   return (
     <Select value={scopeToValue(scope)} onValueChange={(v) => onChange(valueToScope(v))}>
-      <SelectTrigger className="h-8 w-[200px] text-xs"><SelectValue placeholder="Scope" /></SelectTrigger>
+      <SelectTrigger className="h-8 w-[200px] text-xs">
+        <SelectValue placeholder="Scope" />
+      </SelectTrigger>
       <SelectContent>
         {canSeeOrg && (
           <SelectGroup>
             <SelectLabel className="text-[10px] uppercase tracking-wide">Scope</SelectLabel>
-            <SelectItem value="org" className="text-xs">Organization</SelectItem>
+            <SelectItem value="org" className="text-xs">
+              Organization
+            </SelectItem>
           </SelectGroup>
         )}
         {teams.length > 0 && (
@@ -225,7 +346,9 @@ function ScopeSelect({ scope, boot, teams, managers, onChange }: {
               .filter((t) => t.id !== boot.primaryTeamId)
               .slice(0, 50)
               .map((t) => (
-                <SelectItem key={t.id} value={`team:${t.id}`} className="text-xs">{t.name}</SelectItem>
+                <SelectItem key={t.id} value={`team:${t.id}`} className="text-xs">
+                  {t.name}
+                </SelectItem>
               ))}
           </SelectGroup>
         )}
@@ -233,13 +356,17 @@ function ScopeSelect({ scope, boot, teams, managers, onChange }: {
           <SelectGroup>
             <SelectLabel className="text-[10px] uppercase tracking-wide">Managers</SelectLabel>
             {(boot.isManager || boot.isAdmin) && (
-              <SelectItem value={`manager:${boot.userId}`} className="text-xs">My Hierarchy</SelectItem>
+              <SelectItem value={`manager:${boot.userId}`} className="text-xs">
+                My Hierarchy
+              </SelectItem>
             )}
             {managers
               .filter((m) => m.id !== boot.userId)
               .slice(0, 50)
               .map((m) => (
-                <SelectItem key={m.id} value={`manager:${m.id}`} className="text-xs">{m.name}</SelectItem>
+                <SelectItem key={m.id} value={`manager:${m.id}`} className="text-xs">
+                  {m.name}
+                </SelectItem>
               ))}
           </SelectGroup>
         )}
@@ -250,20 +377,44 @@ function ScopeSelect({ scope, boot, teams, managers, onChange }: {
 
 /* ---------------- Shared primitives ---------------- */
 
-function FilterSelect({ value, onChange, label, options }: {
-  value: string; onChange: (v: string) => void; label: string; options: [string, string][];
+function FilterSelect({
+  value,
+  onChange,
+  label,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  options: [string, string][];
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-8 w-[120px] text-xs"><SelectValue placeholder={label} /></SelectTrigger>
+      <SelectTrigger className="h-8 w-[120px] text-xs">
+        <SelectValue placeholder={label} />
+      </SelectTrigger>
       <SelectContent>
-        {options.map(([v, l]) => <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>)}
+        {options.map(([v, l]) => (
+          <SelectItem key={v} value={v} className="text-xs">
+            {l}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );
 }
 
-function Section({ title, icon, children, action }: { title: string; icon: React.ReactNode; children: React.ReactNode; action?: React.ReactNode }) {
+function Section({
+  title,
+  icon,
+  children,
+  action,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -277,13 +428,27 @@ function Section({ title, icon, children, action }: { title: string; icon: React
   );
 }
 
-function Kpi({ label, value, sub, tone, to }: {
-  label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "warn" | "bad" | "neutral"; to?: string;
+function Kpi({
+  label,
+  value,
+  sub,
+  tone,
+  to,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: "good" | "warn" | "bad" | "neutral";
+  to?: string;
 }) {
   const toneClass =
-    tone === "good" ? "border-status-completed/40" :
-    tone === "warn" ? "border-priority-medium/40" :
-    tone === "bad" ? "border-priority-high/40" : "";
+    tone === "good"
+      ? "border-status-completed/40"
+      : tone === "warn"
+        ? "border-priority-medium/40"
+        : tone === "bad"
+          ? "border-priority-high/40"
+          : "";
   const body = (
     <Card className={`p-3 md:p-4 h-full ${toneClass}`}>
       <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
@@ -301,13 +466,31 @@ function toneForPct(pct: number): "good" | "warn" | "bad" {
 }
 
 function StatusDot({ tone }: { tone: "good" | "warn" | "bad" }) {
-  const c = tone === "good" ? "bg-status-completed" : tone === "warn" ? "bg-priority-medium" : "bg-priority-high";
+  const c =
+    tone === "good"
+      ? "bg-status-completed"
+      : tone === "warn"
+        ? "bg-priority-medium"
+        : "bg-priority-high";
   return <span className={`inline-block h-2 w-2 rounded-full ${c}`} />;
 }
 
-function Row({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "warn" | "bad" }) {
+function Row({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone?: "warn" | "bad";
+}) {
   const c = tone === "bad" ? "text-priority-high" : tone === "warn" ? "text-priority-medium" : "";
-  return <div className="flex justify-between"><span className="text-muted-foreground">{label}</span><span className={`font-medium tabular-nums ${c}`}>{value}</span></div>;
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-medium tabular-nums ${c}`}>{value}</span>
+    </div>
+  );
 }
 
 /* ---------------- 1. Execution Health ---------------- */
@@ -324,10 +507,22 @@ function ExecutionHealth({ s }: { s: ExecSummary }) {
         <Kpi label="Planned today" value={e.planned_today} />
         <Kpi label="Completed today" value={e.completed_today} />
         <Kpi label="Completion %" value={`${pct}%`} tone={toneForPct(pct)} />
-        <Kpi label="Week trend" value={`${cur}%`} tone={toneForPct(cur)}
-          sub={<span className={delta >= 0 ? "text-status-completed" : "text-priority-high"}>
-            {delta >= 0 ? <TrendingUp className="inline h-3 w-3" /> : <TrendingDown className="inline h-3 w-3" />} {delta >= 0 ? "+" : ""}{delta}% vs prev week ({prev}%)
-          </span>} />
+        <Kpi
+          label="Week trend"
+          value={`${cur}%`}
+          tone={toneForPct(cur)}
+          sub={
+            <span className={delta >= 0 ? "text-status-completed" : "text-priority-high"}>
+              {delta >= 0 ? (
+                <TrendingUp className="inline h-3 w-3" />
+              ) : (
+                <TrendingDown className="inline h-3 w-3" />
+              )}{" "}
+              {delta >= 0 ? "+" : ""}
+              {delta}% vs prev week ({prev}%)
+            </span>
+          }
+        />
       </div>
     </Section>
   );
@@ -347,12 +542,26 @@ function DeliveryHealth({ s }: { s: ExecSummary }) {
       {d.projects.length > 0 && (
         <Card className="p-3 divide-y">
           {d.projects.map((p) => (
-            <Link key={p.id} to="/tasks" className="flex items-center justify-between gap-2 py-1.5 text-sm hover:bg-muted/30 rounded px-1">
+            <Link
+              key={p.id}
+              to="/tasks"
+              className="flex items-center justify-between gap-2 py-1.5 text-sm hover:bg-muted/30 rounded px-1"
+            >
               <span className="truncate min-w-0">{p.name}</span>
               <span className="flex items-center gap-2 shrink-0 text-xs">
-                {p.overdue > 0 && <Badge variant="outline" className="border-priority-high/40 text-priority-high">{p.overdue} overdue</Badge>}
-                {p.blocked > 0 && <Badge variant="outline" className="border-status-blocked/40">{p.blocked} blocked</Badge>}
-                <StatusDot tone={p.status === "late" ? "bad" : p.status === "risk" ? "warn" : "good"} />
+                {p.overdue > 0 && (
+                  <Badge variant="outline" className="border-priority-high/40 text-priority-high">
+                    {p.overdue} overdue
+                  </Badge>
+                )}
+                {p.blocked > 0 && (
+                  <Badge variant="outline" className="border-status-blocked/40">
+                    {p.blocked} blocked
+                  </Badge>
+                )}
+                <StatusDot
+                  tone={p.status === "late" ? "bad" : p.status === "risk" ? "warn" : "good"}
+                />
               </span>
             </Link>
           ))}
@@ -369,18 +578,46 @@ function RiskCenter({ s }: { s: ExecSummary }) {
   return (
     <Section title="Risk Center" icon={<ShieldAlert className="h-4 w-4 text-priority-high" />}>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-2">
-        <Kpi label="Blocked items" value={r.blocked} tone={r.blocked > 0 ? "bad" : "good"} to="/blockers" />
-        <Kpi label="High-sev risks" value={r.high} tone={r.high > 0 ? "bad" : "good"} to="/command" />
-        <Kpi label="SLA breaches" value={r.sla_breaches} tone={r.sla_breaches > 0 ? "bad" : "good"} />
-        <Kpi label="Approvals pending" value={r.approvals_pending} tone={r.approvals_pending > 5 ? "warn" : "neutral"} />
+        <Kpi
+          label="Blocked items"
+          value={r.blocked}
+          tone={r.blocked > 0 ? "bad" : "good"}
+          to="/blockers"
+        />
+        <Kpi
+          label="High-sev risks"
+          value={r.high}
+          tone={r.high > 0 ? "bad" : "good"}
+          to="/command"
+        />
+        <Kpi
+          label="SLA breaches"
+          value={r.sla_breaches}
+          tone={r.sla_breaches > 0 ? "bad" : "good"}
+        />
+        <Kpi
+          label="Approvals pending"
+          value={r.approvals_pending}
+          tone={r.approvals_pending > 5 ? "warn" : "neutral"}
+        />
       </div>
       {r.critical.length > 0 && (
         <Card className="p-3 divide-y">
           {r.critical.map((x) => (
-            <Link key={x.id} to={x.entity_type === "task" ? "/tasks" : "/command"}
-              className="flex items-start justify-between gap-2 py-1.5 text-sm hover:bg-muted/30 rounded px-1">
+            <Link
+              key={x.id}
+              to={x.entity_type === "task" ? "/tasks" : "/command"}
+              className="flex items-start justify-between gap-2 py-1.5 text-sm hover:bg-muted/30 rounded px-1"
+            >
               <span className="min-w-0 truncate">{x.summary}</span>
-              <Badge variant="outline" className={x.severity === "critical" ? "border-priority-high/60 text-priority-high" : "border-priority-medium/60 text-priority-medium"}>
+              <Badge
+                variant="outline"
+                className={
+                  x.severity === "critical"
+                    ? "border-priority-high/60 text-priority-high"
+                    : "border-priority-medium/60 text-priority-medium"
+                }
+              >
                 {x.severity}
               </Badge>
             </Link>
@@ -408,14 +645,27 @@ function WorkloadBalance({ s }: { s: ExecSummary }) {
       {rows.length > 0 && (
         <Card className="p-3 divide-y">
           {rows.slice(0, 10).map((r) => {
-            const tone = r.pct > 120 ? "text-priority-high" : r.pct >= 80 ? "text-status-completed" : "text-status-progress";
+            const tone =
+              r.pct > 120
+                ? "text-priority-high"
+                : r.pct >= 80
+                  ? "text-status-completed"
+                  : "text-status-progress";
             return (
-              <div key={r.user_id} className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_120px_auto] items-center gap-2 py-1.5 text-sm">
+              <div
+                key={r.user_id}
+                className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_120px_auto] items-center gap-2 py-1.5 text-sm"
+              >
                 <div className="min-w-0 truncate font-medium">{r.name ?? "Unknown"}</div>
                 <div className="hidden sm:block h-1.5 bg-muted rounded overflow-hidden">
-                  <div className={`h-full ${r.pct > 120 ? "bg-priority-high" : r.pct >= 80 ? "bg-status-completed" : "bg-status-progress"}`} style={{ width: `${Math.min(100, r.pct)}%` }} />
+                  <div
+                    className={`h-full ${r.pct > 120 ? "bg-priority-high" : r.pct >= 80 ? "bg-status-completed" : "bg-status-progress"}`}
+                    style={{ width: `${Math.min(100, r.pct)}%` }}
+                  />
                 </div>
-                <div className={`text-right text-xs font-semibold tabular-nums ${tone}`}>{r.pct}%</div>
+                <div className={`text-right text-xs font-semibold tabular-nums ${tone}`}>
+                  {r.pct}%
+                </div>
               </div>
             );
           })}
@@ -434,16 +684,31 @@ function ExecutionDiscipline({ s }: { s: ExecSummary }) {
   return (
     <Section title="Execution Discipline" icon={<Gauge className="h-4 w-4" />}>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-2">
-        <Kpi label="Carry-forward today" value={d.cf_today} tone={d.cf_today > 5 ? "warn" : "good"} />
+        <Kpi
+          label="Carry-forward today"
+          value={d.cf_today}
+          tone={d.cf_today > 5 ? "warn" : "good"}
+        />
         <Kpi label="Carry-forward >3x" value={d.cf_hot} tone={d.cf_hot > 0 ? "bad" : "good"} />
         <Kpi label="EOD compliance" value={`${eodPct}%`} tone={toneForPct(eodPct)} />
-        <Kpi label="Blocked >3 days" value={d.blocked_3d} tone={d.blocked_3d > 0 ? "bad" : "good"} />
+        <Kpi
+          label="Blocked >3 days"
+          value={d.blocked_3d}
+          tone={d.blocked_3d > 0 ? "bad" : "good"}
+        />
       </div>
       <Card className="p-3">
-        <div className="text-[11px] text-muted-foreground mb-1">Carry-forward last {d.cf_trend.length} days</div>
+        <div className="text-[11px] text-muted-foreground mb-1">
+          Carry-forward last {d.cf_trend.length} days
+        </div>
         <div className="flex items-end gap-0.5 h-16">
           {d.cf_trend.map((x) => (
-            <div key={x.d} className="flex-1 bg-priority-medium/70 rounded-t" style={{ height: `${(x.n / max) * 100}%` }} title={`${x.d}: ${x.n}`} />
+            <div
+              key={x.d}
+              className="flex-1 bg-priority-medium/70 rounded-t"
+              style={{ height: `${(x.n / max) * 100}%` }}
+              title={`${x.d}: ${x.n}`}
+            />
           ))}
         </div>
       </Card>
@@ -458,22 +723,39 @@ function AutomationROI({ s }: { s: ExecSummary }) {
   const successRate = a.success_rate ?? 100;
   const max = Math.max(1, ...a.trend.map((x) => x.n));
   return (
-    <Section title="Automation ROI" icon={<Bot className="h-4 w-4" />} action={
-      <Link to="/configure/automations" className="text-xs text-primary hover:underline">Open engine</Link>
-    }>
+    <Section
+      title="Automation ROI"
+      icon={<Bot className="h-4 w-4" />}
+      action={
+        <Link to="/configure/automations" className="text-xs text-primary hover:underline">
+          Open engine
+        </Link>
+      }
+    >
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3 mb-2">
         <Kpi label="Today" value={a.today_runs} />
         <Kpi label="Range total" value={a.total_runs} sub={`${a.active_rules} active rules`} />
-        <Kpi label="Success rate" value={a.total_runs === 0 ? "—" : `${successRate}%`} tone={a.total_runs === 0 ? "neutral" : toneForPct(successRate)} />
+        <Kpi
+          label="Success rate"
+          value={a.total_runs === 0 ? "—" : `${successRate}%`}
+          tone={a.total_runs === 0 ? "neutral" : toneForPct(successRate)}
+        />
         <Kpi label="Failed (24h)" value={a.failed_24h} tone={a.failed_24h > 0 ? "warn" : "good"} />
         <Kpi label="Dead-letter (24h)" value={a.dead_24h} tone={a.dead_24h > 0 ? "bad" : "good"} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <Card className="p-3">
-          <div className="text-[11px] text-muted-foreground mb-1">Activity last {a.trend.length} days</div>
+          <div className="text-[11px] text-muted-foreground mb-1">
+            Activity last {a.trend.length} days
+          </div>
           <div className="flex items-end gap-0.5 h-16">
             {a.trend.map((x) => (
-              <div key={x.d} className="flex-1 bg-primary/70 rounded-t" style={{ height: `${(x.n / max) * 100}%` }} title={`${x.d}: ${x.n}`} />
+              <div
+                key={x.d}
+                className="flex-1 bg-primary/70 rounded-t"
+                style={{ height: `${(x.n / max) * 100}%` }}
+                title={`${x.d}: ${x.n}`}
+              />
             ))}
           </div>
         </Card>
@@ -481,7 +763,11 @@ function AutomationROI({ s }: { s: ExecSummary }) {
           <Row label="Follow-ups auto-created" value={a.follow_ups} />
           <Row label="Approvals auto-created" value={a.approvals_auto} />
           <Row label="Escalations generated" value={a.escalations} />
-          <Row label="Pending queue" value={a.pending} tone={a.pending > 5000 ? "warn" : undefined} />
+          <Row
+            label="Pending queue"
+            value={a.pending}
+            tone={a.pending > 5000 ? "warn" : undefined}
+          />
         </Card>
       </div>
     </Section>
@@ -499,14 +785,29 @@ function AdoptionMetrics({ s }: { s: ExecSummary }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-2">
         <Kpi label="DAU" value={a.dau} sub={`of ${total} members`} />
         <Kpi label="WAU" value={a.wau} sub={`of ${total} members`} />
-        <Kpi label="EOD users (range)" value={a.eod_users} sub={`${Math.round((a.eod_users / total) * 100)}%`} />
-        <Kpi label="Status updaters" value={a.status_users} sub={`${Math.round((a.status_users / total) * 100)}%`} />
+        <Kpi
+          label="EOD users (range)"
+          value={a.eod_users}
+          sub={`${Math.round((a.eod_users / total) * 100)}%`}
+        />
+        <Kpi
+          label="Status updaters"
+          value={a.status_users}
+          sub={`${Math.round((a.status_users / total) * 100)}%`}
+        />
       </div>
       <Card className="p-3">
-        <div className="text-[11px] text-muted-foreground mb-1">Daily active users · last {a.dau_trend.length} days</div>
+        <div className="text-[11px] text-muted-foreground mb-1">
+          Daily active users · last {a.dau_trend.length} days
+        </div>
         <div className="flex items-end gap-0.5 h-16">
           {a.dau_trend.map((x) => (
-            <div key={x.d} className="flex-1 bg-status-completed/70 rounded-t" style={{ height: `${(x.n / max) * 100}%` }} title={`${x.d}: ${x.n}`} />
+            <div
+              key={x.d}
+              className="flex-1 bg-status-completed/70 rounded-t"
+              style={{ height: `${(x.n / max) * 100}%` }}
+              title={`${x.d}: ${x.n}`}
+            />
           ))}
         </div>
       </Card>
@@ -523,12 +824,24 @@ function TeamHealthSection({ s }: { s: ExecSummary }) {
     <Section title="Team Health" icon={<CheckCircle2 className="h-4 w-4" />}>
       <Card className="p-3 divide-y">
         {rows.map((r) => {
-          const tone = r.score >= 85 ? "text-status-completed" : r.score >= 70 ? "text-priority-medium" : "text-priority-high";
+          const tone =
+            r.score >= 85
+              ? "text-status-completed"
+              : r.score >= 70
+                ? "text-priority-medium"
+                : "text-priority-high";
           return (
-            <div key={r.team} className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 py-1.5 text-sm">
+            <div
+              key={r.team}
+              className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 py-1.5 text-sm"
+            >
               <div className="min-w-0 truncate font-medium">{r.team}</div>
-              <div className="text-xs text-muted-foreground truncate hidden sm:block">{r.manager}</div>
-              <div className={`text-right text-base font-semibold tabular-nums ${tone}`}>{r.score}</div>
+              <div className="text-xs text-muted-foreground truncate hidden sm:block">
+                {r.manager}
+              </div>
+              <div className={`text-right text-base font-semibold tabular-nums ${tone}`}>
+                {r.score}
+              </div>
             </div>
           );
         })}
@@ -562,11 +875,23 @@ function ManagerEffectivenessSection({ s }: { s: ExecSummary }) {
                 <tr key={r.manager} className="border-b last:border-0">
                   <td className="py-1.5 truncate max-w-[140px]">{r.manager}</td>
                   <td className="text-right tabular-nums">{r.completion}%</td>
-                  <td className={`text-right tabular-nums ${r.overdue > 0 ? "text-priority-high" : ""}`}>{r.overdue}</td>
+                  <td
+                    className={`text-right tabular-nums ${r.overdue > 0 ? "text-priority-high" : ""}`}
+                  >
+                    {r.overdue}
+                  </td>
                   <td className="text-right tabular-nums">{r.appr || "—"}</td>
                   <td className="text-right">
-                    {flag === "Top" && <Badge className="bg-status-completed/15 text-status-completed border border-status-completed/30">Top</Badge>}
-                    {flag === "Attn" && <Badge className="bg-priority-high/15 text-priority-high border border-priority-high/30">Attention</Badge>}
+                    {flag === "Top" && (
+                      <Badge className="bg-status-completed/15 text-status-completed border border-status-completed/30">
+                        Top
+                      </Badge>
+                    )}
+                    {flag === "Attn" && (
+                      <Badge className="bg-priority-high/15 text-priority-high border border-priority-high/30">
+                        Attention
+                      </Badge>
+                    )}
                   </td>
                 </tr>
               );
@@ -586,14 +911,18 @@ function ExecutiveInsights({ s }: { s: ExecSummary }) {
 
   if (i.cf_prev_7d > 0) {
     const delta = Math.round(((i.cf_last_7d - i.cf_prev_7d) / i.cf_prev_7d) * 100);
-    if (Math.abs(delta) >= 10) ins.push({
-      text: `Carry-forward ${delta >= 0 ? "increased" : "decreased"} ${Math.abs(delta)}% this week.`,
-      tone: delta >= 0 ? "bad" : "good",
-    });
+    if (Math.abs(delta) >= 10)
+      ins.push({
+        text: `Carry-forward ${delta >= 0 ? "increased" : "decreased"} ${Math.abs(delta)}% this week.`,
+        tone: delta >= 0 ? "bad" : "good",
+      });
   }
 
   if (s.automation.follow_ups > 5) {
-    ins.push({ text: `Automation auto-created ${s.automation.follow_ups} follow-up work items in the last ${s.meta.days} days.`, tone: "good" });
+    ins.push({
+      text: `Automation auto-created ${s.automation.follow_ups} follow-up work items in the last ${s.meta.days} days.`,
+      tone: "good",
+    });
   }
 
   // Fixed: server-side comparison (P1 #4) — pending growth via aged subset
@@ -610,17 +939,38 @@ function ExecutiveInsights({ s }: { s: ExecSummary }) {
   }
 
   if (s.automation.auto_disabled_rules > 0) {
-    ins.push({ text: `${s.automation.auto_disabled_rules} automation rule(s) auto-disabled by circuit breaker.`, tone: "bad" });
+    ins.push({
+      text: `${s.automation.auto_disabled_rules} automation rule(s) auto-disabled by circuit breaker.`,
+      tone: "bad",
+    });
   }
 
-  if (ins.length === 0) ins.push({ text: "No significant changes detected. Execution metrics are stable.", tone: "good" });
+  if (ins.length === 0)
+    ins.push({
+      text: "No significant changes detected. Execution metrics are stable.",
+      tone: "good",
+    });
 
   return (
     <Section title="Executive Insights" icon={<AlertTriangle className="h-4 w-4" />}>
       <Card className="p-3 space-y-2">
         {ins.slice(0, 8).map((x, idx) => {
-          const Icon = x.tone === "bad" ? AlertOctagon : x.tone === "warn" ? AlertTriangle : x.tone === "good" ? CheckCircle2 : Sparkles;
-          const c = x.tone === "bad" ? "text-priority-high" : x.tone === "warn" ? "text-priority-medium" : x.tone === "good" ? "text-status-completed" : "text-muted-foreground";
+          const Icon =
+            x.tone === "bad"
+              ? AlertOctagon
+              : x.tone === "warn"
+                ? AlertTriangle
+                : x.tone === "good"
+                  ? CheckCircle2
+                  : Sparkles;
+          const c =
+            x.tone === "bad"
+              ? "text-priority-high"
+              : x.tone === "warn"
+                ? "text-priority-medium"
+                : x.tone === "good"
+                  ? "text-status-completed"
+                  : "text-muted-foreground";
           return (
             <div key={idx} className="flex items-start gap-2 text-sm">
               <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${c}`} />

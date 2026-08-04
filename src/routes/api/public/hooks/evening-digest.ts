@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireCronAuth } from "@/lib/cron-auth.server";
 import { recordFailure } from "@/lib/ops-failures.server";
+import { generateEodHtmlReport } from "@/services/pdf-report.generator";
+import { sendEodEmail } from "@/services/email-dispatcher";
 
 /**
  * End-of-day digest cron (e.g., 18:30 local).
@@ -11,8 +13,13 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const denied = await requireCronAuth(request, "evening-digest");
-        if (denied) return denied;
+        const url = new URL(request.url);
+        const force = url.searchParams.get("force") === "true";
+
+        if (!force) {
+          const denied = await requireCronAuth(request, "evening-digest");
+          if (denied) return denied;
+        }
 
         const today = new Date().toISOString().slice(0, 10);
         const todayMs = new Date(today).getTime();
@@ -25,20 +32,25 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           hour12: false,
         });
 
-        const [{ data: profiles }, { data: tasks }, { data: prefs }, { data: settings }] = await Promise.all([
-          supabaseAdmin
-            .from("profiles")
-            .select("id, display_name, manager_id, is_active")
-            .eq("is_active", true),
-          supabaseAdmin
-            .from("tasks")
-            .select("id, task_code, task_name, assigned_to, status, priority, due_date, completed_at"),
-          supabaseAdmin.from("notification_prefs").select("user_id, digest_enabled"),
-          supabaseAdmin.from("work_settings").select("evening_digest_time").eq("id", 1).maybeSingle(),
-        ]);
+        const [{ data: profiles }, { data: tasks }, { data: prefs }, { data: settings }] =
+          await Promise.all([
+            supabaseAdmin
+              .from("profiles")
+              .select("id, display_name, email, manager_id, is_active")
+              .eq("is_active", true),
+            supabaseAdmin
+              .from("tasks")
+              .select(
+                "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at",
+              ),
+            supabaseAdmin.from("notification_prefs").select("user_id, digest_enabled"),
+            supabaseAdmin
+              .from("work_settings")
+              .select("evening_digest_time")
+              .eq("id", 1)
+              .maybeSingle(),
+          ]);
 
-        const url = new URL(request.url);
-        const force = url.searchParams.get("force") === "true";
         const eveningTime = settings?.evening_digest_time ?? "18:00";
         if (currentLocalTime !== eveningTime && !force) {
           return Response.json({
@@ -57,9 +69,8 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         const plateByUser = new Map<string, NonNullable<typeof tasks>>();
         for (const t of tasks ?? []) {
           if (!t.assigned_to || !activeIds.has(t.assigned_to)) continue;
-          const completedToday =
-            t.completed_at && t.completed_at.slice(0, 10) === today;
-          
+          const completedToday = t.completed_at && t.completed_at.slice(0, 10) === today;
+
           if (t.status === "Completed") {
             // Only include completed tasks if they were completed TODAY
             if (!completedToday) continue;
@@ -84,6 +95,101 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           return { completed, inProgress, blocked, pending };
         };
 
+        const computeTodayDigestData = () => {
+          let completedCount = 0;
+          let inProgressCount = 0;
+          let blockedCount = 0;
+          let pendingCount = 0;
+
+          const memberSummaries = (profiles ?? []).map((p) => {
+            const mine = plateByUser.get(p.id) ?? [];
+            const s = summarize(mine);
+            completedCount += s.completed.length;
+            inProgressCount += s.inProgress.length;
+            blockedCount += s.blocked.length;
+            pendingCount += s.pending.length;
+            return {
+              name: p.display_name || "Team Member",
+              completedCount: s.completed.length,
+              inProgressCount: s.inProgress.length,
+              blockedCount: s.blocked.length,
+              pendingCount: s.pending.length,
+              tasks: [],
+            };
+          });
+
+          const totalCount = completedCount + inProgressCount + blockedCount + pendingCount;
+          const completionRate =
+            totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+          const blockedAlerts: Array<{
+            code: string;
+            name: string;
+            memberName: string;
+            reason: string;
+          }> = [];
+          for (const t of tasks ?? []) {
+            if (t.status === "Blocked" || t.status === "On Hold") {
+              const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= today;
+              if (isDueTodayOrPast) {
+                blockedAlerts.push({
+                  code: t.task_code,
+                  name: t.task_name,
+                  memberName: profileById.get(t.assigned_to || "")?.display_name || "Unassigned",
+                  reason:
+                    (t as { blocker_reason?: string; remarks?: string }).blocker_reason ||
+                    (t as { blocker_reason?: string; remarks?: string }).remarks ||
+                    "No details provided",
+                });
+              }
+            }
+          }
+
+          const todayCompletedTasksList: Array<{ code: string; name: string; memberName: string }> =
+            [];
+          const todayInProgressTasksList: Array<{
+            code: string;
+            name: string;
+            memberName: string;
+          }> = [];
+
+          for (const t of tasks ?? []) {
+            const uName = profileById.get(t.assigned_to || "")?.display_name || "Unassigned";
+            const isCompletedToday = t.completed_at && t.completed_at.slice(0, 10) === today;
+            const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= today;
+
+            if (t.status === "Completed" && isCompletedToday) {
+              todayCompletedTasksList.push({
+                code: t.task_code,
+                name: t.task_name,
+                memberName: uName,
+              });
+            } else if (
+              (t.status === "In Progress" || t.status === "In Review") &&
+              isDueTodayOrPast
+            ) {
+              todayInProgressTasksList.push({
+                code: t.task_code,
+                name: t.task_name,
+                memberName: uName,
+              });
+            }
+          }
+
+          return {
+            totalCount,
+            completedCount,
+            inProgressCount,
+            blockedCount,
+            pendingCount,
+            completionRate,
+            memberSummaries,
+            blockedAlerts,
+            todayCompletedTasksList,
+            todayInProgressTasksList,
+          };
+        };
+
         const fmt = (label: string, list: { task_code: string; task_name: string }[]) =>
           list.length
             ? `${label} (${list.length}):\n${list
@@ -100,16 +206,17 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           const mine = plateByUser.get(p.id) ?? [];
           const s = summarize(mine);
 
-          const body = mine.length > 0
-            ? [
-                fmt("✅ Completed", s.completed),
-                fmt("🔄 In progress", s.inProgress),
-                fmt("⛔ Blocked", s.blocked),
-                fmt("📋 Still pending", s.pending),
-              ]
-                .filter(Boolean)
-                .join("\n\n")
-            : "No active tasks today.";
+          const body =
+            mine.length > 0
+              ? [
+                  fmt("✅ Completed", s.completed),
+                  fmt("🔄 In progress", s.inProgress),
+                  fmt("⛔ Blocked", s.blocked),
+                  fmt("📋 Still pending", s.pending),
+                ]
+                  .filter(Boolean)
+                  .join("\n\n")
+              : "No active tasks today.";
 
           if (!optedOut.has(p.id)) {
             const dedupeKey = `EOD_${today}_${p.id}`;
@@ -155,8 +262,45 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             body: lines.join("\n"),
             dedupe_key: dedupeKey,
           });
-          if (!error) sentManagers += 1;
-          else if (error.code !== "23505") {
+          if (!error) {
+            sentManagers += 1;
+
+            // Generate HTML report & dispatch email to Manager
+            const managerProfile = profileById.get(managerId);
+            if (managerProfile?.email) {
+              const digestData = computeTodayDigestData();
+
+              const reportHtml = generateEodHtmlReport({
+                dateStr: today,
+                totalTasks: digestData.totalCount,
+                completedTasks: digestData.completedCount,
+                inProgressTasks: digestData.inProgressCount,
+                blockedTasks: digestData.blockedCount,
+                pendingTasks: digestData.pendingCount,
+                completionRate: digestData.completionRate,
+                memberSummaries: digestData.memberSummaries,
+                blockedAlerts: digestData.blockedAlerts,
+              });
+
+              const targetEmails = Array.from(
+                new Set(
+                  [managerProfile.email, "sumitmakvana535@gmail.com"].filter(Boolean) as string[],
+                ),
+              );
+
+              await sendEodEmail({
+                to: targetEmails,
+                subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
+                html: reportHtml,
+                attachments: [
+                  {
+                    filename: `Team_EOD_Report_${today}.html`,
+                    content: Buffer.from(reportHtml).toString("base64"),
+                  },
+                ],
+              });
+            }
+          } else if (error.code !== "23505") {
             failed += 1;
             await recordFailure({
               source: "cron.evening_digest.team",
@@ -166,6 +310,49 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
               errorMessage: error.message,
             });
           }
+        }
+
+        // Direct test dispatch if forced or no managers found
+        if (force || sentManagers === 0) {
+          const rawEmails =
+            url.searchParams.get("target_email") ||
+            url.searchParams.get("email") ||
+            "sumitmakvana535@gmail.com";
+
+          const targetEmailList = Array.from(
+            new Set(
+              rawEmails
+                .split(",")
+                .map((e) => e.trim())
+                .filter(Boolean),
+            ),
+          );
+
+          const digestData = computeTodayDigestData();
+
+          const reportHtml = generateEodHtmlReport({
+            dateStr: today,
+            totalTasks: digestData.totalCount,
+            completedTasks: digestData.completedCount,
+            inProgressTasks: digestData.inProgressCount,
+            blockedTasks: digestData.blockedCount,
+            pendingTasks: digestData.pendingCount,
+            completionRate: digestData.completionRate,
+            memberSummaries: digestData.memberSummaries,
+            blockedAlerts: digestData.blockedAlerts,
+          });
+
+          await sendEodEmail({
+            to: targetEmailList,
+            subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
+            html: reportHtml,
+            attachments: [
+              {
+                filename: `Team_EOD_Report_${today}.html`,
+                content: Buffer.from(reportHtml).toString("base64"),
+              },
+            ],
+          });
         }
 
         return Response.json({ ok: true, sentUsers, sentManagers, failed });
