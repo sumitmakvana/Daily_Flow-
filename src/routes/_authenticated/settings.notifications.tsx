@@ -29,7 +29,7 @@ function NotifPrefsPage() {
           eod_send_to_managers: p.eod_send_to_managers ?? true,
           eod_send_to_admins: p.eod_send_to_admins ?? false,
           eod_send_to_custom: p.eod_send_to_custom ?? true,
-          custom_target_email: p.custom_target_email || "sumitmakvana535@gmail.com",
+          custom_target_email: p.custom_target_email ?? (user.email || ""),
         });
       }
     });
@@ -40,7 +40,33 @@ function NotifPrefsPage() {
   const update = <K extends keyof NotificationPrefs>(k: K, v: NotificationPrefs[K]) =>
     setPrefs((p) => (p ? { ...p, [k]: v } : p));
 
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+  const validateTargetEmails = (emailsStr: string): boolean => {
+    const list = emailsStr
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
+    if (list.length === 0) {
+      toast.error("Please enter at least one target email address.");
+      return false;
+    }
+    for (const email of list) {
+      if (!emailRegex.test(email)) {
+        toast.error(
+          `❌ Invalid email format: "${email}". Please enter a valid email address (e.g. user@company.com).`,
+        );
+        return false;
+      }
+    }
+    return true;
+  };
+
   const save = async () => {
+    if (prefs.eod_send_to_custom && !validateTargetEmails(prefs.custom_target_email || "")) {
+      return;
+    }
+
     setBusy(true);
     try {
       const saved = await notifPrefsService.save(prefs);
@@ -49,7 +75,7 @@ function NotifPrefsPage() {
         eod_send_to_managers: saved.eod_send_to_managers ?? prefs.eod_send_to_managers,
         eod_send_to_admins: saved.eod_send_to_admins ?? prefs.eod_send_to_admins,
         eod_send_to_custom: saved.eod_send_to_custom ?? prefs.eod_send_to_custom,
-        custom_target_email: saved.custom_target_email || prefs.custom_target_email,
+        custom_target_email: saved.custom_target_email ?? prefs.custom_target_email,
       });
       toast.success("Notification preferences saved successfully!");
     } catch (e) {
@@ -62,7 +88,7 @@ function NotifPrefsPage() {
   const sendToManagers = prefs.eod_send_to_managers ?? true;
   const sendToAdmins = prefs.eod_send_to_admins ?? false;
   const sendToCustom = prefs.eod_send_to_custom ?? true;
-  const customTargetEmail = prefs.custom_target_email || "sumitmakvana535@gmail.com";
+  const customTargetEmail = prefs.custom_target_email ?? (user.email || "");
 
   return (
     <div className="max-w-xl mx-auto px-3 md:px-4 py-4 space-y-4">
@@ -260,6 +286,9 @@ function NotifPrefsPage() {
                   size="sm"
                   type="button"
                   onClick={async () => {
+                    if (sendToCustom && !validateTargetEmails(customTargetEmail)) {
+                      return;
+                    }
                     try {
                       toast.info(`Sending EOD Email Report to ${customTargetEmail}...`);
                       const res = await dispatchEodTestEmailFn({

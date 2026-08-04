@@ -283,9 +283,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
               });
 
               const targetEmails = Array.from(
-                new Set(
-                  [managerProfile.email, "sumitmakvana535@gmail.com"].filter(Boolean) as string[],
-                ),
+                new Set([managerProfile.email].filter(Boolean) as string[]),
               );
 
               await sendEodEmail({
@@ -315,9 +313,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         // Direct test dispatch if forced or no managers found
         if (force || sentManagers === 0) {
           const rawEmails =
-            url.searchParams.get("target_email") ||
-            url.searchParams.get("email") ||
-            "sumitmakvana535@gmail.com";
+            url.searchParams.get("target_email") || url.searchParams.get("email") || "";
 
           const targetEmailList = Array.from(
             new Set(

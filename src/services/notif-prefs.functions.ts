@@ -35,7 +35,7 @@ async function ensureNotifColumnsAdmin() {
       ADD COLUMN IF NOT EXISTS eod_send_to_admins boolean DEFAULT false,
       ADD COLUMN IF NOT EXISTS eod_send_to_custom boolean DEFAULT true,
       ADD COLUMN IF NOT EXISTS eod_recipient_policy text DEFAULT 'single_email',
-      ADD COLUMN IF NOT EXISTS custom_target_email text DEFAULT 'sumitmakvana535@gmail.com';
+      ADD COLUMN IF NOT EXISTS custom_target_email text DEFAULT '';
     `);
     columnsEnsured = true;
   } catch (err) {
@@ -59,7 +59,7 @@ export const getNotifPrefsFn = createServerFn({ method: "GET" })
                   COALESCE(eod_send_to_admins, false) as eod_send_to_admins,
                   COALESCE(eod_send_to_custom, true) as eod_send_to_custom,
                   COALESCE(eod_recipient_policy, 'single_email') as eod_recipient_policy,
-                  COALESCE(custom_target_email, 'sumitmakvana535@gmail.com') as custom_target_email
+                  COALESCE(custom_target_email, '') as custom_target_email
              FROM public.notification_prefs
              WHERE user_id = $1`,
           [data.userId],
@@ -81,7 +81,7 @@ export const getNotifPrefsFn = createServerFn({ method: "GET" })
             eod_send_to_admins: false,
             eod_send_to_custom: true,
             eod_recipient_policy: "single_email",
-            custom_target_email: "sumitmakvana535@gmail.com",
+            custom_target_email: "",
           };
         }
         return null;
@@ -137,7 +137,7 @@ export const saveNotifPrefsFn = createServerFn({ method: "POST" })
             data.eod_send_to_admins ?? false,
             data.eod_send_to_custom ?? true,
             data.eod_recipient_policy ?? "single_email",
-            data.custom_target_email ?? "sumitmakvana535@gmail.com",
+            data.custom_target_email ?? "",
           ],
         );
         return res.rows[0];
@@ -176,7 +176,7 @@ export const saveNotifPrefsFn = createServerFn({ method: "POST" })
           eod_send_to_admins: data.eod_send_to_admins ?? false,
           eod_send_to_custom: data.eod_send_to_custom ?? true,
           eod_recipient_policy: data.eod_recipient_policy ?? "single_email",
-          custom_target_email: data.custom_target_email ?? "sumitmakvana535@gmail.com",
+          custom_target_email: data.custom_target_email ?? "",
         };
       }
     });
