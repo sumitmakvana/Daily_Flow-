@@ -280,7 +280,7 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
       blockedAlerts,
     });
 
-    const rawEmails = data.targetEmail || "sumitmakvana535@gmail.com";
+    const rawEmails = data.targetEmail || "";
     const targetEmailList = Array.from(
       new Set(
         rawEmails
@@ -294,12 +294,6 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
       to: targetEmailList,
       subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
       html: reportHtml,
-      attachments: [
-        {
-          filename: `Team_EOD_Report_${today}.html`,
-          content: Buffer.from(reportHtml).toString("base64"),
-        },
-      ],
     });
 
     return { ok: result.success, sentTo: targetEmailList, result };

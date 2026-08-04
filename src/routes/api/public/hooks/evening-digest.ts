@@ -290,12 +290,6 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
                 to: targetEmails,
                 subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
                 html: reportHtml,
-                attachments: [
-                  {
-                    filename: `Team_EOD_Report_${today}.html`,
-                    content: Buffer.from(reportHtml).toString("base64"),
-                  },
-                ],
               });
             }
           } else if (error.code !== "23505") {
@@ -342,12 +336,6 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             to: targetEmailList,
             subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
             html: reportHtml,
-            attachments: [
-              {
-                filename: `Team_EOD_Report_${today}.html`,
-                content: Buffer.from(reportHtml).toString("base64"),
-              },
-            ],
           });
         }
 

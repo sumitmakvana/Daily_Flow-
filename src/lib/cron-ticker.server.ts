@@ -171,12 +171,6 @@ export function startBackgroundCronTicker() {
             to: toList,
             subject: `📊 [EOD Team Digest] Today's Team Status Report - ${todayStr} | Daily Flow`,
             html: reportHtml,
-            attachments: [
-              {
-                filename: `Team_EOD_Report_${todayStr}.html`,
-                content: Buffer.from(reportHtml).toString("base64"),
-              },
-            ],
           });
           console.log(
             `[CronTicker] Automated EOD Email dispatched to recipients: ${toList.join(", ")}`,
