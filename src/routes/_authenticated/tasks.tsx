@@ -48,22 +48,23 @@ function getTaskDayLabel(isoDate: string | null | undefined): { key: string; lab
   const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 3600 * 24));
 
+  const dateKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+  const formattedDate = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
+
   if (diffDays === 0) {
-    return { key: "0_today", label: "Today", dateObj: target };
+    return { key: dateKey, label: `Today (${formattedDate})`, dateObj: target };
   }
   if (diffDays === 1) {
-    return { key: "1_yesterday", label: "Yesterday", dateObj: target };
+    return { key: dateKey, label: `Yesterday (${formattedDate})`, dateObj: target };
   }
   if (diffDays === -1) {
-    return { key: "-1_tomorrow", label: "Tomorrow", dateObj: target };
+    return { key: dateKey, label: `Tomorrow (${formattedDate})`, dateObj: target };
   }
 
-  const formatted = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
-  const dateKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
-  return { key: dateKey, label: formatted, dateObj: target };
+  return { key: dateKey, label: formattedDate, dateObj: target };
 }
 
-function groupTasksByWhatsAppDay(taskList: Task[]) {
+function groupTasksByWhatsAppDay(taskList: Task[], sortBy: string = "newest") {
   const map = new Map<string, { label: string; dateObj: Date | null; tasks: Task[] }>();
 
   for (const t of taskList) {
@@ -76,20 +77,19 @@ function groupTasksByWhatsAppDay(taskList: Task[]) {
     map.get(info.key)!.tasks.push(t);
   }
 
+  const isAscending = sortBy === "due_soon" || sortBy === "oldest";
+
   return Array.from(map.entries())
     .map(([key, data]) => ({ key, ...data }))
     .sort((a, b) => {
-      if (a.key === "0_today") return -1;
-      if (b.key === "0_today") return 1;
-      if (a.key === "-1_tomorrow") return -2;
-      if (b.key === "-1_tomorrow") return 2;
-      if (a.key === "1_yesterday") return 1;
-      if (b.key === "1_yesterday") return -1;
-      if (a.key === "999_no_date") return 1000;
-      if (b.key === "999_no_date") return -1000;
+      if (a.key === "999_no_date") return 1;
+      if (b.key === "999_no_date") return -1;
+      if (!a.dateObj && !b.dateObj) return 0;
       if (!a.dateObj) return 1;
       if (!b.dateObj) return -1;
-      return b.dateObj.getTime() - a.dateObj.getTime();
+      return isAscending
+        ? a.dateObj.getTime() - b.dateObj.getTime()
+        : b.dateObj.getTime() - a.dateObj.getTime();
     });
 }
 
@@ -395,7 +395,7 @@ function TasksPage() {
   );
 
   const renderWhatsAppGroupedTasks = (taskList: Task[]) => {
-    const groups = groupTasksByWhatsAppDay(taskList);
+    const groups = groupTasksByWhatsAppDay(taskList, sortBy);
     if (groups.length === 0) return null;
 
     return (

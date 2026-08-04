@@ -279,4 +279,9 @@ export interface NotificationPrefs {
   notify_blocker_resolved: boolean;
   notify_manager_overload: boolean;
   notify_manager_delays: boolean;
+  eod_send_to_managers?: boolean;
+  eod_send_to_admins?: boolean;
+  eod_send_to_custom?: boolean;
+  eod_recipient_policy?: string | null;
+  custom_target_email?: string | null;
 }

@@ -1,5 +1,26 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { ListChecks, LayoutDashboard, AlertOctagon, BarChart3, Bell, LogOut, Activity, Sun, CalendarRange, Grid3x3, Settings, ShieldAlert, Gauge, Sparkles, Brain, Download, Sunrise, TrendingUp, Menu, ChevronDown } from "lucide-react";
+import {
+  ListChecks,
+  LayoutDashboard,
+  AlertOctagon,
+  BarChart3,
+  Bell,
+  LogOut,
+  Activity,
+  Sun,
+  CalendarRange,
+  Grid3x3,
+  Settings,
+  ShieldAlert,
+  Gauge,
+  Sparkles,
+  Brain,
+  Download,
+  Sunrise,
+  TrendingUp,
+  Menu,
+  ChevronDown,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { HolidayBanner } from "@/components/HolidayBanner";
@@ -21,11 +42,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import {
-  Sheet,
-  SheetContent,
-  SheetClose,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
 import noesisLogo from "@/components/ui/noesis_analytics_logo.svg";
 
 const memberNav = [
@@ -60,6 +77,7 @@ const managerNav = [
 const primaryManagerNav = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
+  { to: "/executive", icon: Gauge, label: "Executive / EOD" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/eod", icon: Sun, label: "EOD" },
@@ -88,7 +106,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [unread, setUnread] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifModalOpen, setNotifModalOpen] = useState(false);
-  const [profile, setProfile] = useState<{ display_name: string | null; email: string | null; avatar_url: string | null } | null>(null);
+  const [profile, setProfile] = useState<{
+    display_name: string | null;
+    email: string | null;
+    avatar_url: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -123,17 +145,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const nav = isManager ? managerNav : memberNav;
 
-  const mobileBottomNav = isManager ? [
-    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/tasks", icon: ListChecks, label: "Tasks" },
-    { to: "/calendar", icon: CalendarRange, label: "Calendar" },
-    { to: "/eod", icon: Sun, label: "EOD" },
-  ] : [
-    { to: "/my-day", icon: Sunrise, label: "My Day" },
-    { to: "/tasks", icon: ListChecks, label: "Tasks" },
-    { to: "/calendar", icon: CalendarRange, label: "Calendar" },
-    { to: "/eod-tasks", icon: Sun, label: "EOD" },
-  ];
+  const mobileBottomNav = isManager
+    ? [
+        { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+        { to: "/tasks", icon: ListChecks, label: "Tasks" },
+        { to: "/calendar", icon: CalendarRange, label: "Calendar" },
+        { to: "/eod", icon: Sun, label: "EOD" },
+      ]
+    : [
+        { to: "/my-day", icon: Sunrise, label: "My Day" },
+        { to: "/tasks", icon: ListChecks, label: "Tasks" },
+        { to: "/calendar", icon: CalendarRange, label: "Calendar" },
+        { to: "/eod-tasks", icon: Sun, label: "EOD" },
+      ];
 
   useEffect(() => {
     if (!user) return;
@@ -208,14 +232,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="hidden md:flex items-center gap-0.5 ml-4">
             {!isManager ? (
               memberNav.map((n) => {
-                const active = location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+                const active =
+                  location.pathname === n.to || location.pathname.startsWith(n.to + "/");
                 return (
                   <Link
                     key={n.to}
                     to={n.to}
                     className={cn(
                       "px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5",
-                      active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                      active
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
                     )}
                   >
                     <n.icon className="h-3.5 w-3.5" /> {n.label}
@@ -225,14 +252,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ) : (
               <>
                 {primaryManagerNav.map((n) => {
-                  const active = location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+                  const active =
+                    location.pathname === n.to || location.pathname.startsWith(n.to + "/");
                   return (
                     <Link
                       key={n.to}
                       to={n.to}
                       className={cn(
                         "px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5",
-                        active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                        active
+                          ? "bg-accent text-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
                       )}
                     >
                       <n.icon className="h-3.5 w-3.5" /> {n.label}
@@ -251,14 +281,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-48 max-h-[70vh] overflow-y-auto">
                     {secondaryManagerNav.map((n) => {
-                      const active = location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+                      const active =
+                        location.pathname === n.to || location.pathname.startsWith(n.to + "/");
                       return (
                         <DropdownMenuItem key={n.to} asChild>
                           <Link
                             to={n.to}
                             className={cn(
                               "w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-sm transition-colors",
-                              active ? "bg-accent text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
+                              active
+                                ? "bg-accent text-foreground font-semibold"
+                                : "text-muted-foreground hover:text-foreground",
                             )}
                           >
                             <n.icon className="h-3.5 w-3.5" />
@@ -275,7 +308,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             to="/configure"
                             className={cn(
                               "w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-sm transition-colors",
-                              location.pathname === "/configure" ? "bg-accent text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
+                              location.pathname === "/configure"
+                                ? "bg-accent text-foreground font-semibold"
+                                : "text-muted-foreground hover:text-foreground",
                             )}
                           >
                             <Settings className="h-3.5 w-3.5" />
@@ -287,7 +322,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             to="/admin"
                             className={cn(
                               "w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-sm transition-colors",
-                              location.pathname === "/admin" ? "bg-accent text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
+                              location.pathname === "/admin"
+                                ? "bg-accent text-foreground font-semibold"
+                                : "text-muted-foreground hover:text-foreground",
                             )}
                           >
                             <ShieldAlert className="h-3.5 w-3.5" />
@@ -332,11 +369,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 )}
                 <div className="flex flex-col text-left overflow-hidden select-none">
-                  <span className="text-xs font-semibold truncate leading-none mb-0.5" title={profile.display_name || profile.email || ""}>
+                  <span
+                    className="text-xs font-semibold truncate leading-none mb-0.5"
+                    title={profile.display_name || profile.email || ""}
+                  >
                     {profile.display_name || profile.email}
                   </span>
                   {profile.display_name && profile.email && (
-                    <span className="text-[9px] text-muted-foreground truncate leading-none" title={profile.email}>
+                    <span
+                      className="text-[9px] text-muted-foreground truncate leading-none"
+                      title={profile.email}
+                    >
                       {profile.email}
                     </span>
                   )}
@@ -348,7 +391,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Settings className="h-4 w-4" />
               </Button>
             </Link>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleLogout} title="Sign out">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleLogout}
+              title="Sign out"
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -378,7 +427,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="relative">
                   <n.icon className="h-5 w-5" />
                   {n.to === "/notifications" && unread > 0 && (
-                    <span className="absolute -top-1 -right-2 h-3.5 min-w-3.5 rounded-full bg-primary text-primary-foreground text-[9px] flex items-center justify-center px-0.5">{unread}</span>
+                    <span className="absolute -top-1 -right-2 h-3.5 min-w-3.5 rounded-full bg-primary text-primary-foreground text-[9px] flex items-center justify-center px-0.5">
+                      {unread}
+                    </span>
                   )}
                 </div>
                 {n.label}
@@ -397,7 +448,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Drawer (Sheet) */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="right" className="w-72 p-0 flex flex-col h-full bg-background border-l border-border">
+        <SheetContent
+          side="right"
+          className="w-72 p-0 flex flex-col h-full bg-background border-l border-border"
+        >
           <div className="p-4 border-b border-border/60 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <img src={noesisLogo} alt="Noesis Analytics" className="h-6 w-auto" />
@@ -428,25 +482,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
-          
+
           <div className="flex-1 overflow-y-auto px-2 py-4 space-y-6">
             <div className="space-y-1">
-              <div className="px-3 mb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Navigation</div>
+              <div className="px-3 mb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Navigation
+              </div>
               {nav.map((n) => {
-                const active = location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+                const active =
+                  location.pathname === n.to || location.pathname.startsWith(n.to + "/");
                 return (
                   <SheetClose key={n.to} asChild>
                     <Link
                       to={n.to}
                       className={cn(
                         "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                        active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+                        active
+                          ? "bg-accent text-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
                       )}
                     >
                       <div className="relative">
                         <n.icon className="h-4 w-4" />
                         {n.to === "/notifications" && unread > 0 && (
-                          <span className="absolute -top-1 -right-2 h-3.5 min-w-3.5 rounded-full bg-primary text-primary-foreground text-[9px] flex items-center justify-center px-0.5">{unread}</span>
+                          <span className="absolute -top-1 -right-2 h-3.5 min-w-3.5 rounded-full bg-primary text-primary-foreground text-[9px] flex items-center justify-center px-0.5">
+                            {unread}
+                          </span>
                         )}
                       </div>
                       <span>{n.label}</span>
@@ -455,16 +516,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 );
               })}
             </div>
-            
+
             {isAdmin && (
               <div className="space-y-1">
-                <div className="px-3 mb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Admin Controls</div>
+                <div className="px-3 mb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Admin Controls
+                </div>
                 <SheetClose asChild>
                   <Link
                     to="/configure"
                     className={cn(
                       "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                      location.pathname === "/configure" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+                      location.pathname === "/configure"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
                     )}
                   >
                     <Settings className="h-4 w-4" />
@@ -476,7 +541,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     to="/admin"
                     className={cn(
                       "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                      location.pathname === "/admin" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+                      location.pathname === "/admin"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
                     )}
                   >
                     <ShieldAlert className="h-4 w-4" />
@@ -487,13 +554,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
 
             <div className="space-y-1">
-              <div className="px-3 mb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Account</div>
+              <div className="px-3 mb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Account
+              </div>
               <SheetClose asChild>
                 <Link
                   to="/settings/notifications"
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                    location.pathname.startsWith("/settings") ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+                    location.pathname.startsWith("/settings")
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
                   )}
                 >
                   <Settings className="h-4 w-4" />
