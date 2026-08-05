@@ -75,11 +75,9 @@ const managerNav = [
 ];
 
 const primaryManagerNav = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/executive", icon: Gauge, label: "Executive Dashboard" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
-  { to: "/executive", icon: Gauge, label: "Executive / EOD" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
-  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
 ];
@@ -226,7 +224,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
         <div className="flex h-12 items-center px-3 md:px-4 gap-3">
-          <Link to="/today" className="flex items-center gap-2 font-semibold text-sm mr-2 shrink-0">
+          <Link to={isManager ? "/executive" : "/my-day"} className="flex items-center gap-2 font-semibold text-sm mr-2 shrink-0">
             <img src={noesisLogo} alt="Noesis Analytics" className="h-7 w-auto" />
           </Link>
           <nav className="hidden md:flex items-center gap-0.5 ml-4">

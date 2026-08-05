@@ -27,14 +27,27 @@ export class TaskConflictError extends Error {
   }
 }
 
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function cleanProjectId(val: unknown): string | null {
+  if (typeof val === "string" && UUID_REGEX.test(val.trim())) {
+    return val.trim();
+  }
+  return null;
+}
+
 export const tasksService = {
   async create(payload: Partial<Task>, _userId: string): Promise<Task> {
     if (import.meta.env.MODE === "test") {
       (globalThis as any).__test_user_id = _userId;
     }
     void _userId;
+    const cleanedPayload = { ...payload };
+    if ("project_id" in cleanedPayload) {
+      cleanedPayload.project_id = cleanProjectId(cleanedPayload.project_id) as any;
+    }
     const row = (await createTaskFn({
-      data: { payload: payload as Record<string, unknown> },
+      data: { payload: cleanedPayload as Record<string, unknown> },
     })) as unknown as Task | null;
     if (!row) throw new Error("Task creation failed");
     return row;
@@ -49,11 +62,15 @@ export const tasksService = {
       (globalThis as any).__test_user_id = _userId;
     }
     void _userId;
+    const cleanedPatch = { ...patch };
+    if ("project_id" in cleanedPatch) {
+      cleanedPatch.project_id = cleanProjectId(cleanedPatch.project_id) as any;
+    }
     const row = (await updateTaskFn({
       data: {
         id: task.id,
         version: task.version,
-        patch: patch as Record<string, unknown>,
+        patch: cleanedPatch as Record<string, unknown>,
       },
     })) as unknown as Task | null;
     if (!row) throw new TaskConflictError();

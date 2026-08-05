@@ -28,7 +28,7 @@ async function resolveLanding(fallback?: string): Promise<string> {
   try {
     const roles = (await getMyRoles()) as string[];
     const isManager = roles.includes("manager") || roles.includes("admin");
-    return isManager ? "/today" : "/my-day";
+    return isManager ? "/executive" : "/my-day";
   } catch {
     return "/my-day";
   }

@@ -50,6 +50,7 @@ export const dynamicFieldsService = {
     const allowed = new Set(defs.map((d) => d.key));
 
     for (const k of Object.keys(values)) {
+      if (k === "checklist" || k === "start_date") continue;
       if (!allowed.has(k)) errors.push(`Unknown field "${k}"`);
     }
     for (const d of defs) {
