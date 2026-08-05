@@ -80,6 +80,7 @@ export interface Task {
   priority: TaskPriority;
   reviewer: string | null;
   status: TaskStatus;
+  start_date?: string | null;
   due_date: string | null;
   done: boolean;
   remarks: string | null;

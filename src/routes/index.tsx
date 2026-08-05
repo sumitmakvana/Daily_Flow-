@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({
       .select("role")
       .eq("user_id", data.session.user.id);
     const isManager = (roles ?? []).some((r) => r.role === "manager" || r.role === "admin");
-    throw redirect({ to: isManager ? "/today" : "/my-day" });
+    throw redirect({ to: isManager ? "/executive" : "/my-day" });
   },
   component: () => null,
 });
