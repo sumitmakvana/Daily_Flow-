@@ -42,13 +42,16 @@ export function EodCheckInSheet({
   const [carry, setCarry] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  const [prevOpen, setPrevOpen] = useState(false);
+
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpen) {
       setRemaining([counts.remainingDefault || 0]);
       setTomorrow("");
       setNote("");
       setCarry(true);
     }
+    setPrevOpen(open);
   }, [open, counts.remainingDefault]);
 
   const tomorrowOptions = counts.pending

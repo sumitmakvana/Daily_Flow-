@@ -72,33 +72,44 @@ export function RuleEditorDrawer({
 
   useEffect(() => { workItemTypesService.list().then(setTypes).catch(() => {}); }, []);
 
+  const [prevOpen, setPrevOpen] = useState(false);
+  const [prevRuleId, setPrevRuleId] = useState<string | undefined>(undefined);
+
   useEffect(() => {
-    if (rule) {
-      setForm({
-        name: rule.name,
-        description: rule.description ?? "",
-        description_internal: rule.description_internal ?? "",
-        type_id: rule.type_id,
-        trigger_kind: rule.trigger_kind,
-        condition_expr: rule.condition_expr ?? {},
-        actions: rule.actions ?? [],
-        dedupe_window_minutes: rule.dedupe_window_minutes,
-        max_runs_per_entity: rule.max_runs_per_entity,
-        max_runs_per_minute: rule.max_runs_per_minute,
-        allow_self_retrigger: rule.allow_self_retrigger,
-        is_active: rule.is_active,
-      });
-    } else if (open && prefill) {
-      setForm({
-        ...EMPTY,
-        ...prefill,
-        description: prefill.description ?? "",
-        description_internal: prefill.description_internal ?? "",
-        is_active: false,
-      });
-    } else if (open) {
-      setForm(EMPTY);
+    if (open) {
+      const isNewOpen = !prevOpen;
+      const isDifferentRule = rule?.id !== prevRuleId;
+      if (isNewOpen || isDifferentRule) {
+        if (rule) {
+          setForm({
+            name: rule.name,
+            description: rule.description ?? "",
+            description_internal: rule.description_internal ?? "",
+            type_id: rule.type_id,
+            trigger_kind: rule.trigger_kind,
+            condition_expr: rule.condition_expr ?? {},
+            actions: rule.actions ?? [],
+            dedupe_window_minutes: rule.dedupe_window_minutes,
+            max_runs_per_entity: rule.max_runs_per_entity,
+            max_runs_per_minute: rule.max_runs_per_minute,
+            allow_self_retrigger: rule.allow_self_retrigger,
+            is_active: rule.is_active,
+          });
+        } else if (prefill) {
+          setForm({
+            ...EMPTY,
+            ...prefill,
+            description: prefill.description ?? "",
+            description_internal: prefill.description_internal ?? "",
+            is_active: false,
+          });
+        } else {
+          setForm(EMPTY);
+        }
+      }
     }
+    setPrevOpen(open);
+    setPrevRuleId(rule?.id);
   }, [rule, prefill, open]);
 
   const issues = validateRule({

@@ -45,11 +45,18 @@ export function TaskQuickActionModal({
   const [hoursInput, setHoursInput] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
+  const [prevOpen, setPrevOpen] = useState(false);
+  const [prevTaskId, setPrevTaskId] = useState<string | undefined>(undefined);
+
   useEffect(() => {
-    if (task) {
-      setHoursInput(task.actual_hours != null ? String(task.actual_hours) : "");
+    if (open && task) {
+      if (!prevOpen || task.id !== prevTaskId) {
+        setHoursInput(task.actual_hours != null ? String(task.actual_hours) : "");
+      }
     }
-  }, [task]);
+    setPrevOpen(open);
+    setPrevTaskId(task?.id);
+  }, [open, task]);
 
   if (!task) return null;
 

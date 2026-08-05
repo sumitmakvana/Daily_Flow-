@@ -95,6 +95,9 @@ export function TaskFormDialog({
     { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
   ]);
 
+  const [prevOpen, setPrevOpen] = useState(false);
+  const [prevInitialId, setPrevInitialId] = useState<string | undefined>(undefined);
+
   useEffect(() => {
     if (open && form.due_date) {
       const year = new Date(form.due_date).getFullYear();
@@ -106,15 +109,21 @@ export function TaskFormDialog({
 
   useEffect(() => {
     if (open) {
-      setForm(initial ?? { priority: "Medium", status: "To Do", custom_fields: {} });
-      setCreationMode("single");
-      setSelectedAssignees(initial?.assigned_to ? [initial.assigned_to] : []);
-      setGridRows([
-        { id: "1", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
-        { id: "2", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
-        { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
-      ]);
+      const isNewOpen = !prevOpen;
+      const isDifferentTask = initial?.id !== prevInitialId;
+      if (isNewOpen || isDifferentTask) {
+        setForm(initial ?? { priority: "Medium", status: "To Do", custom_fields: {} });
+        setCreationMode("single");
+        setSelectedAssignees(initial?.assigned_to ? [initial.assigned_to] : []);
+        setGridRows([
+          { id: "1", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
+          { id: "2", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
+          { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
+        ]);
+      }
     }
+    setPrevOpen(open);
+    setPrevInitialId(initial?.id);
   }, [open, initial]);
 
   useEffect(() => {
@@ -138,9 +147,9 @@ export function TaskFormDialog({
     dynamicFieldsService.listDefs(form.type_id).then(setFieldDefs).catch(() => setFieldDefs([]));
   }, [open, form.type_id]);
 
-  // Clean up custom_fields
+  // Clean up custom_fields ONLY if fieldDefs are loaded
   useEffect(() => {
-    if (!open) return;
+    if (!open || fieldDefs.length === 0) return;
     const allowed = new Set(fieldDefs.map((d) => d.key));
     const current = (form.custom_fields ?? {}) as Record<string, unknown>;
     const next: Record<string, unknown> = {};
