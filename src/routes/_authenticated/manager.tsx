@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,10 @@ function ManagerPage() {
     refetchOnWindowFocus: true,
     refetchInterval: 5000,
   });
+
+  useRealtimeTasks(() => {
+    q.refetch();
+  }, "manager-command-rt");
 
   if (q.isLoading) {
     return (

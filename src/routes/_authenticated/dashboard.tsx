@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityBadge } from "@/components/PriorityBadge";
@@ -18,19 +19,17 @@ function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
-  useEffect(() => {
-    const load = async () => {
-      const [{ data: t }, { data: p }] = await Promise.all([
-        supabase.from("tasks").select("*"),
-        supabase.from("profiles").select("id,display_name,avatar_url"),
-      ]);
-      setTasks((t ?? []) as Task[]);
-      setProfiles((p ?? []) as Profile[]);
-    };
-    load();
-    const ch = supabase.channel("dash").on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, load).subscribe();
-    return () => { supabase.removeChannel(ch); };
+  const load = useCallback(async () => {
+    const [{ data: t }, { data: p }] = await Promise.all([
+      supabase.from("tasks").select("*"),
+      supabase.from("profiles").select("id,display_name,avatar_url"),
+    ]);
+    setTasks((t ?? []) as Task[]);
+    setProfiles((p ?? []) as Profile[]);
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeTasks(load, "dashboard-rt");
 
   const stats = useMemo(() => {
     const active = tasks.filter((t) => !["Completed"].includes(t.status));

@@ -1,8 +1,10 @@
 import { createFileRoute, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { focusManager, useQueryClient } from "@tanstack/react-query";
 import { auth } from "@/integrations/backend/auth";
 import { getMyRoles } from "@/services/auth.functions";
 import { AppShell } from "@/components/AppShell";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 
 /**
  * Manager/admin-only path prefixes. Members hitting these get redirected to /my-day.
@@ -46,6 +48,20 @@ function AuthenticatedLayout() {
   const location = useLocation();
   const [ready, setReady] = useState(false);
   const [roles, setRoles] = useState<string[]>([]);
+  const queryClient = useQueryClient();
+
+  // GLOBAL ROOT REALTIME ENGINE: Listens for any task change across the app
+  // and refetches ALL active queries on any page/component globally.
+  useRealtimeTasks(() => {
+    console.log(
+      "%c[GLOBAL REALTIME ENGINE] ⚡ Invalidation Triggered for ALL Active Queries Across Entire Application",
+      "background: #2563eb; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold;",
+    );
+    // Force TanStack Query focus manager to true so background queries execute HTTP request immediately
+    focusManager.setFocused(true);
+    queryClient.invalidateQueries();
+    queryClient.refetchQueries({ type: "active" });
+  }, "global-root-realtime");
 
   useEffect(() => {
     let cancelled = false;

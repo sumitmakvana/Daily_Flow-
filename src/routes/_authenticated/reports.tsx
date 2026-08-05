@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { Card, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
@@ -17,17 +18,18 @@ function ReportsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!isManager && !isAdmin) return;
-    (async () => {
-      const [{ data: t }, { data: p }] = await Promise.all([
-        supabase.from("tasks").select("*"),
-        supabase.from("profiles").select("id,display_name,avatar_url"),
-      ]);
-      setTasks((t ?? []) as Task[]);
-      setProfiles((p ?? []) as Profile[]);
-    })();
+    const [{ data: t }, { data: p }] = await Promise.all([
+      supabase.from("tasks").select("*"),
+      supabase.from("profiles").select("id,display_name,avatar_url"),
+    ]);
+    setTasks((t ?? []) as Task[]);
+    setProfiles((p ?? []) as Profile[]);
   }, [isManager, isAdmin]);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeTasks(load, "reports-rt");
 
   const planVsActual = useMemo(() => profiles.map((p) => {
     const own = tasks.filter((t) => t.assigned_to === p.id);

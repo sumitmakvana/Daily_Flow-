@@ -11,6 +11,7 @@
  *   updated, a `TaskConflictError` is thrown so callers can re-fetch.
  */
 import type { Task, TaskStatus, TaskPriority } from "@/lib/types";
+import { notifyTaskChanged } from "@/lib/task-events";
 import {
   createTaskFn,
   updateTaskFn,
@@ -37,6 +38,7 @@ export const tasksService = {
       data: { payload: payload as Record<string, unknown> },
     })) as unknown as Task | null;
     if (!row) throw new Error("Task creation failed");
+    notifyTaskChanged();
     return row;
   },
 
@@ -57,6 +59,7 @@ export const tasksService = {
       },
     })) as unknown as Task | null;
     if (!row) throw new TaskConflictError();
+    notifyTaskChanged();
     return row;
   },
 
@@ -104,6 +107,7 @@ export const tasksService = {
     await insertAssignmentNotificationFn({
       data: { userId: newAssignee, taskId: task.id },
     });
+    notifyTaskChanged();
   },
 
   async setPriority(task: Task, priority: TaskPriority, userId: string) {
@@ -121,9 +125,11 @@ export const tasksService = {
     await addTaskCommentHistoryFn({
       data: { taskId, comment, status },
     });
+    notifyTaskChanged();
   },
 
   async delete(id: string) {
     await deleteTaskFn({ data: { id } });
+    notifyTaskChanged();
   },
 };

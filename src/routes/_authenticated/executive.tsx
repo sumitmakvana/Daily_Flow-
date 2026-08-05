@@ -1,7 +1,8 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { Card } from "@/components/ui/card";
 import {
   Select,
@@ -125,7 +126,7 @@ function ExecutivePage() {
         );
       return (data ?? []) as Task[];
     },
-    staleTime: 5000,
+    staleTime: 1000,
   });
 
   const { data: eodProfiles = [] } = useQuery({

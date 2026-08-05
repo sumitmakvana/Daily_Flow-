@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { Card } from "@/components/ui/card";
 import type { Task, WorkloadSnapshot, CarryForwardEvent } from "@/lib/types";
 import { TrendingUp, AlertOctagon, ArrowRightCircle, Clock, CheckCircle2, Users, Eye } from "lucide-react";
@@ -26,21 +27,22 @@ function AnalyticsPage() {
   const [snaps, setSnaps] = useState<WorkloadSnapshot[]>([]);
   const [carries, setCarries] = useState<CarryForwardEvent[]>([]);
 
-  useEffect(() => {
-    (async () => {
-      const since = new Date();
-      since.setDate(since.getDate() - 30);
-      const sinceISO = since.toISOString().slice(0, 10);
-      const [{ data: t }, { data: s }, { data: cf }] = await Promise.all([
-        supabase.from("tasks").select("*"),
-        supabase.from("daily_workload_snapshot").select("*").gte("snapshot_date", sinceISO),
-        supabase.from("carry_forward_events").select("*").gte("created_at", since.toISOString()),
-      ]);
-      setTasks((t ?? []) as Task[]);
-      setSnaps((s ?? []) as WorkloadSnapshot[]);
-      setCarries((cf ?? []) as CarryForwardEvent[]);
-    })();
+  const load = useCallback(async () => {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+    const sinceISO = since.toISOString().slice(0, 10);
+    const [{ data: t }, { data: s }, { data: cf }] = await Promise.all([
+      supabase.from("tasks").select("*"),
+      supabase.from("daily_workload_snapshot").select("*").gte("snapshot_date", sinceISO),
+      supabase.from("carry_forward_events").select("*").gte("created_at", since.toISOString()),
+    ]);
+    setTasks((t ?? []) as Task[]);
+    setSnaps((s ?? []) as WorkloadSnapshot[]);
+    setCarries((cf ?? []) as CarryForwardEvent[]);
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeTasks(load, "analytics-rt");
 
   const days = useMemo(() => daysAgo(14), []);
 

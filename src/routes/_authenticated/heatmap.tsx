@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Profile, Task, WorkloadSnapshot } from "@/lib/types";
@@ -18,7 +19,7 @@ function HeatmapPage() {
   const [snaps, setSnaps] = useState<WorkloadSnapshot[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [{ data: p }, { data: t }, s] = await Promise.all([
       supabase.from("profiles").select("id,display_name,avatar_url"),
       supabase.from("tasks").select("*"),
@@ -27,8 +28,10 @@ function HeatmapPage() {
     setProfiles((p ?? []) as Profile[]);
     setTasks((t ?? []) as Task[]);
     setSnaps(s);
-  };
-  useEffect(() => { load(); }, []);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeTasks(load, "heatmap-rt");
 
   const days = useMemo(() => {
     const arr: string[] = [];

@@ -2,6 +2,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, useRef } from "react";
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,10 @@ function MyDayPage() {
     refetchOnWindowFocus: true,
     refetchInterval: 5000,
   });
+
+  useRealtimeTasks(() => {
+    q.refetch();
+  }, "my-day-command-rt");
 
   if (q.isLoading) {
     return (

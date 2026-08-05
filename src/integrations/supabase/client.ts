@@ -1,6 +1,36 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { auth as keycloakAuth } from '../backend/auth';
+import { subscribeToLocalTaskChanges } from '@/lib/task-events';
+
+function createRealtimeChannel(name: string) {
+  const listeners: Array<(payload: any) => void> = [];
+
+  return {
+    on(event: string, filterConfig: any, callback: (payload: any) => void) {
+      listeners.push(callback);
+      return this;
+    },
+    subscribe(statusCallback?: (status: string) => void) {
+      const unsubscribe = subscribeToLocalTaskChanges(() => {
+        listeners.forEach((cb) => cb({ eventType: "UPDATE", table: "tasks", timestamp: Date.now() }));
+      });
+
+      if (statusCallback) {
+        setTimeout(() => statusCallback("SUBSCRIBED"), 0);
+      }
+
+      return {
+        unsubscribe() {
+          unsubscribe();
+        },
+      };
+    },
+    unsubscribe() {
+      // noop
+    },
+  };
+}
 
 function createSupabaseClient() {
   // Use import.meta.env for client-side (Vite build-time replacement)
@@ -84,42 +114,16 @@ export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>,
       return keycloakAuth;
     }
     if (prop === "channel") {
-      return (channelName: string) => {
-        let intervalId: any = null;
-        let callback: (() => void) | null = null;
-
-        const mockChannel = {
-          on: (event: string, filterObj: any, cb: () => void) => {
-            callback = cb;
-            return mockChannel;
-          },
-          subscribe: () => {
-            if (callback) {
-              intervalId = setInterval(() => {
-                if (callback) callback();
-              }, 4000);
-            }
-            return mockChannel;
-          },
-          unsubscribe: () => {
-            if (intervalId) {
-              clearInterval(intervalId);
-              intervalId = null;
-            }
-          },
-          presenceState: () => ({}),
-          send: async () => ({ status: "ok" }),
-          track: async () => ({ status: "ok" }),
-          untrack: async () => ({ status: "ok" }),
-        };
-        return mockChannel;
-      };
-    }
-    if (prop === "removeChannel") {
-      return (channel: any) => {
-        if (channel && typeof channel.unsubscribe === "function") {
-          channel.unsubscribe();
+      return (name: string) => {
+        const SUPABASE_KEY =
+          (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY) ||
+          (typeof process !== "undefined" && process.env?.SUPABASE_PUBLISHABLE_KEY) ||
+          "";
+        if (!SUPABASE_KEY || SUPABASE_KEY.includes("placeholder") || SUPABASE_KEY.includes("dummy") || SUPABASE_KEY.includes("local")) {
+          return createRealtimeChannel(name);
         }
+        if (!_supabase) _supabase = createSupabaseClient();
+        return _supabase.channel(name);
       };
     }
     if (!_supabase) _supabase = createSupabaseClient();
