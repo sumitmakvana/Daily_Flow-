@@ -13,25 +13,30 @@ export function AnnouncementNoticeBanner() {
 
   // Dynamic container max-width matching each specific page layout
   let maxWidthClass = "max-w-5xl"; // default
-  if (pathname.includes("/calendar")) {
+  let paddingClass = "px-3 md:px-4";
+
+  if (pathname.includes("/calendar") || pathname.includes("/executive") || pathname.includes("/workload") || pathname.includes("/planning")) {
     maxWidthClass = "max-w-7xl";
-  } else if (pathname.includes("/today")) {
-    maxWidthClass = "max-w-2xl";
-  } else if (pathname.includes("/blockers")) {
-    maxWidthClass = "max-w-4xl";
-  } else if (pathname.includes("/eod-tasks")) {
-    maxWidthClass = "max-w-4xl";
-  } else if (pathname.includes("/my-day")) {
+    paddingClass = "px-3 md:px-6";
+  } else if (pathname.includes("/tasks") || pathname.includes("/my-day")) {
     maxWidthClass = "max-w-5xl";
-  } else if (pathname.includes("/tasks")) {
-    maxWidthClass = "max-w-5xl";
+    paddingClass = "px-3 md:px-4";
+  } else if (pathname.includes("/today") || pathname.includes("/settings")) {
+    maxWidthClass = "max-w-4xl";
+    paddingClass = "px-3 md:px-6";
+  } else if (pathname.includes("/blockers") || pathname.includes("/eod")) {
+    maxWidthClass = "max-w-3xl";
+    paddingClass = "px-3 md:px-4";
+  } else if (pathname.includes("/notifications")) {
+    maxWidthClass = "max-w-xl";
+    paddingClass = "px-3 md:px-6";
   }
 
   return (
     <>
       {/* PREMIUM ANNOUNCEMENT NOTICE BANNER */}
       {!dismissed && (
-        <div className={`${maxWidthClass} mx-auto px-3 md:px-4 mt-3 mb-1 transition-all duration-200`}>
+        <div className={`${maxWidthClass} mx-auto ${paddingClass} mt-3 mb-1 transition-all duration-200`}>
           <div className="relative overflow-hidden bg-card/95 text-foreground px-4 py-2.5 rounded-xl shadow-lg border border-primary/25 backdrop-blur-sm flex flex-col sm:flex-row items-center justify-between gap-3 group hover:border-primary/40 transition-all duration-300">
             {/* AMBIENT GLOW BACKDROP */}
             <div className="absolute -top-12 -left-12 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none group-hover:bg-primary/20 transition-all duration-500" />

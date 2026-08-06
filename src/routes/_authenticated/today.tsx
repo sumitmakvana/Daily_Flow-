@@ -38,10 +38,34 @@ function TodayPage() {
     user?.id ? { kind: "assignee", userId: user.id } : { kind: "all" },
   );
 
+  const isTaskCompletedToday = useCallback((t: Task) => {
+    if (t.status !== "Completed") return false;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const localTodayIso = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const todayDateStr = new Date().toDateString();
+
+    if (t.completed_at) {
+      const compDate = t.completed_at.slice(0, 10);
+      if (compDate === todayIso || compDate === localTodayIso || isToday(t.completed_at)) {
+        return true;
+      }
+    }
+    if (t.updated_at) {
+      const upDate = t.updated_at.slice(0, 10);
+      if (upDate === todayIso || upDate === localTodayIso || isToday(t.updated_at)) {
+        return true;
+      }
+    }
+    if (t.due_date && isToday(t.due_date)) {
+      return true;
+    }
+    return !t.completed_at;
+  }, []);
+
   const today = useMemo(() => tasks.filter((t) => (isToday(t.due_date) || isOverdue(t.due_date, t.status)) && t.status !== "Completed" && t.status !== "Blocked"), [tasks]);
   const pending = useMemo(() => tasks.filter((t) => !isToday(t.due_date) && !isOverdue(t.due_date, t.status) && t.status !== "Completed" && t.status !== "Blocked"), [tasks]);
   const blocked = useMemo(() => tasks.filter((t) => t.status === "Blocked"), [tasks]);
-  const completedToday = useMemo(() => tasks.filter((t) => t.status === "Completed" && t.completed_at && isToday(t.completed_at)), [tasks]);
+  const completedToday = useMemo(() => tasks.filter(isTaskCompletedToday), [tasks, isTaskCompletedToday]);
 
   if (!user) return null;
 
@@ -70,21 +94,23 @@ function TodayPage() {
   );
 
   return (
-    <div className="max-w-2xl mx-auto px-3 md:px-4 py-4 space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="max-w-4xl mx-auto px-3 md:px-6 py-6 space-y-6">
+      <div className="flex items-center justify-between border-b border-border pb-4">
         <div>
-          <h1 className="text-xl font-semibold">My work today</h1>
-          <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+          <h1 className="text-2xl font-bold tracking-tight">My work today</h1>
+          <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+            {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+          </p>
         </div>
-        <Button size="sm" className="h-10 md:h-9" onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" /> New
+        <Button size="sm" className="h-9 gap-1.5" onClick={() => setDialogOpen(true)}>
+          <Plus className="h-4 w-4" /> New Task
         </Button>
       </div>
       <EodReminder tasks={tasks} userId={user.id} onDone={load} />
-      <Section title="Today & overdue" items={today} tone="text-priority-high" />
-      <Section title="Blocked" items={blocked} tone="text-status-blocked" />
+      <Section title="Today & overdue" items={today} tone="text-destructive font-semibold" />
+      <Section title="Blocked" items={blocked} tone="text-amber-500 font-semibold" />
       <Section title="Pending" items={pending} />
-      <Section title="Completed today" items={completedToday} tone="text-status-completed" />
+      <Section title="Completed today" items={completedToday} tone="text-emerald-500 font-semibold" />
       <TaskFormDialog open={dialogOpen} onOpenChange={setDialogOpen} userId={user.id} onSaved={load} />
     </div>
   );

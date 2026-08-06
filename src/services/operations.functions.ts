@@ -174,6 +174,36 @@ export const createProjectFn = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const updateProjectFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string; project: Record<string, unknown> }) =>
+    z.object({ id: z.string(), project: z.record(z.string(), z.unknown()) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const keys = Object.keys(data.project);
+    const values = Object.values(data.project);
+    const setClause = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
+    await withUser(context.userId, async (client) => {
+      await client.query(
+        `UPDATE public.projects SET ${setClause} WHERE id = $1`,
+        [data.id, ...values],
+      );
+    });
+    return { ok: true };
+  });
+
+export const deleteProjectFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) =>
+    z.object({ id: z.string() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await withUser(context.userId, async (client) => {
+      await client.query(`DELETE FROM public.projects WHERE id = $1`, [data.id]);
+    });
+    return { ok: true };
+  });
+
 // ----- holidays -------------------------------------------------------------
 
 export const listHolidaysFn = createServerFn({ method: "GET" })

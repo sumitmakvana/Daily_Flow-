@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { Link } from "@tanstack/react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import {
   ArrowUpRight,
   Award,
   ChevronDown,
+  Sun,
   LineChart as LineChartIcon,
 } from "lucide-react";
 import type { Task } from "@/lib/types";
@@ -156,6 +158,21 @@ export function MyTodayWorkSummaryCard({ tasks = [], userName }: MyTodayWorkSumm
 
   return (
     <div className="space-y-3.5 mb-6">
+      {/* Header bar with Open Today Page action */}
+      <div className="flex items-center justify-between px-0.5">
+        <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+          <Sun className="w-4 h-4 text-amber-500" />
+          <span>Today's Work Overview</span>
+        </h2>
+        <Link to="/today">
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 hover:bg-accent border-border">
+            <Sun className="w-3.5 h-3.5 text-primary" />
+            <span>Open Today Page</span>
+            <ArrowUpRight className="w-3 h-3 text-muted-foreground" />
+          </Button>
+        </Link>
+      </div>
+
       {/* TOP ROW: 4 KPI Cards using App Theme Tokens */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         {/* Completed Card */}
