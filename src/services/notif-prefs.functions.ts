@@ -6,6 +6,11 @@ import { getPool } from "@/integrations/postgres/client.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { sendEodEmail } from "@/services/email-dispatcher";
+import {
+  getTodayDateStr,
+  isTaskCompletedToday,
+  isTaskDueOrActiveToday,
+} from "@/lib/task-date-utils";
 import type { NotificationPrefs } from "@/lib/types";
 
 const PrefsSchema = z.object({
@@ -189,7 +194,7 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
     z.object({ targetEmail: z.string().optional() }).parse(d),
   )
   .handler(async ({ data }) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayDateStr("Asia/Kolkata");
     const [{ data: profiles }, { data: tasks }] = await Promise.all([
       supabaseAdmin
         .from("profiles")
@@ -198,7 +203,7 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
       supabaseAdmin
         .from("tasks")
         .select(
-          "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, blocker_reason, remarks",
+          "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, updated_at, blocker_reason, remarks",
         ),
     ]);
 
@@ -207,9 +212,9 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
     for (const t of tasks ?? []) {
       if (!t.assigned_to) continue;
       const arr = plateByUser.get(t.assigned_to) ?? [];
-      const isCompletedToday = t.completed_at && t.completed_at.slice(0, 10) === today;
-      const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= today;
-      if (isCompletedToday || (t.status !== "Completed" && isDueTodayOrPast)) {
+      const isCompToday = isTaskCompletedToday(t, today);
+      const isDueTodayOrPast = isTaskDueOrActiveToday(t, today);
+      if (isCompToday || (t.status !== "Completed" && isDueTodayOrPast)) {
         arr.push(t);
       }
       plateByUser.set(t.assigned_to, arr);

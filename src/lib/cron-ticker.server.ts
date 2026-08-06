@@ -1,6 +1,11 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { sendEodEmail } from "@/services/email-dispatcher";
+import {
+  getTodayDateStr,
+  isTaskCompletedToday,
+  isTaskDueOrActiveToday,
+} from "@/lib/task-date-utils";
 
 let isTickerRunning = false;
 let lastFiredKey = "";
@@ -12,7 +17,7 @@ export function startBackgroundCronTicker() {
 
   setInterval(async () => {
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getTodayDateStr("Asia/Kolkata");
       const currentLocalTime = new Date().toLocaleTimeString("en-US", {
         timeZone: "Asia/Kolkata",
         hour: "2-digit",
@@ -45,7 +50,7 @@ export function startBackgroundCronTicker() {
           supabaseAdmin
             .from("tasks")
             .select(
-              "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, blocker_reason, remarks",
+              "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, updated_at, blocker_reason, remarks",
             ),
           supabaseAdmin.from("notification_prefs").select("*"),
         ]);
@@ -56,9 +61,9 @@ export function startBackgroundCronTicker() {
         for (const t of tasks ?? []) {
           if (!t.assigned_to) continue;
           const arr = plateByUser.get(t.assigned_to) ?? [];
-          const isCompletedToday = t.completed_at && t.completed_at.slice(0, 10) === todayStr;
-          const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= todayStr;
-          if (isCompletedToday || (t.status !== "Completed" && isDueTodayOrPast)) {
+          const isCompToday = isTaskCompletedToday(t, todayStr);
+          const isDueTodayOrPast = isTaskDueOrActiveToday(t, todayStr);
+          if (isCompToday || (t.status !== "Completed" && isDueTodayOrPast)) {
             arr.push(t);
           }
           plateByUser.set(t.assigned_to, arr);
