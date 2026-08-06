@@ -66,8 +66,11 @@ interface GridRow {
   assigned_to: string | null;
   type_id: string | null;
   client: string;
+  isCustomClient?: boolean;
   project_name: string;
+  isCustomProj?: boolean;
   priority: Task["priority"];
+  start_date: string | null;
   due_date: string | null;
   planned_hours: number;
 }
@@ -103,12 +106,14 @@ export function TaskFormDialog({
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [isCustomProject, setIsCustomProject] = useState(false);
+  const [isCustomClient, setIsCustomClient] = useState(false);
 
   // Multi-Task Grid State
   const [gridRows, setGridRows] = useState<GridRow[]>([
-    { id: "1", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
-    { id: "2", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
-    { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
+    { id: "1", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+    { id: "2", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+    { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
   ]);
 
   const [prevOpen, setPrevOpen] = useState(false);
@@ -132,9 +137,9 @@ export function TaskFormDialog({
         setCreationMode("single");
         setSelectedAssignees(initial?.assigned_to ? [initial.assigned_to] : []);
         setGridRows([
-          { id: "1", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
-          { id: "2", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
-          { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
+          { id: "1", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+          { id: "2", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+          { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
         ]);
       }
     }
@@ -159,19 +164,21 @@ export function TaskFormDialog({
     ]).then(([projRes, taskRes]) => {
       const map = new Map<string, { id: string; name: string; client: string | null }>();
 
-      // 1. Add entries from projects table
+      // 1. Add entries from projects table (case-insensitive keys)
       (projRes.data ?? []).forEach((p) => {
         if (p.name?.trim()) {
-          map.set(p.name.trim(), { id: p.id, name: p.name.trim(), client: p.client?.trim() || null });
+          const key = p.name.trim().toLowerCase();
+          map.set(key, { id: p.id, name: p.name.trim(), client: p.client?.trim() || null });
         }
       });
 
-      // 2. Add entries directly typed by members in tasks table
+      // 2. Add entries directly typed by members in tasks table (deduplicating case-insensitively)
       (taskRes.data ?? []).forEach((t) => {
         if (t.project_name?.trim()) {
-          const existing = map.get(t.project_name.trim());
+          const key = t.project_name.trim().toLowerCase();
+          const existing = map.get(key);
           if (!existing) {
-            map.set(t.project_name.trim(), {
+            map.set(key, {
               id: "",
               name: t.project_name.trim(),
               client: t.client?.trim() || null,
@@ -274,6 +281,7 @@ export function TaskFormDialog({
         client: form.client ?? "",
         project_name: form.project_name ?? "",
         priority: "Medium",
+        start_date: form.start_date ?? null,
         due_date: form.due_date ?? null,
         planned_hours: 0,
       },
@@ -290,7 +298,7 @@ export function TaskFormDialog({
 
   const clearGridRows = () => {
     setGridRows([
-      { id: String(Date.now()), task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", due_date: null, planned_hours: 0 },
+      { id: String(Date.now()), task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
     ]);
   };
 
@@ -307,8 +315,34 @@ export function TaskFormDialog({
     toast.info(`Task marked as ${nextStatus}`);
   };
 
+  const ensureMasterProject = async (projectName?: string | null, clientName?: string | null) => {
+    if (!projectName || !projectName.trim()) return;
+    const name = projectName.trim();
+    try {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name")
+        .ilike("name", name)
+        .maybeSingle();
+
+      if (!data) {
+        await supabase.from("projects").insert({
+          name: name,
+          client: clientName?.trim() || null,
+          status: "active",
+          sla_days: 3,
+        });
+      }
+    } catch (err) {
+      console.warn("Auto project master creation skipped:", err);
+    }
+  };
+
   // Main Save Handler
   const handleSave = async () => {
+    if (form.project_name?.trim()) {
+      await ensureMasterProject(form.project_name, form.client);
+    }
     // 1. Edit existing task
     if (initial?.id) {
       if (!form.task_name?.trim()) {
@@ -373,6 +407,7 @@ export function TaskFormDialog({
                 client: row.client || form.client || null,
                 project_name: row.project_name || form.project_name || null,
                 priority: row.priority,
+                start_date: row.start_date || form.start_date || null,
                 due_date: row.due_date,
                 planned_hours: Number(row.planned_hours) || 0,
                 status: "To Do",
@@ -588,44 +623,45 @@ export function TaskFormDialog({
                 </Badge>
               </div>
 
-              <div className="border border-border rounded-xl overflow-x-auto max-h-[50vh] overflow-y-auto bg-card shadow-md">
-                <table className="w-full text-xs text-left border-collapse min-w-[1000px]">
+              <div className="border border-border rounded-xl overflow-x-auto max-h-[55vh] overflow-y-auto bg-card shadow-md">
+                <table className="w-full text-[11px] text-left border-collapse">
                   <thead className="sticky top-0 bg-secondary z-10 text-muted-foreground uppercase text-[10px] tracking-wider font-semibold border-b border-border">
                     <tr>
-                      <th className="py-2.5 px-2 text-center w-8">#</th>
-                      <th className="py-2.5 px-3 min-w-[180px]">Task Name *</th>
-                      <th className="py-2.5 px-3 min-w-[140px]">Assigned To</th>
-                      <th className="py-2.5 px-3 min-w-[130px]">Work Type</th>
-                      <th className="py-2.5 px-3 min-w-[120px]">Client</th>
-                      <th className="py-2.5 px-3 min-w-[120px]">Project</th>
-                      <th className="py-2.5 px-3 w-[100px]">Priority</th>
-                      <th className="py-2.5 px-3 w-[130px]">Due Date</th>
-                      <th className="py-2.5 px-3 w-[70px]">Hrs</th>
-                      <th className="py-2.5 px-2 text-center w-10"></th>
+                      <th className="py-2 px-1.5 text-center w-7 border-r border-border/40">#</th>
+                      <th className="py-2 px-2 min-w-[160px] border-r border-border/40">Task Name *</th>
+                      <th className="py-2 px-1.5 min-w-[125px] border-r border-border/40">Assigned To</th>
+                      <th className="py-2 px-1.5 min-w-[115px] border-r border-border/40">Work Type</th>
+                      <th className="py-2 px-1.5 min-w-[115px] border-r border-border/40">Client</th>
+                      <th className="py-2 px-1.5 min-w-[125px] border-r border-border/40">Project</th>
+                      <th className="py-2 px-1.5 w-[90px] border-r border-border/40">Priority</th>
+                      <th className="py-2 px-1.5 w-[115px] border-r border-border/40">Start Date</th>
+                      <th className="py-2 px-1.5 w-[115px] border-r border-border/40">Due Date</th>
+                      <th className="py-2 px-1.5 w-[55px] border-r border-border/40">Hrs</th>
+                      <th className="py-2 px-1 text-center w-8"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {gridRows.map((row, index) => (
-                      <tr key={row.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="py-2 px-2 text-center text-muted-foreground font-mono">
+                      <tr key={row.id} className="hover:bg-muted/40 transition-colors">
+                        <td className="py-1 px-1 text-center text-muted-foreground font-mono text-[10px] border-r border-border/40">
                           {index + 1}
                         </td>
-                        <td className="py-1.5 px-2">
+                        <td className="py-1 px-1 border-r border-border/40">
                           <Input
-                            className="h-8 text-xs bg-background border-border"
+                            className="h-7 text-[11px] px-2 bg-background border-border"
                             placeholder="Task title..."
                             value={row.task_name}
                             onChange={(e) => updateGridRow(row.id, "task_name", e.target.value)}
                           />
                         </td>
-                        <td className="py-1.5 px-2">
+                        <td className="py-1 px-1 border-r border-border/40">
                           <Select
                             value={row.assigned_to ?? NONE}
                             onValueChange={(v) =>
                               updateGridRow(row.id, "assigned_to", v === NONE ? null : v)
                             }
                           >
-                            <SelectTrigger className="h-8 text-xs bg-background border-border">
+                            <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
                               <SelectValue placeholder="Unassigned" />
                             </SelectTrigger>
                             <SelectContent>
@@ -638,15 +674,15 @@ export function TaskFormDialog({
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="py-1.5 px-2">
+                        <td className="py-1 px-1 border-r border-border/40">
                           <Select
                             value={row.type_id ?? NONE}
                             onValueChange={(v) =>
                               updateGridRow(row.id, "type_id", v === NONE ? null : v)
                             }
                           >
-                            <SelectTrigger className="h-8 text-xs bg-background border-border">
-                              <SelectValue placeholder="Task (default)" />
+                            <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
+                              <SelectValue placeholder="Default Task" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value={NONE}>Default Task</SelectItem>
@@ -658,59 +694,133 @@ export function TaskFormDialog({
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="py-1.5 px-2">
-                          <Select
-                            value={row.client || NONE}
-                            onValueChange={(v) =>
-                              updateGridRow(row.id, "client", v === NONE ? "" : v)
-                            }
-                          >
-                            <SelectTrigger className="h-8 text-xs min-w-[110px] bg-background border-border">
-                              <SelectValue placeholder="Client..." />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-60 overflow-y-auto">
-                              <SelectItem value={NONE}>None</SelectItem>
-                              {uniqueClients.map((c: string, idx: number) => (
-                                <SelectItem key={`gc-${row.id}-${c || 'blank'}-${idx}`} value={c || NONE}>
-                                  {c}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <td className="py-1 px-1 border-r border-border/40">
+                          {row.isCustomClient ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                className="h-7 text-[11px] px-1.5 bg-background border-border"
+                                placeholder="Custom client..."
+                                value={row.client || ""}
+                                onChange={(e) => updateGridRow(row.id, "client", e.target.value)}
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                title="Select from list"
+                                onClick={() => updateGridRow(row.id, "isCustomClient", false)}
+                                className="text-[10px] text-primary hover:underline shrink-0"
+                              >
+                                📋
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Select
+                                value={row.client || NONE}
+                                onValueChange={(v) => {
+                                  if (v === "__CUSTOM__") {
+                                    updateGridRow(row.id, "isCustomClient", true);
+                                  } else {
+                                    updateGridRow(row.id, "client", v === NONE ? "" : v);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
+                                  <SelectValue placeholder="Client..." />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60 overflow-y-auto">
+                                  <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
+                                    ✏️ + Type custom client name...
+                                  </SelectItem>
+                                  <SelectItem value={NONE}>None</SelectItem>
+                                  {uniqueClients.map((c: string, idx: number) => (
+                                    <SelectItem key={`gc-${row.id}-${c || 'blank'}-${idx}`} value={c || NONE}>
+                                      {c}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <button
+                                type="button"
+                                title="Type custom client"
+                                onClick={() => updateGridRow(row.id, "isCustomClient", true)}
+                                className="text-[10px] text-muted-foreground hover:text-primary shrink-0 px-0.5"
+                              >
+                                ✏️
+                              </button>
+                            </div>
+                          )}
                         </td>
-                        <td className="py-1.5 px-2">
-                          <Select
-                            value={row.project_name || NONE}
-                            onValueChange={(v) => {
-                              const projName = v === NONE ? "" : v;
-                              const match = projects.find((p) => p.name === projName);
-                              updateGridRow(row.id, "project_name", projName);
-                              if (match?.client) {
-                                updateGridRow(row.id, "client", match.client);
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="h-8 text-xs min-w-[120px] bg-background border-border">
-                              <SelectValue placeholder="Project..." />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-60 overflow-y-auto">
-                              <SelectItem value={NONE}>None</SelectItem>
-                              {projects.map((p, idx) => (
-                                <SelectItem key={`gp-${row.id}-${p.id || 'typed'}-${p.name}-${idx}`} value={p.name}>
-                                  {p.client ? `${p.name} (${p.client})` : p.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <td className="py-1 px-1 border-r border-border/40">
+                          {row.isCustomProj ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                className="h-7 text-[11px] px-1.5 bg-background border-border"
+                                placeholder="Custom project..."
+                                value={row.project_name || ""}
+                                onChange={(e) => updateGridRow(row.id, "project_name", e.target.value)}
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                title="Select from list"
+                                onClick={() => updateGridRow(row.id, "isCustomProj", false)}
+                                className="text-[10px] text-primary hover:underline shrink-0"
+                              >
+                                📋
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Select
+                                value={row.project_name || NONE}
+                                onValueChange={(v) => {
+                                  if (v === "__CUSTOM__") {
+                                    updateGridRow(row.id, "isCustomProj", true);
+                                  } else {
+                                    const projName = v === NONE ? "" : v;
+                                    const match = projects.find((p) => p.name === projName);
+                                    updateGridRow(row.id, "project_name", projName);
+                                    if (match?.client) {
+                                      updateGridRow(row.id, "client", match.client);
+                                    }
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
+                                  <SelectValue placeholder="Project..." />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60 overflow-y-auto">
+                                  <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
+                                    ✏️ + Type custom project name...
+                                  </SelectItem>
+                                  <SelectItem value={NONE}>None</SelectItem>
+                                  {projects.map((p, idx) => (
+                                    <SelectItem key={`gp-${row.id}-${p.id || 'typed'}-${p.name}-${idx}`} value={p.name}>
+                                      {p.client ? `${p.name} (${p.client})` : p.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <button
+                                type="button"
+                                title="Type custom project"
+                                onClick={() => updateGridRow(row.id, "isCustomProj", true)}
+                                className="text-[10px] text-muted-foreground hover:text-primary shrink-0 px-0.5"
+                              >
+                                ✏️
+                              </button>
+                            </div>
+                          )}
                         </td>
-                        <td className="py-1.5 px-2">
+                        <td className="py-1 px-1 border-r border-border/40">
                           <Select
                             value={row.priority}
                             onValueChange={(v) =>
                               updateGridRow(row.id, "priority", v as Task["priority"])
                             }
                           >
-                            <SelectTrigger className="h-8 text-xs bg-background border-border">
+                            <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -722,21 +832,31 @@ export function TaskFormDialog({
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="py-1.5 px-2">
+                        <td className="py-1 px-1 border-r border-border/40">
                           <Input
                             type="date"
-                            className="h-8 text-xs cursor-pointer px-2 bg-background border-border"
+                            className="h-7 text-[11px] cursor-pointer px-1 bg-background border-border"
+                            value={row.start_date ?? ""}
+                            onChange={(e) =>
+                              updateGridRow(row.id, "start_date", e.target.value || null)
+                            }
+                          />
+                        </td>
+                        <td className="py-1 px-1 border-r border-border/40">
+                          <Input
+                            type="date"
+                            className="h-7 text-[11px] cursor-pointer px-1 bg-background border-border"
                             value={row.due_date ?? ""}
                             onChange={(e) =>
                               updateGridRow(row.id, "due_date", e.target.value || null)
                             }
                           />
                         </td>
-                        <td className="py-1.5 px-2">
+                        <td className="py-1 px-1 border-r border-border/40">
                           <Input
                             type="number"
                             step="0.5"
-                            className="h-8 text-xs px-2 bg-background border-border"
+                            className="h-7 text-[11px] px-1 bg-background border-border"
                             value={row.planned_hours || ""}
                             onChange={(e) =>
                               updateGridRow(
@@ -747,7 +867,7 @@ export function TaskFormDialog({
                             }
                           />
                         </td>
-                        <td className="py-1.5 px-2 text-center">
+                        <td className="py-1 px-1 text-center">
                           <Button
                             type="button"
                             variant="ghost"
@@ -958,55 +1078,114 @@ export function TaskFormDialog({
                     </Select>
                   </div>
 
-                  {/* Project Autocomplete */}
+                  {/* Project Field (Select or Type Custom) */}
                   <div>
-                    <Label className="text-xs text-muted-foreground">Project</Label>
-                    <Select
-                      value={form.project_name || NONE}
-                      onValueChange={(val) => {
-                        const projName = val === NONE ? "" : val;
-                        const match = projects.find((p) => p.name === projName);
-                        setForm((prev) => ({
-                          ...prev,
-                          project_name: projName,
-                          project_id: match ? match.id : prev.project_id,
-                          client: match?.client ? match.client : prev.client,
-                        }));
-                      }}
-                    >
-                      <SelectTrigger className="h-9 text-xs bg-card border-border text-foreground">
-                        <SelectValue placeholder="Type or select project..." />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60 overflow-y-auto">
-                        <SelectItem value={NONE}>None (No Project)</SelectItem>
-                        {projects.map((p, idx) => (
-                          <SelectItem key={`proj-${p.id || 'typed'}-${p.name}-${idx}`} value={p.name}>
-                            {p.client ? `${p.name} (${p.client})` : p.name}
+                    <div className="flex items-center justify-between mb-1">
+                      <Label className="text-xs text-muted-foreground">Project</Label>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomProject(!isCustomProject)}
+                        className="text-[10px] text-primary hover:underline font-medium"
+                      >
+                        {isCustomProject ? "📋 Select from list" : "✏️ Type custom project"}
+                      </button>
+                    </div>
+
+                    {isCustomProject ? (
+                      <Input
+                        className="h-9 text-xs bg-card border-border text-foreground"
+                        placeholder="Type custom project name..."
+                        value={form.project_name ?? ""}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            project_name: e.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <Select
+                        value={form.project_name || NONE}
+                        onValueChange={(val) => {
+                          if (val === "__CUSTOM__") {
+                            setIsCustomProject(true);
+                            return;
+                          }
+                          const projName = val === NONE ? "" : val;
+                          const match = projects.find((p) => p.name === projName);
+                          setForm((prev) => ({
+                            ...prev,
+                            project_name: projName,
+                            project_id: match ? match.id : prev.project_id,
+                            client: match?.client ? match.client : prev.client,
+                          }));
+                        }}
+                      >
+                        <SelectTrigger className="h-9 text-xs bg-card border-border text-foreground">
+                          <SelectValue placeholder="Select project..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60 overflow-y-auto">
+                          <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
+                            ✏️ + Type custom project name...
                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          <SelectItem value={NONE}>None (No Project)</SelectItem>
+                          {projects.map((p, idx) => (
+                            <SelectItem key={`proj-${p.id || 'typed'}-${p.name}-${idx}`} value={p.name}>
+                              {p.client ? `${p.name} (${p.client})` : p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
 
-                  {/* Client Select */}
+                  {/* Client Field (Select or Type Custom) */}
                   <div>
-                    <Label className="text-xs text-muted-foreground">Client</Label>
-                    <Select
-                      value={form.client || NONE}
-                      onValueChange={(val) => setForm({ ...form, client: val === NONE ? "" : val })}
-                    >
-                      <SelectTrigger className="h-9 text-xs bg-card border-border text-foreground">
-                        <SelectValue placeholder="Type or select client..." />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60 overflow-y-auto">
-                        <SelectItem value={NONE}>None (No Client)</SelectItem>
-                        {uniqueClients.map((c: string, idx: number) => (
-                          <SelectItem key={`client-${c || 'blank'}-${idx}`} value={c || NONE}>
-                            {c}
+                    <div className="flex items-center justify-between mb-1">
+                      <Label className="text-xs text-muted-foreground">Client</Label>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomClient(!isCustomClient)}
+                        className="text-[10px] text-primary hover:underline font-medium"
+                      >
+                        {isCustomClient ? "📋 Select from list" : "✏️ Type custom client"}
+                      </button>
+                    </div>
+
+                    {isCustomClient ? (
+                      <Input
+                        className="h-9 text-xs bg-card border-border text-foreground"
+                        placeholder="Type custom client name..."
+                        value={form.client ?? ""}
+                        onChange={(e) => setForm({ ...form, client: e.target.value })}
+                      />
+                    ) : (
+                      <Select
+                        value={form.client || NONE}
+                        onValueChange={(val) => {
+                          if (val === "__CUSTOM__") {
+                            setIsCustomClient(true);
+                            return;
+                          }
+                          setForm({ ...form, client: val === NONE ? "" : val });
+                        }}
+                      >
+                        <SelectTrigger className="h-9 text-xs bg-card border-border text-foreground">
+                          <SelectValue placeholder="Select client..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60 overflow-y-auto">
+                          <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
+                            ✏️ + Type custom client name...
                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          <SelectItem value={NONE}>None (No Client)</SelectItem>
+                          {uniqueClients.map((c: string, idx: number) => (
+                            <SelectItem key={`client-${c || 'blank'}-${idx}`} value={c || NONE}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
 
                   {/* Start Date & Due Date Grid */}

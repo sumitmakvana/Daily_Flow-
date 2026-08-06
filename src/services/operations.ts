@@ -9,6 +9,8 @@ import {
   deleteTeamFn,
   listProjectsFn,
   createProjectFn,
+  updateProjectFn,
+  deleteProjectFn,
   listHolidaysFn,
   addHolidayFn,
   removeHolidayFn,
@@ -53,6 +55,12 @@ export const projectsService = {
   },
   async create(p: Omit<Project, "id">) {
     await createProjectFn({ data: { project: p as unknown as Record<string, unknown> } });
+  },
+  async update(id: string, patch: Partial<Project>) {
+    await updateProjectFn({ data: { id, project: patch as unknown as Record<string, unknown> } });
+  },
+  async delete(id: string) {
+    await deleteProjectFn({ data: { id } });
   },
 };
 

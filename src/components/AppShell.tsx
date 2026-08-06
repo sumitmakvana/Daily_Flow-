@@ -47,6 +47,7 @@ import noesisLogo from "@/components/ui/noesis_analytics_logo.svg";
 
 const memberNav = [
   { to: "/my-day", icon: Sunrise, label: "My Day" },
+  { to: "/today", icon: Sun, label: "Today" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod-tasks", icon: Sun, label: "EOD" },
@@ -58,6 +59,7 @@ const managerNav = [
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
   { to: "/command", icon: Activity, label: "Command" },
   { to: "/executive", icon: Gauge, label: "Exec" },
+  { to: "/today", icon: Sun, label: "Today" },
   { to: "/forecast", icon: TrendingUp, label: "Forecast" },
   { to: "/intelligence", icon: Brain, label: "Intelligence" },
   { to: "/planning-suggestions", icon: Sparkles, label: "Suggestions" },
@@ -76,6 +78,7 @@ const managerNav = [
 
 const primaryManagerNav = [
   { to: "/executive", icon: Gauge, label: "Executive Dashboard" },
+  { to: "/today", icon: Sun, label: "Today" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod", icon: Sun, label: "EOD" },
@@ -84,6 +87,7 @@ const primaryManagerNav = [
 
 const secondaryManagerNav = [
   { to: "/admin", icon: Sparkles, label: "⭐ App Feedback" },
+  { to: "/today", icon: Sun, label: "Today" },
   { to: "/command", icon: Activity, label: "Command" },
   { to: "/executive", icon: Gauge, label: "Exec" },
   { to: "/forecast", icon: TrendingUp, label: "Forecast" },
@@ -145,15 +149,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const mobileBottomNav = isManager
     ? [
-        { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+        { to: "/executive", icon: Gauge, label: "Exec" },
+        { to: "/today", icon: Sun, label: "Today" },
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
-        { to: "/calendar", icon: CalendarRange, label: "Calendar" },
         { to: "/eod", icon: Sun, label: "EOD" },
       ]
     : [
         { to: "/my-day", icon: Sunrise, label: "My Day" },
+        { to: "/today", icon: Sun, label: "Today" },
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
-        { to: "/calendar", icon: CalendarRange, label: "Calendar" },
         { to: "/eod-tasks", icon: Sun, label: "EOD" },
       ];
 

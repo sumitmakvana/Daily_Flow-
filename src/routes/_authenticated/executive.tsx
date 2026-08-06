@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Sheet,
   SheetContent,
@@ -28,6 +30,7 @@ import {
   AlertTriangle,
   Bot,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   Gauge,
   ShieldAlert,
@@ -141,9 +144,9 @@ function scopeToFilters(s: Scope): { team: string | null; manager: string | null
 
 function ExecutivePage() {
   const [range, setRange] = useState<RangeKey>("7");
-  const [projectId, setProjectId] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [memberFilter, setMemberFilter] = useState<string>("all");
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [scope, setScopeState] = useState<Scope | null>(() => readStoredScope());
 
   // Interactive member drilldown state
@@ -224,15 +227,15 @@ function ExecutivePage() {
   const filters = scope ? scopeToFilters(scope) : null;
   const fetchSummary = useServerFn(getExecSummary);
   const { data: summary } = useQuery({
-    queryKey: ["exec-summary", range, scope, projectId, typeFilter],
+    queryKey: ["exec-summary", range, scope, selectedProjects, selectedTypes],
     queryFn: () =>
       fetchSummary({
         data: {
           days: Number(range),
           team: filters!.team,
           manager: filters!.manager,
-          project: projectId === "all" ? null : projectId,
-          type: typeFilter === "all" ? null : typeFilter,
+          project: selectedProjects.length > 0 ? selectedProjects[0] : null,
+          type: selectedTypes.length > 0 ? selectedTypes[0] : null,
         },
       }),
     enabled: !!filters,
@@ -397,33 +400,24 @@ function ExecutivePage() {
               ["90", "90d"],
             ]}
           />
-          <FilterSelect
-            value={projectId}
-            onChange={setProjectId}
+          <MultiSelectFilterPopover
             label="Project"
-            options={[
-              ["all", "All projects"],
-              ...availableProjects,
-            ]}
+            options={availableProjects.map(([id, name]) => ({ id, label: name }))}
+            selectedValues={selectedProjects}
+            onChange={setSelectedProjects}
           />
-          <FilterSelect
-            value={memberFilter}
-            onChange={setMemberFilter}
+          <MultiSelectFilterPopover
             label="Member"
-            options={[
-              ["all", "All Members"],
-              ...eodProfiles.map((p) => [p.id, p.display_name] as [string, string]),
-            ]}
+            options={eodProfiles.map((p) => ({ id: p.id, label: p.display_name }))}
+            selectedValues={selectedMembers}
+            onChange={setSelectedMembers}
           />
           {availableTypes.length > 0 && (
-            <FilterSelect
-              value={typeFilter}
-              onChange={setTypeFilter}
+            <MultiSelectFilterPopover
               label="Type"
-              options={[
-                ["all", "All types"],
-                ...availableTypes,
-              ]}
+              options={availableTypes.map(([id, name]) => ({ id, label: name }))}
+              selectedValues={selectedTypes}
+              onChange={setSelectedTypes}
             />
           )}
           <Button
@@ -444,9 +438,9 @@ function ExecutivePage() {
         checkins={eodCheckinsList}
         range={range}
         scope={scope}
-        projectId={projectId}
-        memberFilter={memberFilter}
-        typeFilter={typeFilter}
+        selectedProjects={selectedProjects}
+        selectedMembers={selectedMembers}
+        selectedTypes={selectedTypes}
         onSelectMember={(id) => setSelectedMemberId(id)}
       />
 
@@ -490,9 +484,9 @@ function ExecutiveRealDashboard({
   checkins,
   range,
   scope,
-  projectId,
-  memberFilter,
-  typeFilter,
+  selectedProjects = [],
+  selectedMembers = [],
+  selectedTypes = [],
   onSelectMember,
 }: {
   profiles: Profile[];
@@ -501,9 +495,9 @@ function ExecutiveRealDashboard({
   checkins: EodCheckin[];
   range: string;
   scope: Scope | null;
-  projectId: string;
-  memberFilter: string;
-  typeFilter: string;
+  selectedProjects?: string[];
+  selectedMembers?: string[];
+  selectedTypes?: string[];
   onSelectMember: (memberId: string) => void;
 }) {
   const [memberSearch, setMemberSearch] = useState("");
@@ -514,8 +508,8 @@ function ExecutiveRealDashboard({
   const filteredProfiles = useMemo(() => {
     let result = profiles;
 
-    if (memberFilter && memberFilter !== "all") {
-      result = result.filter((p) => p.id === memberFilter);
+    if (selectedMembers && selectedMembers.length > 0) {
+      result = result.filter((p) => selectedMembers.includes(p.id));
     } else if (scope && scope.kind === "team") {
       result = result.filter((p) => (p as any).team_id === scope.id);
     } else if (scope && scope.kind === "manager") {
@@ -523,15 +517,15 @@ function ExecutiveRealDashboard({
     }
 
     return result;
-  }, [profiles, scope, memberFilter]);
+  }, [profiles, scope, selectedMembers]);
 
   // 2. Dynamic Filtering for Tasks by Scope, Project, Member, Type & Range
   const filteredTasks = useMemo(() => {
     let result = tasks;
 
-    // Member filter
-    if (memberFilter && memberFilter !== "all") {
-      result = result.filter((t) => t.assigned_to === memberFilter);
+    // Member filter (multi-select)
+    if (selectedMembers && selectedMembers.length > 0) {
+      result = result.filter((t) => t.assigned_to && selectedMembers.includes(t.assigned_to));
     } else if (scope && scope.kind === "team") {
       const teamMemberIds = new Set(profiles.filter((p) => (p as any).team_id === scope.id).map((p) => p.id));
       result = result.filter(
@@ -544,21 +538,21 @@ function ExecutiveRealDashboard({
       result = result.filter((t) => t.assigned_to && managedMemberIds.has(t.assigned_to));
     }
 
-    // Project filter
-    if (projectId !== "all") {
-      const projObj = projects.find((p) => p.id === projectId || p.name === projectId);
-      const targetName = projObj?.name || projectId;
-      result = result.filter(
-        (t) =>
-          t.project_id === projectId ||
-          t.project_name === projectId ||
-          (t.project_name && t.project_name.trim().toLowerCase() === targetName.trim().toLowerCase())
-      );
+    // Project filter (multi-select)
+    if (selectedProjects && selectedProjects.length > 0) {
+      result = result.filter((t) => {
+        return selectedProjects.some((sp) => {
+          if (t.project_id === sp) return true;
+          if (t.project_name && t.project_name.trim().toLowerCase() === sp.trim().toLowerCase()) return true;
+          const projObj = projects.find((p) => p.id === sp || p.name.trim().toLowerCase() === sp.trim().toLowerCase());
+          return projObj && t.project_name && t.project_name.trim().toLowerCase() === projObj.name.trim().toLowerCase();
+        });
+      });
     }
 
-    // Type filter
-    if (typeFilter !== "all") {
-      result = result.filter((t) => t.type_id === typeFilter);
+    // Type filter (multi-select)
+    if (selectedTypes && selectedTypes.length > 0) {
+      result = result.filter((t) => t.type_id && selectedTypes.includes(t.type_id));
     }
 
     // Range / Timeframe filter
@@ -581,7 +575,7 @@ function ExecutiveRealDashboard({
     }
 
     return result;
-  }, [tasks, scope, projectId, memberFilter, typeFilter, range, profiles, projects]);
+  }, [tasks, scope, selectedProjects, selectedMembers, selectedTypes, range, profiles, projects]);
 
   // 3. Dynamic Metrics derived from filteredTasks
   const metrics = useMemo(() => {
@@ -1248,6 +1242,91 @@ function ExecutiveRealDashboard({
 }
 
 /* -------------------------------------------------------------------------- */
+/*            MULTI-SELECT FILTER POPOVER COMPONENT                          */
+/* -------------------------------------------------------------------------- */
+
+function MultiSelectFilterPopover({
+  label,
+  options,
+  selectedValues,
+  onChange,
+}: {
+  label: string;
+  options: Array<{ id: string; label: string }>;
+  selectedValues: string[];
+  onChange: (vals: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const toggleValue = (id: string) => {
+    if (selectedValues.includes(id)) {
+      onChange(selectedValues.filter((v) => v !== id));
+    } else {
+      onChange([...selectedValues, id]);
+    }
+  };
+
+  const displayText =
+    selectedValues.length === 0
+      ? `All ${label}s`
+      : selectedValues.length === options.length
+      ? `All ${label}s`
+      : `${selectedValues.length} ${label}${selectedValues.length > 1 ? "s" : ""}`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2.5 text-xs bg-[#121320] border-[#25273e] text-white hover:bg-[#1c1e33] justify-between gap-1.5 font-normal"
+        >
+          <span className="truncate max-w-[110px]">{displayText}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-52 p-2 bg-[#161726] border-[#25273e] text-white shadow-2xl z-[100]"
+        align="start"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
+        <div className="flex items-center justify-between border-b border-[#25273e] pb-1.5 mb-1.5 px-1">
+          <span className="text-[11px] font-bold text-[#94a3b8] uppercase">{label}s</span>
+          {selectedValues.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="text-[10px] text-indigo-400 hover:underline cursor-pointer"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="max-h-52 overflow-y-auto space-y-1">
+          {options.map((opt) => {
+            const checked = selectedValues.includes(opt.id);
+            return (
+              <div
+                key={opt.id}
+                onClick={() => toggleValue(opt.id)}
+                className="flex items-center space-x-2 px-2 py-1.5 hover:bg-[#202238] rounded cursor-pointer text-xs"
+              >
+                <Checkbox checked={checked} className="border-indigo-400/50 data-[state=checked]:bg-indigo-600" />
+                <span className="flex-1 truncate">{opt.label}</span>
+              </div>
+            );
+          })}
+          {options.length === 0 && (
+            <div className="text-[11px] text-[#94a3b8] italic p-2 text-center">No options available</div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /*            INTERACTIVE MEMBER DRILLDOWN SHEET / DRAWER COMPONENT          */
 /* -------------------------------------------------------------------------- */
 
@@ -1267,9 +1346,16 @@ function MemberDetailSheet({
   checkins: EodCheckin[];
 }) {
   const [taskSearch, setTaskSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [drawerRange, setDrawerRange] = useState("all");
-  const [drawerProject, setDrawerProject] = useState("all");
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+
+  const statusOptions = [
+    { id: "In Progress", label: "In Progress" },
+    { id: "Completed", label: "Completed" },
+    { id: "Blocked", label: "Blocked" },
+    { id: "To Do", label: "To Do" },
+  ];
 
   const member = useMemo(
     () => profiles.find((p) => p.id === memberId) || null,
@@ -1281,22 +1367,52 @@ function MemberDetailSheet({
     return tasks.filter((t) => t.assigned_to === memberId);
   }, [tasks, memberId]);
 
+  const availableDrawerProjects = useMemo(() => {
+    const map = new Map<string, { id: string; label: string }>();
+
+    // 1. Add projects directly from member's tasks (e.g. TicketTape, TerraCognita)
+    memberTasks.forEach((t) => {
+      if (t.project_name?.trim()) {
+        const name = t.project_name.trim();
+        const key = name.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, { id: name, label: name });
+        }
+      }
+    });
+
+    // 2. Add projects from master projects list
+    projects.forEach((p) => {
+      if (p.name?.trim()) {
+        const name = p.name.trim();
+        const key = name.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, { id: name, label: name });
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [memberTasks, projects]);
+
   const filteredTasks = useMemo(() => {
     return memberTasks.filter((t) => {
       // 1. Search text filter
       const matchSearch =
+        !taskSearch.trim() ||
         t.task_name.toLowerCase().includes(taskSearch.toLowerCase()) ||
         t.task_code.toLowerCase().includes(taskSearch.toLowerCase()) ||
         (t.project_name && t.project_name.toLowerCase().includes(taskSearch.toLowerCase()));
 
-      // 2. Status filter
-      const matchStatus = statusFilter === "all" || t.status === statusFilter;
+      // 2. Multi-select Status filter
+      const matchStatus =
+        selectedStatuses.length === 0 || selectedStatuses.includes(t.status);
 
-      // 3. Project filter
+      // 3. Multi-select Project filter
       const matchProject =
-        drawerProject === "all" ||
-        t.project_id === drawerProject ||
-        (t.project_name && t.project_name === projects.find((p) => p.id === drawerProject)?.name);
+        selectedProjects.length === 0 ||
+        (t.project_name && selectedProjects.some((sp) => sp.toLowerCase() === t.project_name?.toLowerCase())) ||
+        (t.project_id && selectedProjects.includes(t.project_id));
 
       // 4. Range filter (Today, 7d, 14d, 30d, 90d, All Time)
       let matchRange = true;
@@ -1316,7 +1432,7 @@ function MemberDetailSheet({
 
       return matchSearch && matchStatus && matchProject && matchRange;
     });
-  }, [memberTasks, taskSearch, statusFilter, drawerProject, drawerRange, projects]);
+  }, [memberTasks, taskSearch, selectedStatuses, selectedProjects, drawerRange]);
 
   const memberCheckins = useMemo(() => {
     if (!memberId) return [];
@@ -1347,7 +1463,12 @@ function MemberDetailSheet({
 
   return (
     <Sheet open={!!memberId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto bg-[#0f101d] border-l border-[#25273e] text-[#e2e8f0] p-6 space-y-6">
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-2xl overflow-y-auto bg-[#0f101d] border-l border-[#25273e] text-[#e2e8f0] p-6 space-y-6"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <SheetHeader className="space-y-3 border-b border-[#25273e] pb-4">
           <div className="flex items-center gap-4">
             <Avatar className="h-14 w-14 border-2 border-indigo-500">
@@ -1395,32 +1516,19 @@ function MemberDetailSheet({
               </SelectContent>
             </Select>
 
-            <Select value={drawerProject} onValueChange={setDrawerProject}>
-              <SelectTrigger className="h-7 w-32 text-xs bg-[#121320] border-[#25273e] text-white">
-                <SelectValue placeholder="Project" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white">
-                <SelectItem value="all">All Projects</SelectItem>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilterPopover
+              label="Project"
+              options={availableDrawerProjects}
+              selectedValues={selectedProjects}
+              onChange={setSelectedProjects}
+            />
 
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-7 w-28 text-xs bg-[#121320] border-[#25273e] text-white">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white">
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="In Progress">In Progress</SelectItem>
-                <SelectItem value="Completed">Completed</SelectItem>
-                <SelectItem value="Blocked">Blocked</SelectItem>
-                <SelectItem value="To Do">To Do</SelectItem>
-              </SelectContent>
-            </Select>
+            <MultiSelectFilterPopover
+              label="Status"
+              options={statusOptions}
+              selectedValues={selectedStatuses}
+              onChange={setSelectedStatuses}
+            />
 
             <Input
               placeholder="Search tasks..."
@@ -1483,18 +1591,18 @@ function MemberDetailSheet({
                 onChange={(e) => setTaskSearch(e.target.value)}
                 className="h-7 w-36 text-xs bg-[#161726] border-[#25273e]"
               />
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-7 w-28 text-xs bg-[#161726] border-[#25273e]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#161726] border-[#25273e] text-xs">
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="In Progress">In Progress</SelectItem>
-                  <SelectItem value="Completed">Completed</SelectItem>
-                  <SelectItem value="Blocked">Blocked</SelectItem>
-                  <SelectItem value="To Do">To Do</SelectItem>
-                </SelectContent>
-              </Select>
+              <MultiSelectFilterPopover
+                label="Project"
+                options={availableDrawerProjects}
+                selectedValues={selectedProjects}
+                onChange={setSelectedProjects}
+              />
+              <MultiSelectFilterPopover
+                label="Status"
+                options={statusOptions}
+                selectedValues={selectedStatuses}
+                onChange={setSelectedStatuses}
+              />
             </div>
           </div>
 
