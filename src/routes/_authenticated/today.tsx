@@ -10,6 +10,7 @@ import { Plus } from "lucide-react";
 import type { Profile, Task } from "@/lib/types";
 import { isToday, isOverdue } from "@/lib/format";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
+import { getTodayDateStr, isTaskCompletedToday } from "@/lib/task-date-utils";
 
 export const Route = createFileRoute("/_authenticated/today")({
   component: TodayPage,
@@ -38,34 +39,13 @@ function TodayPage() {
     user?.id ? { kind: "assignee", userId: user.id } : { kind: "all" },
   );
 
-  const isTaskCompletedToday = useCallback((t: Task) => {
-    if (t.status !== "Completed") return false;
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const localTodayIso = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
-    const todayDateStr = new Date().toDateString();
-
-    if (t.completed_at) {
-      const compDate = t.completed_at.slice(0, 10);
-      if (compDate === todayIso || compDate === localTodayIso || isToday(t.completed_at)) {
-        return true;
-      }
-    }
-    if (t.updated_at) {
-      const upDate = t.updated_at.slice(0, 10);
-      if (upDate === todayIso || upDate === localTodayIso || isToday(t.updated_at)) {
-        return true;
-      }
-    }
-    if (t.due_date && isToday(t.due_date)) {
-      return true;
-    }
-    return !t.completed_at;
-  }, []);
+  const todayStr = getTodayDateStr();
+  const isCompletedToday = useCallback((t: Task) => isTaskCompletedToday(t, todayStr), [todayStr]);
 
   const today = useMemo(() => tasks.filter((t) => (isToday(t.due_date) || isOverdue(t.due_date, t.status)) && t.status !== "Completed" && t.status !== "Blocked"), [tasks]);
   const pending = useMemo(() => tasks.filter((t) => !isToday(t.due_date) && !isOverdue(t.due_date, t.status) && t.status !== "Completed" && t.status !== "Blocked"), [tasks]);
   const blocked = useMemo(() => tasks.filter((t) => t.status === "Blocked"), [tasks]);
-  const completedToday = useMemo(() => tasks.filter(isTaskCompletedToday), [tasks, isTaskCompletedToday]);
+  const completedToday = useMemo(() => tasks.filter(isCompletedToday), [tasks, isCompletedToday]);
 
   if (!user) return null;
 

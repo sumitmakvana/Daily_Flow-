@@ -4,6 +4,11 @@ import { requireCronAuth } from "@/lib/cron-auth.server";
 import { recordFailure } from "@/lib/ops-failures.server";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { sendEodEmail } from "@/services/email-dispatcher";
+import {
+  getTodayDateStr,
+  isTaskCompletedToday,
+  isTaskDueOrActiveToday,
+} from "@/lib/task-date-utils";
 
 /**
  * End-of-day digest cron (e.g., 18:30 local).
@@ -21,8 +26,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           if (denied) return denied;
         }
 
-        const today = new Date().toISOString().slice(0, 10);
-        const todayMs = new Date(today).getTime();
+        const today = getTodayDateStr("Asia/Kolkata");
 
         // Get current time in Indian Standard Time (IST) formatted as HH:MM
         const currentLocalTime = new Date().toLocaleTimeString("en-US", {
@@ -41,7 +45,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             supabaseAdmin
               .from("tasks")
               .select(
-                "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at",
+                "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, updated_at",
               ),
             supabaseAdmin.from("notification_prefs").select("user_id, digest_enabled"),
             supabaseAdmin
@@ -69,16 +73,13 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         const plateByUser = new Map<string, NonNullable<typeof tasks>>();
         for (const t of tasks ?? []) {
           if (!t.assigned_to || !activeIds.has(t.assigned_to)) continue;
-          const completedToday = t.completed_at && t.completed_at.slice(0, 10) === today;
 
           if (t.status === "Completed") {
-            // Only include completed tasks if they were completed TODAY
-            if (!completedToday) continue;
+            // Only include completed tasks if completed TODAY
+            if (!isTaskCompletedToday(t, today)) continue;
           } else {
-            // For active tasks, they must be due today/past or have no due date
-            const dueMs = t.due_date ? new Date(t.due_date).getTime() : null;
-            const onPlate = (dueMs !== null && dueMs <= todayMs) || dueMs === null;
-            if (!onPlate) continue;
+            // For active tasks, must be due today or past
+            if (!isTaskDueOrActiveToday(t, today)) continue;
           }
           const arr = plateByUser.get(t.assigned_to) ?? [];
           arr.push(t);
@@ -130,8 +131,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           }> = [];
           for (const t of tasks ?? []) {
             if (t.status === "Blocked" || t.status === "On Hold") {
-              const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= today;
-              if (isDueTodayOrPast) {
+              if (isTaskDueOrActiveToday(t, today)) {
                 blockedAlerts.push({
                   code: t.task_code,
                   name: t.task_name,
@@ -155,10 +155,8 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
 
           for (const t of tasks ?? []) {
             const uName = profileById.get(t.assigned_to || "")?.display_name || "Unassigned";
-            const isCompletedToday = t.completed_at && t.completed_at.slice(0, 10) === today;
-            const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= today;
 
-            if (t.status === "Completed" && isCompletedToday) {
+            if (t.status === "Completed" && isTaskCompletedToday(t, today)) {
               todayCompletedTasksList.push({
                 code: t.task_code,
                 name: t.task_name,
@@ -166,7 +164,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
               });
             } else if (
               (t.status === "In Progress" || t.status === "In Review") &&
-              isDueTodayOrPast
+              isTaskDueOrActiveToday(t, today)
             ) {
               todayInProgressTasksList.push({
                 code: t.task_code,

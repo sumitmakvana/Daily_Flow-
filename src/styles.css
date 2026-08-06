@@ -158,5 +158,139 @@ input[type="number"] {
   scrollbar-width: none;
 }
 
+/* ==========================================================================
+   UX4G Digital India Accessibility Compliance Tokens & Utilities
+   ========================================================================== */
+
+/* Font Size Resizing */
+html[data-font-size="small"] { font-size: 87.5%; }
+html[data-font-size="normal"] { font-size: 100%; }
+html[data-font-size="large"] { font-size: 112.5%; }
+html[data-font-size="xlarge"] { font-size: 125%; }
+
+/* Line Height */
+html[data-line-height="high"] * { line-height: 1.9 !important; }
+
+/* Text Spacing */
+html[data-text-spacing="high"] * { letter-spacing: 0.12em !important; word-spacing: 0.16em !important; }
+
+/* Color Adjustments */
+html.ux4g-monochrome { filter: grayscale(100%) !important; }
+html.ux4g-high-saturate { filter: saturate(200%) !important; }
+html.ux4g-low-saturate { filter: saturate(50%) !important; }
+html.ux4g-invert-colors { filter: invert(100%) hue-rotate(180deg) !important; }
+
+/* UX4G High Contrast Dark Theme */
+html.ux4g-high-contrast-dark {
+  --background: #000000;
+  --foreground: #ffff00;
+  --card: #0d0d0d;
+  --card-foreground: #ffffff;
+  --popover: #0d0d0d;
+  --popover-foreground: #ffffff;
+  --primary: #00ffff;
+  --primary-foreground: #000000;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ffffff;
+  --muted: #262626;
+  --muted-foreground: #00ffff;
+  --accent: #333333;
+  --accent-foreground: #ffff00;
+  --destructive: #ff0000;
+  --border: #ffff00;
+  --input: #1a1a1a;
+  --ring: #00ffff;
+}
+
+/* UX4G High Contrast Light Theme */
+html.ux4g-high-contrast-light {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #f0f0f0;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #0000ee;
+  --primary-foreground: #ffffff;
+  --secondary: #e0e0e0;
+  --secondary-foreground: #000000;
+  --muted: #e5e5e5;
+  --muted-foreground: #111111;
+  --accent: #d0d0d0;
+  --accent-foreground: #000000;
+  --destructive: #cc0000;
+  --border: #000000;
+  --input: #ffffff;
+  --ring: #0000ee;
+}
+
+/* Highlight Links */
+html.ux4g-highlight-links a {
+  text-decoration: underline !important;
+  font-weight: 700 !important;
+  background-color: rgba(255, 235, 59, 0.35) !important;
+  color: #0000ee !important;
+  outline: 1px dashed #0000ee !important;
+}
+
+/* Dyslexia Friendly Font */
+html.ux4g-dyslexic-font body, html.ux4g-dyslexic-font button, html.ux4g-dyslexic-font input, html.ux4g-dyslexic-font select {
+  font-family: "Comic Sans MS", "Chalkboard SE", "Comic Neue", sans-serif !important;
+}
+
+/* Hide Images */
+html.ux4g-hide-images img, html.ux4g-hide-images video, html.ux4g-hide-images svg:not(.ux4g-icon) {
+  opacity: 0.05 !important;
+  filter: blur(4px) !important;
+}
+
+/* Focus Mode / Highlight active element */
+html.ux4g-focus-mode *:focus {
+  outline: 4px solid #ff007f !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 15px rgba(255, 0, 127, 0.8) !important;
+}
+
+/* Large Cursor */
+html.ux4g-large-cursor, html.ux4g-large-cursor * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='%236366f1' stroke='%23ffffff' stroke-width='2'%3E%3Cpath d='M3 3l7 18 3-7 7-3L3 3z'/%3E%3C/svg%3E"), auto !important;
+}
+
+/* Reading Guide Bar */
+#ux4g-reading-guide-line {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: rgba(99, 102, 241, 0.4);
+  border-top: 2px solid #6366f1;
+  border-bottom: 2px solid #6366f1;
+  pointer-events: none;
+  z-index: 99999;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+  display: none;
+}
+
+/* Screen Reader Only Utility (UX4G standard) */
+.sr-only-focusable:not(:focus):not(:focus-within) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* UX4G Focus ring compliance for keyboard users */
+:focus-visible {
+  outline: 3px solid var(--ring) !important;
+  outline-offset: 2px !important;
+}
+
+
+
 
 

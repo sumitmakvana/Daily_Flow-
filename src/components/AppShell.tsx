@@ -20,11 +20,13 @@ import {
   TrendingUp,
   Menu,
   ChevronDown,
+  Accessibility,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { HolidayBanner } from "@/components/HolidayBanner";
 import { AnnouncementNoticeBanner } from "@/components/AnnouncementNoticeBanner";
+import { UX4GAccessibilityToolbar } from "@/components/UX4GAccessibilityToolbar";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth, signOut } from "@/hooks/use-auth";
@@ -108,6 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [unread, setUnread] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifModalOpen, setNotifModalOpen] = useState(false);
+  const [accessibilityOpen, setAccessibilityOpen] = useState(false);
   const [profile, setProfile] = useState<{
     display_name: string | null;
     email: string | null;
@@ -225,6 +228,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      {/* UX4G Accessibility Toolbar */}
+      <UX4GAccessibilityToolbar isOpen={accessibilityOpen} onOpenChange={setAccessibilityOpen} />
+
       {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
         <div className="flex h-12 items-center px-3 md:px-4 gap-3">
@@ -388,6 +394,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => setAccessibilityOpen(true)}
+              title="Accessibility Options (Ctrl+F2)"
+            >
+              <Accessibility className="h-4 w-4" />
+            </Button>
             <Link to="/settings/notifications" className="hidden md:inline-flex">
               <Button variant="ghost" size="icon" className="h-8 w-8" title="Notification settings">
                 <Settings className="h-4 w-4" />
@@ -406,7 +421,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 pb-16 md:pb-0">
+      <main id="main-content" tabIndex={-1} className="flex-1 pb-16 md:pb-0 focus:outline-none">
         <HolidayBanner />
         <AnnouncementNoticeBanner />
         {children}

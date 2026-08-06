@@ -23,6 +23,11 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  getTodayDateStr,
+  isTaskCompletedToday,
+  isTaskDueOrActiveToday,
+} from "@/lib/task-date-utils";
+import {
   ResponsiveContainer,
   LineChart,
   Line,
@@ -55,7 +60,7 @@ interface MyTodayWorkSummaryCardProps {
 
 export function MyTodayWorkSummaryCard({ tasks = [], userName }: MyTodayWorkSummaryCardProps) {
   const { user } = useAuth();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayDateStr();
   const [dailyNote, setDailyNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fetchedTasks, setFetchedTasks] = useState<Task[]>([]);
@@ -76,39 +81,20 @@ export function MyTodayWorkSummaryCard({ tasks = [], userName }: MyTodayWorkSumm
     loadUserTasks();
   }, [user?.id]);
 
-  const localTodayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
-
   // Use fetchedTasks if available (contains completed tasks), else fallback to passed tasks
   const effectiveTasks = fetchedTasks.length > 0 ? fetchedTasks : tasks;
 
-  // Filter strictly for tasks completed TODAY (matching todayStr or localTodayStr)
-  const completedToday = effectiveTasks.filter((t) => {
-    if (t.status !== "Completed") return false;
-    if (t.completed_at) {
-      const compDate = t.completed_at.slice(0, 10);
-      return compDate === todayStr || compDate === localTodayStr;
-    }
-    const upDate = (t as Task).updated_at ? (t as Task).updated_at.slice(0, 10) : null;
-    if (upDate) {
-      return upDate === todayStr || upDate === localTodayStr;
-    }
-    return t.due_date === todayStr || t.due_date === localTodayStr;
-  });
-
-  const isDueTodayOrPast = (due?: string | null) => {
-    if (!due) return true;
-    const d = due.slice(0, 10);
-    return d <= todayStr || d <= localTodayStr;
-  };
+  // Filter strictly for tasks completed TODAY using shared date utility
+  const completedToday = effectiveTasks.filter((t) => isTaskCompletedToday(t, todayStr));
 
   const inProgressToday = effectiveTasks.filter(
-    (t) => (t.status === "In Progress" || t.status === "In Review") && isDueTodayOrPast(t.due_date),
+    (t) => (t.status === "In Progress" || t.status === "In Review") && isTaskDueOrActiveToday(t, todayStr),
   );
   const blockedToday = effectiveTasks.filter(
-    (t) => (t.status === "Blocked" || t.status === "On Hold") && isDueTodayOrPast(t.due_date),
+    (t) => (t.status === "Blocked" || t.status === "On Hold") && isTaskDueOrActiveToday(t, todayStr),
   );
   const pendingToday = effectiveTasks.filter(
-    (t) => t.status === "To Do" && isDueTodayOrPast(t.due_date),
+    (t) => t.status === "To Do" && isTaskDueOrActiveToday(t, todayStr),
   );
 
   const totalCount =
