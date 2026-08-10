@@ -111,7 +111,7 @@ function getSessionSync() {
   return {
     access_token: keycloak.token,
     token_type: "bearer",
-    expires_in: 3600,
+    expires_in: 43200, // 12 hours (43200 seconds)
     refresh_token: keycloak.refreshToken || "",
     user: {
       id: keycloak.tokenParsed?.sub || "",
