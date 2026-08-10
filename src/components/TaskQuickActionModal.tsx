@@ -248,7 +248,6 @@ export function TaskQuickActionModal({
                 </Button>
               </div>
             </div>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
