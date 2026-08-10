@@ -3,6 +3,12 @@
   "realm": "lovable",
   "enabled": true,
   "registrationAllowed": true,
+  "ssoSessionIdleTimeout": 43200,
+  "ssoSessionMaxLifespan": 43200,
+  "ssoSessionIdleTimeoutRememberMe": 43200,
+  "ssoSessionMaxLifespanRememberMe": 43200,
+  "accessTokenLifespan": 43200,
+  "offlineSessionIdleTimeout": 43200,
   "roles": {
     "realm": [
       {
