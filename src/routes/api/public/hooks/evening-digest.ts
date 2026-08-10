@@ -174,6 +174,27 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             }
           }
 
+          const upcomingDeadlines: Array<{ dateLabel: string; name: string; priority: string }> = [];
+          const activeTasksWithDueDate = (tasks ?? [])
+            .filter((t) => t.status !== "Completed" && t.due_date)
+            .sort((a, b) => (a.due_date! > b.due_date! ? 1 : -1))
+            .slice(0, 3);
+
+          for (const t of activeTasksWithDueDate) {
+            const dStr = t.due_date!.slice(0, 10);
+            let label = dStr;
+            if (dStr === today) label = "Today";
+            else {
+              const d = new Date(dStr);
+              label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            }
+            upcomingDeadlines.push({
+              dateLabel: label,
+              name: t.task_name,
+              priority: t.priority ? `${t.priority} Priority` : "Medium Priority",
+            });
+          }
+
           return {
             totalCount,
             completedCount,
@@ -185,6 +206,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             blockedAlerts,
             todayCompletedTasksList,
             todayInProgressTasksList,
+            upcomingDeadlines,
           };
         };
 
@@ -314,6 +336,9 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             completionRate: digestData.completionRate,
             memberSummaries: digestData.memberSummaries,
             blockedAlerts: digestData.blockedAlerts,
+            upcomingDeadlines: digestData.upcomingDeadlines,
+            todayCompletedTasksList: digestData.todayCompletedTasksList,
+            todayInProgressTasksList: digestData.todayInProgressTasksList,
           });
 
           const targetEmails = Array.from(recipientEmails);
