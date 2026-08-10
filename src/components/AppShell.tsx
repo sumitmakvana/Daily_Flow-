@@ -18,6 +18,7 @@ import {
   Download,
   Sunrise,
   TrendingUp,
+  Users,
   Menu,
   ChevronDown,
   Accessibility,
@@ -37,6 +38,7 @@ import { StreakChip } from "@/components/StreakChip";
 import { NudgeCenter } from "@/components/NudgeCenter";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { NotificationsModal } from "@/components/NotificationsModal";
+import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +60,8 @@ const memberNav = [
 ];
 
 const managerNav = [
+  { to: "/team-capacity", icon: Users, label: "Team Capacity" },
+  { to: "/my-day", icon: Sunrise, label: "My Day" },
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
   { to: "/command", icon: Activity, label: "Command" },
   { to: "/executive", icon: Gauge, label: "Exec" },
@@ -79,7 +83,9 @@ const managerNav = [
 ];
 
 const primaryManagerNav = [
+  { to: "/team-capacity", icon: Users, label: "Team Capacity" },
   { to: "/executive", icon: Gauge, label: "Executive Dashboard" },
+  { to: "/my-day", icon: Sunrise, label: "My Day" },
   { to: "/today", icon: Sun, label: "Today" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
@@ -153,6 +159,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const mobileBottomNav = isManager
     ? [
         { to: "/executive", icon: Gauge, label: "Exec" },
+        { to: "/my-day", icon: Sunrise, label: "My Day" },
         { to: "/today", icon: Sun, label: "Today" },
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
         { to: "/eod", icon: Sun, label: "EOD" },
@@ -233,11 +240,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
-        <div className="flex h-12 items-center px-3 md:px-4 gap-3">
-          <Link to={isManager ? "/executive" : "/my-day"} className="flex items-center gap-2 font-semibold text-sm mr-2 shrink-0">
+        <div className="flex h-12 items-center px-2 md:px-3 gap-2 w-full justify-between overflow-hidden">
+          <Link to={isManager ? "/executive" : "/my-day"} className="flex items-center gap-2 font-semibold text-sm mr-1 shrink-0">
             <img src={noesisLogo} alt="Noesis Analytics" className="h-7 w-auto" />
           </Link>
-          <nav className="hidden md:flex items-center gap-0.5 ml-4">
+          <nav className="hidden md:flex items-center gap-1 ml-1 min-w-0 flex-1 overflow-x-auto no-scrollbar scrollbar-none py-1">
             {!isManager ? (
               memberNav.map((n) => {
                 const active =
@@ -267,13 +274,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       key={n.to}
                       to={n.to}
                       className={cn(
-                        "px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5",
+                        "px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0",
                         active
-                          ? "bg-accent text-foreground"
+                          ? "bg-accent text-foreground font-semibold"
                           : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
                       )}
                     >
-                      <n.icon className="h-3.5 w-3.5" /> {n.label}
+                      <n.icon className="h-3.5 w-3.5 shrink-0" /> <span className="whitespace-nowrap">{n.label}</span>
                     </Link>
                   );
                 })}
@@ -282,9 +289,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="px-2.5 py-1.5 h-8 text-xs font-medium flex items-center gap-1 text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=open]:bg-accent data-[state=open]:text-foreground"
+                      className="px-2.5 py-1.5 h-8 text-xs font-medium flex items-center gap-1 text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=open]:bg-accent data-[state=open]:text-foreground whitespace-nowrap shrink-0"
                     >
-                      More <ChevronDown className="h-3 w-3" />
+                      More <ChevronDown className="h-3 w-3 shrink-0" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-48 max-h-[70vh] overflow-y-auto">
@@ -346,14 +353,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </>
             )}
           </nav>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-1 shrink-0">
             <SyncStatusBadge />
-            <StreakChip className="mr-1" />
+            <StreakChip className="mr-0.5 hidden lg:inline-flex" />
             {user && <NudgeCenter userId={user.id} />}
             <button
               type="button"
               onClick={() => setNotifModalOpen(true)}
-              className="relative flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
+              className="relative flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors shrink-0"
               title="Notifications"
             >
               <Bell className="h-4 w-4" />
@@ -364,7 +371,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </button>
             {profile && (
-              <div className="hidden md:flex items-center gap-2 px-2 py-1 mr-1 border-r border-border max-w-[180px]">
+              <div className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 border-l border-r border-border max-w-[130px] shrink-0">
                 {profile.avatar_url ? (
                   <img
                     src={profile.avatar_url}
@@ -376,34 +383,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     {(profile.display_name || profile.email || "U").charAt(0).toUpperCase()}
                   </div>
                 )}
-                <div className="flex flex-col text-left overflow-hidden select-none">
+                <div className="flex flex-col text-left overflow-hidden select-none" title={profile.email || ""}>
                   <span
-                    className="text-xs font-semibold truncate leading-none mb-0.5"
+                    className="text-xs font-semibold truncate leading-tight"
                     title={profile.display_name || profile.email || ""}
                   >
-                    {profile.display_name || profile.email}
+                    {profile.display_name || profile.email?.split("@")[0]}
                   </span>
-                  {profile.display_name && profile.email && (
-                    <span
-                      className="text-[9px] text-muted-foreground truncate leading-none"
-                      title={profile.email}
-                    >
-                      {profile.email}
-                    </span>
-                  )}
                 </div>
               </div>
             )}
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
               onClick={() => setAccessibilityOpen(true)}
               title="Accessibility Options (Ctrl+F2)"
             >
               <Accessibility className="h-4 w-4" />
             </Button>
-            <Link to="/settings/notifications" className="hidden md:inline-flex">
+            <Link to="/settings/notifications" className="hidden xl:inline-flex shrink-0">
               <Button variant="ghost" size="icon" className="h-8 w-8" title="Notification settings">
                 <Settings className="h-4 w-4" />
               </Button>

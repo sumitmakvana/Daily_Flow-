@@ -16,6 +16,7 @@ import { Route as AppStorageUploadRouteImport } from './routes/app-storage/uploa
 import { Route as AppStorageFileRouteImport } from './routes/app-storage/file'
 import { Route as AuthenticatedWorkloadRouteImport } from './routes/_authenticated/workload'
 import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
+import { Route as AuthenticatedTeamCapacityRouteImport } from './routes/_authenticated/team-capacity'
 import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
 import { Route as AuthenticatedSyncRouteImport } from './routes/_authenticated/sync'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
@@ -89,6 +90,12 @@ const AuthenticatedTodayRoute = AuthenticatedTodayRouteImport.update({
   path: '/today',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedTeamCapacityRoute =
+  AuthenticatedTeamCapacityRouteImport.update({
+    id: '/team-capacity',
+    path: '/team-capacity',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedTasksRoute = AuthenticatedTasksRouteImport.update({
   id: '/tasks',
   path: '/tasks',
@@ -324,6 +331,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/sync': typeof AuthenticatedSyncRoute
   '/tasks': typeof AuthenticatedTasksRoute
+  '/team-capacity': typeof AuthenticatedTeamCapacityRoute
   '/today': typeof AuthenticatedTodayRoute
   '/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
@@ -370,6 +378,7 @@ export interface FileRoutesByTo {
   '/reports': typeof AuthenticatedReportsRoute
   '/sync': typeof AuthenticatedSyncRoute
   '/tasks': typeof AuthenticatedTasksRoute
+  '/team-capacity': typeof AuthenticatedTeamCapacityRoute
   '/today': typeof AuthenticatedTodayRoute
   '/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
@@ -418,6 +427,7 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/sync': typeof AuthenticatedSyncRoute
   '/_authenticated/tasks': typeof AuthenticatedTasksRoute
+  '/_authenticated/team-capacity': typeof AuthenticatedTeamCapacityRoute
   '/_authenticated/today': typeof AuthenticatedTodayRoute
   '/_authenticated/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
@@ -466,6 +476,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/sync'
     | '/tasks'
+    | '/team-capacity'
     | '/today'
     | '/workload'
     | '/app-storage/file'
@@ -512,6 +523,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/sync'
     | '/tasks'
+    | '/team-capacity'
     | '/today'
     | '/workload'
     | '/app-storage/file'
@@ -559,6 +571,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/sync'
     | '/_authenticated/tasks'
+    | '/_authenticated/team-capacity'
     | '/_authenticated/today'
     | '/_authenticated/workload'
     | '/app-storage/file'
@@ -648,6 +661,13 @@ declare module '@tanstack/react-router' {
       path: '/today'
       fullPath: '/today'
       preLoaderRoute: typeof AuthenticatedTodayRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/team-capacity': {
+      id: '/_authenticated/team-capacity'
+      path: '/team-capacity'
+      fullPath: '/team-capacity'
+      preLoaderRoute: typeof AuthenticatedTeamCapacityRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/tasks': {
@@ -960,6 +980,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSyncRoute: typeof AuthenticatedSyncRoute
   AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
+  AuthenticatedTeamCapacityRoute: typeof AuthenticatedTeamCapacityRoute
   AuthenticatedTodayRoute: typeof AuthenticatedTodayRoute
   AuthenticatedWorkloadRoute: typeof AuthenticatedWorkloadRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
@@ -990,6 +1011,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSyncRoute: AuthenticatedSyncRoute,
   AuthenticatedTasksRoute: AuthenticatedTasksRoute,
+  AuthenticatedTeamCapacityRoute: AuthenticatedTeamCapacityRoute,
   AuthenticatedTodayRoute: AuthenticatedTodayRoute,
   AuthenticatedWorkloadRoute: AuthenticatedWorkloadRoute,
   AuthenticatedSettingsNotificationsRoute:

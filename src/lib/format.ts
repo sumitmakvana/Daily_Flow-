@@ -60,6 +60,57 @@ export interface Holiday {
   isHoliday: boolean;
 }
 
+/**
+ * Format a numeric decimal hours value into user-friendly hours and minutes string.
+ * Examples: 0.5 -> "30m", 1.5 -> "1h 30m", 0.75 -> "45m", 1 -> "1h", 0.25 -> "15m"
+ */
+export function formatHoursMins(hoursVal: number | string | null | undefined): string {
+  const h = Number(hoursVal ?? 0);
+  if (isNaN(h) || h <= 0) return "0h";
+
+  const totalMinutes = Math.round(h * 60);
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+
+  if (hrs === 0) return `${mins}m`;
+  if (mins === 0) return `${hrs}h`;
+  return `${hrs}h ${mins}m`;
+}
+
+/**
+ * Parses user input strings that may contain hours, minutes, or combinations.
+ * Examples: "45m" -> 0.75, "15m" -> 0.25, "30m" -> 0.5, "1h 30m" -> 1.5, "1.5" -> 1.5
+ */
+export function parseHoursOrMins(inputStr: string): number {
+  if (!inputStr) return 0;
+  const str = inputStr.trim().toLowerCase();
+
+  // Pattern like "1h 30m" or "1h30m"
+  const combinedMatch = str.match(/^(\d+(?:\.\d+)?)\s*h(?:ours?)?\s*(\d+(?:\.\d+)?)\s*m(?:ins?)?$/);
+  if (combinedMatch) {
+    const h = parseFloat(combinedMatch[1]);
+    const m = parseFloat(combinedMatch[2]);
+    return Math.round((h + m / 60) * 100) / 100;
+  }
+
+  // Pattern like "45m" or "45 mins" or "45min"
+  const minsOnlyMatch = str.match(/^(\d+(?:\.\d+)?)\s*m(?:ins?)?$/);
+  if (minsOnlyMatch) {
+    const m = parseFloat(minsOnlyMatch[1]);
+    return Math.round((m / 60) * 100) / 100;
+  }
+
+  // Pattern like "2h" or "1.5 hours"
+  const hoursOnlyMatch = str.match(/^(\d+(?:\.\d+)?)\s*h(?:ours?)?$/);
+  if (hoursOnlyMatch) {
+    return parseFloat(hoursOnlyMatch[1]);
+  }
+
+  // Direct numeric fallback
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
 let cachedHolidays: Record<string, Record<string, Holiday>> = {};
 let activeFetches = new Set<number>();
 

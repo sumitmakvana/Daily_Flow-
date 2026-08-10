@@ -26,6 +26,8 @@ export interface EodTaskRow {
   status: string;
   priority: string;
   due_date: string | null;
+  planned_hours?: string | number | null;
+  total_actual_hours?: string | number | null;
   submission: TaskEodSubmission | null;
 }
 
@@ -50,6 +52,8 @@ export const listMyEodTasksFn = createServerFn({ method: "POST" })
                 t.status::text  AS status,
                 t.priority::text AS priority,
                 t.due_date::text AS due_date,
+                t.planned_hours::text AS planned_hours,
+                t.actual_hours::text  AS total_actual_hours,
                 CASE WHEN e.id IS NULL THEN NULL ELSE
                   jsonb_build_object(
                     'id', e.id,

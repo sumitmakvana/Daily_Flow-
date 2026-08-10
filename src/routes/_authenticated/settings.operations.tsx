@@ -234,9 +234,20 @@ function OpsSettings() {
         <ProjectCreator teams={teams} defaultSla={settings.sla_default_days} onCreated={load} />
         <ul className="text-sm divide-y divide-border">
           {projects.map((p) => (
-            <li key={p.id} className="py-2 flex justify-between text-xs">
+            <li key={p.id} className="py-2 flex justify-between text-xs items-center">
               <span><span className="font-medium text-sm">{p.name}</span> · {p.client ?? "—"} · SLA {p.sla_days}d</span>
-              <span className="text-muted-foreground">{teams.find((t) => t.id === p.team_id)?.name ?? "—"}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground">{teams.find((t) => t.id === p.team_id)?.name ?? "—"}</span>
+                <button
+                  onClick={async () => {
+                    await projectsService.delete(p.id);
+                    load();
+                  }}
+                  className="text-xs text-muted-foreground hover:text-red-500 transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
             </li>
           ))}
           {projects.length === 0 && <li className="py-2 text-xs italic text-muted-foreground">No projects yet.</li>}

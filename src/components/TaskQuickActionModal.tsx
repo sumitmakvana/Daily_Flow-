@@ -24,6 +24,8 @@ import { PriorityBadge } from "./PriorityBadge";
 import { BlockerDialog } from "./BlockerDialog";
 import type { Task, TaskStatus } from "@/lib/types";
 import { tasksService, TaskConflictError } from "@/services/tasks";
+import { taskEodService } from "@/services/task-eod";
+import { formatHoursMins, parseHoursOrMins } from "@/lib/format";
 import { toast } from "sonner";
 
 export function TaskQuickActionModal({
@@ -39,7 +41,7 @@ export function TaskQuickActionModal({
   onOpenChange: (open: boolean) => void;
   userId: string;
   onChanged: () => void;
-  onOpenFullEdit?: () => void;
+  onOpenFullEdit?: (task: Task) => void;
 }) {
   const [blockOpen, setBlockOpen] = useState(false);
   const [hoursInput, setHoursInput] = useState<string>("");
@@ -48,10 +50,16 @@ export function TaskQuickActionModal({
   const [prevOpen, setPrevOpen] = useState(false);
   const [prevTaskId, setPrevTaskId] = useState<string | undefined>(undefined);
 
+  const planned = Number(task?.planned_hours ?? 1);
+  const actual = Number(task?.actual_hours ?? 0);
+
   useEffect(() => {
     if (open && task) {
       if (!prevOpen || task.id !== prevTaskId) {
-        setHoursInput(task.actual_hours != null ? String(task.actual_hours) : "");
+        const fill = task.actual_hours != null && Number(task.actual_hours) > 0 
+          ? String(task.actual_hours) 
+          : "";
+        setHoursInput(fill);
       }
     }
     setPrevOpen(open);
@@ -72,7 +80,19 @@ export function TaskQuickActionModal({
   const handleSetStatus = async (status: TaskStatus, extras = {}) => {
     setBusy(true);
     try {
-      await tasksService.setStatus(task, status, userId, extras);
+      const hoursToSave = parseHoursOrMins(hoursInput) || planned;
+      
+      // Update task status and actual_hours
+      await tasksService.setStatus(task, status, userId, { 
+        ...extras,
+        ...(hoursToSave > 0 ? { actual_hours: hoursToSave } : {}) 
+      });
+
+      // Register EOD submission if status is Completed & hours > 0
+      if (status === "Completed" && hoursToSave > 0) {
+        await taskEodService.submit(task.id, "done", hoursToSave, null);
+      }
+
       toast.success(`${task.task_code} updated to ${status}`);
       onChanged();
       onOpenChange(false);
@@ -84,15 +104,15 @@ export function TaskQuickActionModal({
   };
 
   const handleSaveHours = async () => {
-    const hours = Number(hoursInput);
+    const hours = parseHoursOrMins(hoursInput);
     if (isNaN(hours) || hours < 0 || hours > 24) {
-      toast.error("Please enter hours between 0 and 24");
+      toast.error("Please enter valid hours or minutes (e.g. 1.5, 45m, 1h 30m)");
       return;
     }
     setBusy(true);
     try {
       await tasksService.update(task, { actual_hours: hours }, userId);
-      toast.success(`Logged ${hours}h for ${task.task_code}`);
+      toast.success(`Logged ${formatHoursMins(hours)} for ${task.task_code}`);
       onChanged();
       onOpenChange(false);
     } catch (e) {
@@ -105,10 +125,10 @@ export function TaskQuickActionModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[calc(100vw-24px)] sm:max-w-md p-4 space-y-4 max-h-[85vh] overflow-y-auto rounded-2xl">
+        <DialogContent className="w-[calc(100vw-24px)] sm:max-w-md p-4 space-y-4 max-h-[85vh] overflow-y-auto rounded-2xl bg-card border-border text-card-foreground">
           <DialogHeader className="pb-2 border-b border-border/60">
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="font-mono text-xs text-muted-foreground font-semibold">
+              <span className="font-mono text-xs text-primary font-bold">
                 {task.task_code}
               </span>
               <StatusBadge status={task.status} />
@@ -117,7 +137,7 @@ export function TaskQuickActionModal({
             <DialogTitle className="text-base font-semibold leading-snug">
               {task.task_name}
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground pt-1 flex items-center gap-3 flex-wrap">
+            <DialogDescription className="text-xs text-muted-foreground pt-1 flex items-center gap-2 flex-wrap">
               {task.project_name && (
                 <span className="flex items-center gap-1">
                   <Folder className="h-3 w-3 text-muted-foreground" />
@@ -130,7 +150,12 @@ export function TaskQuickActionModal({
                   {task.due_date}
                 </span>
               )}
-              <span>Planned: {task.planned_hours || 1}h</span>
+              <Badge variant="outline" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/30 text-[10px] font-bold">
+                🎯 Planned: {formatHoursMins(planned)}
+              </Badge>
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] font-bold">
+                ⏱️ Logged: {formatHoursMins(actual)}
+              </Badge>
             </DialogDescription>
           </DialogHeader>
 
@@ -143,13 +168,12 @@ export function TaskQuickActionModal({
             <div className="grid grid-cols-2 gap-2">
               {/* 1. Mark Complete */}
               <Button
-                variant={task.status === "Completed" ? "secondary" : "default"}
                 size="sm"
-                className="h-10 justify-start text-xs gap-2"
+                className="h-10 justify-start text-xs gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
                 disabled={busy || task.status === "Completed"}
                 onClick={() => handleSetStatus("Completed")}
               >
-                <CheckCircle2 className="h-4 w-4 text-status-completed" />
+                <CheckCircle2 className="h-4 w-4 text-white" />
                 {task.status === "Completed" ? "Completed" : "Mark Complete"}
               </Button>
 
@@ -157,7 +181,7 @@ export function TaskQuickActionModal({
               <Button
                 variant={task.status === "In Progress" ? "secondary" : "outline"}
                 size="sm"
-                className="h-10 justify-start text-xs gap-2"
+                className="h-10 justify-start text-xs gap-2 border-border"
                 disabled={busy || task.status === "In Progress"}
                 onClick={() => handleSetStatus("In Progress")}
               >
@@ -169,11 +193,11 @@ export function TaskQuickActionModal({
               <Button
                 variant={task.status === "Blocked" ? "destructive" : "outline"}
                 size="sm"
-                className="h-10 justify-start text-xs gap-2"
+                className="h-10 justify-start text-xs gap-2 border-status-blocked/40 text-status-blocked hover:bg-status-blocked/10"
                 disabled={busy}
                 onClick={() => setBlockOpen(true)}
               >
-                <AlertOctagon className="h-4 w-4 text-priority-high" />
+                <AlertOctagon className="h-4 w-4 text-status-blocked" />
                 {task.status === "Blocked" ? "Blocked" : "Flag Blocker"}
               </Button>
 
@@ -181,11 +205,14 @@ export function TaskQuickActionModal({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-10 justify-start text-xs gap-2 border border-border/50"
+                className="h-10 justify-start text-xs gap-2 border border-border/50 text-muted-foreground hover:text-foreground"
                 disabled={busy}
                 onClick={() => {
-                  onOpenChange(false);
-                  onOpenFullEdit?.();
+                  if (task && onOpenFullEdit) {
+                    onOpenFullEdit(task);
+                  } else {
+                    onOpenChange(false);
+                  }
                 }}
               >
                 <Pencil className="h-4 w-4 text-muted-foreground" />
@@ -194,35 +221,57 @@ export function TaskQuickActionModal({
             </div>
 
             {/* Quick Log Hours */}
-            <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50 space-y-2">
+            <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-medium flex items-center gap-1.5 text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5 text-primary" /> Log Hours Worked
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-primary" /> Log Hours & Minutes
                 </span>
-                <span className="text-[11px] text-muted-foreground">
-                  Logged: {task.actual_hours || 0}h
+                <span className="text-[11px] text-muted-foreground font-mono">
+                  Logged: <strong>{formatHoursMins(actual)}</strong> / Planned: <strong>{formatHoursMins(planned)}</strong>
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="24"
+                  type="text"
                   value={hoursInput}
                   onChange={(e) => setHoursInput(e.target.value)}
-                  placeholder="e.g. 2.5"
-                  className="h-8 text-xs flex-1"
+                  placeholder="e.g. 1.5, 45m, 1h 30m"
+                  className="h-8 text-xs font-bold text-primary bg-background border-border text-right"
                 />
                 <Button
                   size="sm"
-                  variant="secondary"
-                  className="h-8 text-xs shrink-0"
+                  className="h-8 text-xs shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
                   disabled={busy || !hoursInput}
                   onClick={handleSaveHours}
                 >
                   {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save Hours"}
                 </Button>
+              </div>
+
+              {/* Quick Fill Presets (Hours & Minutes) */}
+              <div className="flex items-center gap-1 pt-1 flex-wrap text-xs">
+                <span className="text-[10px] text-muted-foreground mr-1">Presets:</span>
+                {[
+                  { label: "15m", val: "0.25" },
+                  { label: "30m", val: "0.5" },
+                  { label: "45m", val: "0.75" },
+                  { label: "1h", val: "1" },
+                  { label: "1.5h", val: "1.5" },
+                  { label: "2h", val: "2" },
+                  { label: `Planned (${formatHoursMins(planned)})`, val: String(planned) },
+                ].map((item) => (
+                  <Button
+                    key={item.label}
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => setHoursInput(item.val)}
+                    className="h-5 px-1.5 text-[10px] bg-muted/60 border border-border/60 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                  >
+                    {item.label}
+                  </Button>
+                ))}
               </div>
             </div>
           </div>

@@ -54,6 +54,8 @@ import {
   Maximize2,
   Minimize2,
   ArrowRightCircle,
+  Pencil,
+  List,
 } from "lucide-react";
 
 const NONE = "__none";
@@ -92,7 +94,7 @@ export function TaskFormDialog({
   const [types, setTypes] = useState<WorkItemType[]>([]);
   const [projects, setProjects] = useState<Array<{ id: string; name: string; client: string | null }>>([]);
   const [form, setForm] = useState<Partial<Task>>(
-    initial ?? { priority: "Medium", status: "To Do", custom_fields: {} }
+    initial ?? { priority: "Medium", status: "To Do", custom_fields: {}, assigned_to: userId ?? null }
   );
   const [fieldDefs, setFieldDefs] = useState<WorkItemFieldDef[]>([]);
   const [apiHolidays, setApiHolidays] = useState<Record<string, Holiday>>({});
@@ -111,9 +113,9 @@ export function TaskFormDialog({
 
   // Multi-Task Grid State
   const [gridRows, setGridRows] = useState<GridRow[]>([
-    { id: "1", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-    { id: "2", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-    { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+    { id: "1", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+    { id: "2", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+    { id: "3", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
   ]);
 
   const [prevOpen, setPrevOpen] = useState(false);
@@ -133,19 +135,26 @@ export function TaskFormDialog({
       const isNewOpen = !prevOpen;
       const isDifferentTask = initial?.id !== prevInitialId;
       if (isNewOpen || isDifferentTask) {
-        setForm(initial ?? { priority: "Medium", status: "To Do", custom_fields: {} });
+        const defaultAssignee = initial ? initial.assigned_to : (userId ?? null);
+        setForm(initial ?? { priority: "Medium", status: "To Do", custom_fields: {}, assigned_to: defaultAssignee });
         setCreationMode("single");
-        setSelectedAssignees(initial?.assigned_to ? [initial.assigned_to] : []);
+        setSelectedAssignees(
+          initial?.assigned_to
+            ? [initial.assigned_to]
+            : defaultAssignee
+            ? [defaultAssignee]
+            : []
+        );
         setGridRows([
-          { id: "1", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-          { id: "2", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-          { id: "3", task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+          { id: "1", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+          { id: "2", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+          { id: "3", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
         ]);
       }
     }
     setPrevOpen(open);
     setPrevInitialId(initial?.id);
-  }, [open, initial]);
+  }, [open, initial, userId]);
 
   useEffect(() => {
     if (!open) return;
@@ -172,20 +181,26 @@ export function TaskFormDialog({
         }
       });
 
-      // 2. Add entries directly typed by members in tasks table (deduplicating case-insensitively)
+      // 2. Add entries directly typed by members in tasks table (deduplicating case-insensitively and splitting merged names)
       (taskRes.data ?? []).forEach((t) => {
         if (t.project_name?.trim()) {
-          const key = t.project_name.trim().toLowerCase();
-          const existing = map.get(key);
-          if (!existing) {
-            map.set(key, {
-              id: "",
-              name: t.project_name.trim(),
-              client: t.client?.trim() || null,
-            });
-          } else if (!existing.client && t.client?.trim()) {
-            existing.client = t.client.trim();
-          }
+          const parts = t.project_name.trim().split("|");
+          parts.forEach((part) => {
+            const pName = part.trim();
+            if (pName) {
+              const key = pName.toLowerCase();
+              const existing = map.get(key);
+              if (!existing) {
+                map.set(key, {
+                  id: "",
+                  name: pName,
+                  client: t.client?.trim() || null,
+                });
+              } else if (!existing.client && t.client?.trim()) {
+                existing.client = t.client.trim();
+              }
+            }
+          });
         }
       });
 
@@ -276,7 +291,7 @@ export function TaskFormDialog({
       {
         id: String(Date.now()),
         task_name: "",
-        assigned_to: null,
+        assigned_to: form.assigned_to ?? userId ?? null,
         type_id: form.type_id ?? null,
         client: form.client ?? "",
         project_name: form.project_name ?? "",
@@ -298,7 +313,7 @@ export function TaskFormDialog({
 
   const clearGridRows = () => {
     setGridRows([
-      { id: String(Date.now()), task_name: "", assigned_to: null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+      { id: String(Date.now()), task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
     ]);
   };
 
@@ -317,24 +332,26 @@ export function TaskFormDialog({
 
   const ensureMasterProject = async (projectName?: string | null, clientName?: string | null) => {
     if (!projectName || !projectName.trim()) return;
-    const name = projectName.trim();
-    try {
-      const { data } = await supabase
-        .from("projects")
-        .select("id, name")
-        .ilike("name", name)
-        .maybeSingle();
+    const parts = projectName.trim().split("|").map((s) => s.trim()).filter(Boolean);
+    for (const name of parts) {
+      try {
+        const { data } = await supabase
+          .from("projects")
+          .select("id, name")
+          .ilike("name", name)
+          .maybeSingle();
 
-      if (!data) {
-        await supabase.from("projects").insert({
-          name: name,
-          client: clientName?.trim() || null,
-          status: "active",
-          sla_days: 3,
-        });
+        if (!data) {
+          await supabase.from("projects").insert({
+            name: name,
+            client: clientName?.trim() || null,
+            status: "active",
+            sla_days: 3,
+          });
+        }
+      } catch (err) {
+        console.warn("Auto project master creation skipped:", err);
       }
-    } catch (err) {
-      console.warn("Auto project master creation skipped:", err);
     }
   };
 
@@ -708,9 +725,9 @@ export function TaskFormDialog({
                                 type="button"
                                 title="Select from list"
                                 onClick={() => updateGridRow(row.id, "isCustomClient", false)}
-                                className="text-[10px] text-primary hover:underline shrink-0"
+                                className="text-[10px] text-primary hover:underline shrink-0 p-0.5"
                               >
-                                📋
+                                <List className="h-3 w-3" />
                               </button>
                             </div>
                           ) : (
@@ -730,7 +747,9 @@ export function TaskFormDialog({
                                 </SelectTrigger>
                                 <SelectContent className="max-h-60 overflow-y-auto">
                                   <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
-                                    ✏️ + Type custom client name...
+                                    <span className="flex items-center gap-1.5">
+                                      <Pencil className="h-3 w-3 text-primary" /> Type custom client name...
+                                    </span>
                                   </SelectItem>
                                   <SelectItem value={NONE}>None</SelectItem>
                                   {uniqueClients.map((c: string, idx: number) => (
@@ -744,9 +763,9 @@ export function TaskFormDialog({
                                 type="button"
                                 title="Type custom client"
                                 onClick={() => updateGridRow(row.id, "isCustomClient", true)}
-                                className="text-[10px] text-muted-foreground hover:text-primary shrink-0 px-0.5"
+                                className="text-[10px] text-muted-foreground hover:text-primary shrink-0 p-0.5"
                               >
-                                ✏️
+                                <Pencil className="h-3 w-3" />
                               </button>
                             </div>
                           )}
@@ -765,9 +784,9 @@ export function TaskFormDialog({
                                 type="button"
                                 title="Select from list"
                                 onClick={() => updateGridRow(row.id, "isCustomProj", false)}
-                                className="text-[10px] text-primary hover:underline shrink-0"
+                                className="text-[10px] text-primary hover:underline shrink-0 p-0.5"
                               >
-                                📋
+                                <List className="h-3 w-3" />
                               </button>
                             </div>
                           ) : (
@@ -792,7 +811,9 @@ export function TaskFormDialog({
                                 </SelectTrigger>
                                 <SelectContent className="max-h-60 overflow-y-auto">
                                   <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
-                                    ✏️ + Type custom project name...
+                                    <span className="flex items-center gap-1.5">
+                                      <Pencil className="h-3 w-3 text-primary" /> Type custom project name...
+                                    </span>
                                   </SelectItem>
                                   <SelectItem value={NONE}>None</SelectItem>
                                   {projects.map((p, idx) => (
@@ -806,9 +827,9 @@ export function TaskFormDialog({
                                 type="button"
                                 title="Type custom project"
                                 onClick={() => updateGridRow(row.id, "isCustomProj", true)}
-                                className="text-[10px] text-muted-foreground hover:text-primary shrink-0 px-0.5"
+                                className="text-[10px] text-muted-foreground hover:text-primary shrink-0 p-0.5"
                               >
-                                ✏️
+                                <Pencil className="h-3 w-3" />
                               </button>
                             </div>
                           )}
@@ -1085,9 +1106,17 @@ export function TaskFormDialog({
                       <button
                         type="button"
                         onClick={() => setIsCustomProject(!isCustomProject)}
-                        className="text-[10px] text-primary hover:underline font-medium"
+                        className="text-[10px] text-primary hover:underline font-medium inline-flex items-center gap-1"
                       >
-                        {isCustomProject ? "📋 Select from list" : "✏️ Type custom project"}
+                        {isCustomProject ? (
+                          <>
+                            <List className="h-3 w-3" /> Select from list
+                          </>
+                        ) : (
+                          <>
+                            <Pencil className="h-3 w-3" /> Type custom project
+                          </>
+                        )}
                       </button>
                     </div>
 
@@ -1126,7 +1155,9 @@ export function TaskFormDialog({
                         </SelectTrigger>
                         <SelectContent className="max-h-60 overflow-y-auto">
                           <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
-                            ✏️ + Type custom project name...
+                            <span className="flex items-center gap-1.5">
+                              <Pencil className="h-3.5 w-3.5 text-primary" /> Type custom project name...
+                            </span>
                           </SelectItem>
                           <SelectItem value={NONE}>None (No Project)</SelectItem>
                           {projects.map((p, idx) => (
@@ -1146,9 +1177,17 @@ export function TaskFormDialog({
                       <button
                         type="button"
                         onClick={() => setIsCustomClient(!isCustomClient)}
-                        className="text-[10px] text-primary hover:underline font-medium"
+                        className="text-[10px] text-primary hover:underline font-medium inline-flex items-center gap-1"
                       >
-                        {isCustomClient ? "📋 Select from list" : "✏️ Type custom client"}
+                        {isCustomClient ? (
+                          <>
+                            <List className="h-3 w-3" /> Select from list
+                          </>
+                        ) : (
+                          <>
+                            <Pencil className="h-3 w-3" /> Type custom client
+                          </>
+                        )}
                       </button>
                     </div>
 
@@ -1175,7 +1214,9 @@ export function TaskFormDialog({
                         </SelectTrigger>
                         <SelectContent className="max-h-60 overflow-y-auto">
                           <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
-                            ✏️ + Type custom client name...
+                            <span className="flex items-center gap-1.5">
+                              <Pencil className="h-3.5 w-3.5 text-primary" /> Type custom client name...
+                            </span>
                           </SelectItem>
                           <SelectItem value={NONE}>None (No Client)</SelectItem>
                           {uniqueClients.map((c: string, idx: number) => (
