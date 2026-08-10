@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Users,
   TrendingUp,
@@ -119,6 +120,26 @@ function TeamCapacityPage() {
     staleTime: 30000,
   });
 
+  // Extract ALL unique, clean project names from both projects table and active tasks
+  const allProjectsList = useMemo(() => {
+    const map = new Map<string, string>();
+    projects.forEach((pr) => {
+      if (pr.name && pr.name.trim()) {
+        const clean = pr.name.trim();
+        map.set(clean.toLowerCase(), clean);
+      }
+    });
+    tasks.forEach((t) => {
+      if (t.project_name && t.project_name.trim()) {
+        const clean = t.project_name.trim();
+        if (!map.has(clean.toLowerCase())) {
+          map.set(clean.toLowerCase(), clean);
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [projects, tasks]);
+
   // Calculate REAL Capacity & Workload per Member strictly from DB
   const memberData = useMemo(() => {
     return profiles.map((p) => {
@@ -207,7 +228,8 @@ function TeamCapacityPage() {
 
       const matchProject =
         projectFilter === "all" ||
-        item.mainProjectName.toLowerCase().includes(projectFilter.toLowerCase());
+        item.skills.some((s) => s.toLowerCase().includes(projectFilter.toLowerCase())) ||
+        item.memberTasks.some((t) => t.project_name?.toLowerCase().includes(projectFilter.toLowerCase()));
 
       const matchAvailability =
         availabilityFilter === "all" ||
@@ -382,26 +404,74 @@ function TeamCapacityPage() {
             <SelectTrigger className="h-8 w-36 text-xs bg-background border-input text-foreground rounded-md">
               <SelectValue placeholder="All Projects" />
             </SelectTrigger>
-            <SelectContent className="bg-card border-border text-xs text-foreground z-[9999]">
+            <SelectContent className="bg-card border-border text-xs text-foreground z-[9999] max-h-60 overflow-y-auto">
               <SelectItem value="all">All Projects</SelectItem>
-              {projects.map((pr) => (
-                <SelectItem key={pr.id} value={pr.name}>{pr.name}</SelectItem>
+              {allProjectsList.map((projName) => (
+                <SelectItem key={projName} value={projName}>
+                  {projName}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-background border-input text-foreground rounded-md">
-              <SelectValue placeholder="Availability" />
-            </SelectTrigger>
-            <SelectContent className="bg-card border-border text-xs text-foreground z-[9999]">
-              <SelectItem value="all">All Availability</SelectItem>
-              <SelectItem value="free">🟢 Free Today</SelectItem>
-              <SelectItem value="available">🟢 Available Today</SelectItem>
-              <SelectItem value="partially">🟡 Partially Available</SelectItem>
-              <SelectItem value="overloaded">🔴 Overloaded</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-1">
+            <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
+              <SelectTrigger className="h-8 w-36 text-xs bg-background border-input text-foreground rounded-md">
+                <SelectValue placeholder="Availability" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border text-xs text-foreground z-[9999]">
+                <SelectItem value="all">All Availability</SelectItem>
+                <SelectItem value="free">🟢 Free Today</SelectItem>
+                <SelectItem value="available">🟢 Available Today</SelectItem>
+                <SelectItem value="partially">🟡 Partially Available</SelectItem>
+                <SelectItem value="overloaded">🔴 Overloaded</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0 border-border text-muted-foreground hover:text-foreground shrink-0" title="Availability Rules Info">
+                  <Info className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-3.5 bg-card border-border text-card-foreground shadow-2xl text-xs space-y-2.5 z-[9999]">
+                <div className="font-bold text-foreground border-b border-border pb-1.5 flex items-center justify-between">
+                  <span>Availability Rules & Logic</span>
+                  <Badge variant="outline" className="text-[9px] border-border">8h Base</Badge>
+                </div>
+                <div className="space-y-2 text-[11px]">
+                  <div className="flex items-start gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 mt-1 shrink-0" />
+                    <div>
+                      <span className="font-bold text-emerald-400">🟢 Free Today (0h):</span>
+                      <span className="text-muted-foreground block text-[10px]">Zero active tasks assigned today.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 mt-1 shrink-0" />
+                    <div>
+                      <span className="font-bold text-emerald-400">🟢 Available Today (&lt;5.5h):</span>
+                      <span className="text-muted-foreground block text-[10px]">Light/moderate workload with free time left.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="h-2 w-2 rounded-full bg-amber-500 mt-1 shrink-0" />
+                    <div>
+                      <span className="font-bold text-amber-400">🟡 Partially Available (5.5h – 8h):</span>
+                      <span className="text-muted-foreground block text-[10px]">Almost fully booked for the day.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="h-2 w-2 rounded-full bg-rose-500 mt-1 shrink-0" />
+                    <div>
+                      <span className="font-bold text-rose-400">🔴 Overloaded (&gt;8h / Blocked):</span>
+                      <span className="text-muted-foreground block text-[10px]">Over 8h capacity or has active blocked tasks.</span>
+                    </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
 
           {/* View Mode Toggle */}
           <div className="flex items-center gap-1 bg-background border border-input p-1 rounded-md">

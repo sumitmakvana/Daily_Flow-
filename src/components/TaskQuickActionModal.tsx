@@ -247,32 +247,7 @@ export function TaskQuickActionModal({
                   {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save Hours"}
                 </Button>
               </div>
-
-              {/* Quick Fill Presets (Hours & Minutes) */}
-              <div className="flex items-center gap-1 pt-1 flex-wrap text-xs">
-                <span className="text-[10px] text-muted-foreground mr-1">Presets:</span>
-                {[
-                  { label: "15m", val: "0.25" },
-                  { label: "30m", val: "0.5" },
-                  { label: "45m", val: "0.75" },
-                  { label: "1h", val: "1" },
-                  { label: "1.5h", val: "1.5" },
-                  { label: "2h", val: "2" },
-                  { label: `Planned (${formatHoursMins(planned)})`, val: String(planned) },
-                ].map((item) => (
-                  <Button
-                    key={item.label}
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => setHoursInput(item.val)}
-                    className="h-5 px-1.5 text-[10px] bg-muted/60 border border-border/60 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
-                  >
-                    {item.label}
-                  </Button>
-                ))}
-              </div>
+            </div>
             </div>
           </div>
         </DialogContent>
