@@ -250,6 +250,18 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         }
 
         let sentManagers = 0;
+
+        // Idempotency check: Skip email sending if already dispatched today (unless force=true)
+        const dispatchDedupeKey = `EOD_EMAIL_DISPATCH_${today}`;
+        const { data: existingDispatch } = await supabaseAdmin
+          .from("notifications")
+          .select("id")
+          .eq("dedupe_key", dispatchDedupeKey)
+          .maybeSingle();
+
+        const shouldSendEmail = force || !existingDispatch;
+        const recipientEmails = new Set<string>();
+
         for (const [managerId, lines] of managerRollup.entries()) {
           if (optedOut.has(managerId)) continue;
           const dedupeKey = `EOD_TEAM_${today}_${managerId}`;
@@ -262,33 +274,9 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           });
           if (!error) {
             sentManagers += 1;
-
-            // Generate HTML report & dispatch email to Manager
             const managerProfile = profileById.get(managerId);
             if (managerProfile?.email) {
-              const digestData = computeTodayDigestData();
-
-              const reportHtml = generateEodHtmlReport({
-                dateStr: today,
-                totalTasks: digestData.totalCount,
-                completedTasks: digestData.completedCount,
-                inProgressTasks: digestData.inProgressCount,
-                blockedTasks: digestData.blockedCount,
-                pendingTasks: digestData.pendingCount,
-                completionRate: digestData.completionRate,
-                memberSummaries: digestData.memberSummaries,
-                blockedAlerts: digestData.blockedAlerts,
-              });
-
-              const targetEmails = Array.from(
-                new Set([managerProfile.email].filter(Boolean) as string[]),
-              );
-
-              await sendEodEmail({
-                to: targetEmails,
-                subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
-                html: reportHtml,
-              });
+              recipientEmails.add(managerProfile.email.trim().toLowerCase());
             }
           } else if (error.code !== "23505") {
             failed += 1;
@@ -302,20 +290,18 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           }
         }
 
-        // Direct test dispatch if forced or no managers found
-        if (force || sentManagers === 0) {
-          const rawEmails =
-            url.searchParams.get("target_email") || url.searchParams.get("email") || "";
+        // Include any target emails passed in URL params (e.g. for testing)
+        const rawEmails =
+          url.searchParams.get("target_email") || url.searchParams.get("email") || "";
+        if (rawEmails) {
+          rawEmails
+            .split(",")
+            .map((e) => e.trim().toLowerCase())
+            .filter(Boolean)
+            .forEach((e) => recipientEmails.add(e));
+        }
 
-          const targetEmailList = Array.from(
-            new Set(
-              rawEmails
-                .split(",")
-                .map((e) => e.trim())
-                .filter(Boolean),
-            ),
-          );
-
+        if (shouldSendEmail && recipientEmails.size > 0) {
           const digestData = computeTodayDigestData();
 
           const reportHtml = generateEodHtmlReport({
@@ -330,11 +316,24 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             blockedAlerts: digestData.blockedAlerts,
           });
 
+          const targetEmails = Array.from(recipientEmails);
+
           await sendEodEmail({
-            to: targetEmailList,
+            to: targetEmails,
             subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
             html: reportHtml,
           });
+
+          // Insert dispatch marker to prevent duplicate email dispatches
+          if (profiles && profiles.length > 0) {
+            await supabaseAdmin.from("notifications").insert({
+              user_id: profiles[0].id,
+              type: "eod_team_digest",
+              title: `EOD Email Dispatched - ${today}`,
+              body: `Automated EOD team performance digest sent to ${targetEmails.join(", ")}.`,
+              dedupe_key: dispatchDedupeKey,
+            });
+          }
         }
 
         return Response.json({ ok: true, sentUsers, sentManagers, failed });

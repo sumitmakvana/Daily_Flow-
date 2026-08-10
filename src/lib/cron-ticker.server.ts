@@ -137,7 +137,22 @@ export function startBackgroundCronTicker() {
           blockedAlerts,
         });
 
-        // Collect recipient emails from notification_prefs
+        // Check if EOD email dispatch has already been executed today to prevent duplicate runs
+        const dispatchDedupeKey = `EOD_EMAIL_DISPATCH_${todayStr}`;
+        const { data: existingDispatch } = await supabaseAdmin
+          .from("notifications")
+          .select("id")
+          .eq("dedupe_key", dispatchDedupeKey)
+          .maybeSingle();
+
+        if (existingDispatch) {
+          console.log(
+            `[CronTicker] EOD email dispatch for ${todayStr} already completed today. Skipping duplicate dispatch.`,
+          );
+          return;
+        }
+
+        // Collect recipient emails from notification_prefs (deduplicated & normalized to lowercase)
         const recipientEmails = new Set<string>();
 
         for (const pref of (prefs as any[]) ?? []) {
@@ -147,25 +162,28 @@ export function startBackgroundCronTicker() {
           if (pref.eod_send_to_custom && pref.custom_target_email) {
             pref.custom_target_email
               .split(",")
-              .map((e: string) => e.trim())
+              .map((e: string) => e.trim().toLowerCase())
               .filter(Boolean)
               .forEach((e: string) => recipientEmails.add(e));
           }
 
-          // 2. Direct Managers
+          // 2. Direct Managers (get manager email for users managed)
           if (pref.eod_send_to_managers) {
-            for (const p of profiles ?? []) {
-              if (p.manager_id) {
-                const mgr = profileById.get(p.manager_id);
-                if (mgr && mgr.email) recipientEmails.add(mgr.email);
-              }
+            const userProfile = profileById.get(pref.user_id);
+            if (userProfile?.manager_id) {
+              const mgr = profileById.get(userProfile.manager_id);
+              if (mgr && mgr.email) recipientEmails.add(mgr.email.trim().toLowerCase());
+            } else if (userProfile?.email) {
+              // If the profile itself is a manager, add manager's own email
+              const isAManager = (profiles ?? []).some((p) => p.manager_id === pref.user_id);
+              if (isAManager) recipientEmails.add(userProfile.email.trim().toLowerCase());
             }
           }
 
           // 3. Admins
           if (pref.eod_send_to_admins) {
             for (const p of profiles ?? []) {
-              if (p.email) recipientEmails.add(p.email);
+              if (p.email) recipientEmails.add(p.email.trim().toLowerCase());
             }
           }
         }
@@ -182,7 +200,17 @@ export function startBackgroundCronTicker() {
             res,
           );
 
-          // Save notification records to public.notifications for auditing
+          // Save dispatch idempotency marker & notification records to public.notifications
+          if (profiles && profiles.length > 0) {
+            await supabaseAdmin.from("notifications").insert({
+              user_id: profiles[0].id,
+              type: "eod_team_digest",
+              title: `EOD Email Dispatched - ${todayStr}`,
+              body: `Automated EOD team performance digest sent to ${toList.join(", ")}.`,
+              dedupe_key: dispatchDedupeKey,
+            });
+          }
+
           for (const p of profiles ?? []) {
             const mine = plateByUser.get(p.id) ?? [];
             const completed = mine.filter((t) => t.status === "Completed").length;
