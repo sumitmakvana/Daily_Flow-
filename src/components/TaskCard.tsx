@@ -403,32 +403,7 @@ export function TaskCard({
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className="text-[10px] text-muted-foreground mr-1">Presets:</span>
-                {[
-                  { label: "15m", val: "0.25" },
-                  { label: "30m", val: "0.5" },
-                  { label: "45m", val: "0.75" },
-                  { label: "1h", val: "1" },
-                  { label: "1.5h", val: "1.5" },
-                  { label: "2h", val: "2" },
-                  { label: `Planned (${formatHoursMins(planned)})`, val: String(planned) },
-                ].map((item) => (
-                  <Button
-                    key={item.label}
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={inlineBusy}
-                    onClick={() => setInlineHours(item.val)}
-                    className="h-5 px-1.5 text-[10px] bg-muted/60 border border-border/60 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
-                  >
-                    {item.label}
-                  </Button>
-                ))}
-              </div>
-
+            <div className="flex items-center justify-end pt-1 flex-wrap gap-2">
               <div className="flex items-center gap-1.5 ml-auto">
                 <Button
                   size="sm"

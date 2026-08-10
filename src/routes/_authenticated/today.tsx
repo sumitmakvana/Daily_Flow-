@@ -16,6 +16,42 @@ export const Route = createFileRoute("/_authenticated/today")({
   component: TodayPage,
 });
 
+interface TaskSectionProps {
+  title: string;
+  items: Task[];
+  tone?: string;
+  profiles: Profile[];
+  userId: string;
+  isManager: boolean;
+  onChanged: () => void;
+}
+
+function TaskSection({ title, items, tone, profiles, userId, isManager, onChanged }: TaskSectionProps) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className={tone}>{title}</span>
+        <span className="text-muted-foreground/60">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic px-1">Nothing here.</p>
+      ) : (
+        items.map((t) => (
+          <TaskCard
+            key={t.id}
+            task={t}
+            assignee={profiles.find((p) => p.id === t.assigned_to)}
+            profiles={profiles}
+            userId={userId}
+            canManage={isManager}
+            onChanged={onChanged}
+          />
+        ))
+      )}
+    </section>
+  );
+}
+
 function TodayPage() {
   const { user, isManager } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -49,30 +85,6 @@ function TodayPage() {
 
   if (!user) return null;
 
-  const Section = ({ title, items, tone }: { title: string; items: Task[]; tone?: string }) => (
-    <section className="space-y-2">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <span className={tone}>{title}</span>
-        <span className="text-muted-foreground/60">{items.length}</span>
-      </div>
-      {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic px-1">Nothing here.</p>
-      ) : (
-        items.map((t) => (
-          <TaskCard
-            key={t.id}
-            task={t}
-            assignee={profiles.find((p) => p.id === t.assigned_to)}
-            profiles={profiles}
-            userId={user.id}
-            canManage={isManager}
-            onChanged={load}
-          />
-        ))
-      )}
-    </section>
-  );
-
   return (
     <div className="max-w-4xl mx-auto px-3 md:px-6 py-6 space-y-6">
       <div className="flex items-center justify-between border-b border-border pb-4">
@@ -87,10 +99,10 @@ function TodayPage() {
         </Button>
       </div>
       <EodReminder tasks={tasks} userId={user.id} onDone={load} />
-      <Section title="Today & overdue" items={today} tone="text-destructive font-semibold" />
-      <Section title="Blocked" items={blocked} tone="text-amber-500 font-semibold" />
-      <Section title="Pending" items={pending} />
-      <Section title="Completed today" items={completedToday} tone="text-emerald-500 font-semibold" />
+      <TaskSection title="Today & overdue" items={today} tone="text-destructive font-semibold" profiles={profiles} userId={user.id} isManager={isManager} onChanged={load} />
+      <TaskSection title="Blocked" items={blocked} tone="text-amber-500 font-semibold" profiles={profiles} userId={user.id} isManager={isManager} onChanged={load} />
+      <TaskSection title="Pending" items={pending} profiles={profiles} userId={user.id} isManager={isManager} onChanged={load} />
+      <TaskSection title="Completed today" items={completedToday} tone="text-emerald-500 font-semibold" profiles={profiles} userId={user.id} isManager={isManager} onChanged={load} />
       <TaskFormDialog open={dialogOpen} onOpenChange={setDialogOpen} userId={user.id} onSaved={load} />
     </div>
   );

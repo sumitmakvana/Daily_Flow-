@@ -124,24 +124,6 @@ export function CompleteTaskEodDialog({
               />
               <span className="text-xs text-muted-foreground">hours</span>
             </div>
-
-            {/* Quick Preset Buttons */}
-            <div className="flex flex-wrap items-center gap-1 pt-1 text-xs">
-              <span className="text-[11px] text-muted-foreground mr-1">Presets:</span>
-              {[0.5, 1, 2, defaultFill, planned].filter((v, i, arr) => v > 0 && arr.indexOf(v) === i).map((hVal) => (
-                <Button
-                  key={hVal}
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setHours(String(hVal))}
-                  className="h-6 px-2 text-[10px] bg-muted/60 border border-border/60 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
-                >
-                  {hVal === planned ? `Planned (${hVal}h)` : `${hVal}h`}
-                </Button>
-              ))}
-            </div>
           </div>
 
           {/* Optional Manager Note */}
