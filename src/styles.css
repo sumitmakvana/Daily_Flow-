@@ -284,10 +284,16 @@ html.ux4g-large-cursor, html.ux4g-large-cursor * {
   border: 0 !important;
 }
 
-/* UX4G Focus ring compliance for keyboard users */
-:focus-visible {
-  outline: 3px solid var(--ring) !important;
-  outline-offset: 2px !important;
+/* Global selection color matching indigo theme */
+::selection {
+  background-color: oklch(0.72 0.18 268 / 0.35);
+  color: #ffffff;
+}
+
+/* Focus ring compliance for keyboard users */
+:focus-visible:not(input):not(textarea):not(select):not(button) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 

@@ -41,8 +41,10 @@ export const tasksService = {
     if (import.meta.env.MODE === "test") {
       (globalThis as any).__test_user_id = _userId;
     }
-    void _userId;
     const cleanedPayload = { ...payload };
+    if (cleanedPayload.assigned_to === undefined && _userId) {
+      cleanedPayload.assigned_to = _userId;
+    }
     if ("project_id" in cleanedPayload) {
       cleanedPayload.project_id = cleanProjectId(cleanedPayload.project_id) as any;
     }

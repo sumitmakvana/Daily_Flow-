@@ -43,6 +43,7 @@ function MyDayPage() {
   const [profile, setProfile] = useState<{ display_name: string | null } | null>(null);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [quickModalOpen, setQuickModalOpen] = useState(false);
   const [fullFormOpen, setFullFormOpen] = useState(false);
   const handledTaskIdRef = useRef<string | null>(null);
@@ -342,7 +343,7 @@ function MyDayPage() {
         open={quickModalOpen}
         onOpenChange={(open) => {
           setQuickModalOpen(open);
-          if (!open) {
+          if (!open && !fullFormOpen) {
             setSelectedTask(null);
             if (taskId) {
               handledTaskIdRef.current = null;
@@ -352,18 +353,31 @@ function MyDayPage() {
         }}
         userId={user?.id ?? ""}
         onChanged={() => q.refetch()}
-        onOpenFullEdit={() => setFullFormOpen(true)}
+        onOpenFullEdit={(taskToEdit) => {
+          setEditingTask(taskToEdit);
+          setQuickModalOpen(false);
+          setFullFormOpen(true);
+        }}
       />
 
       {/* Full Task Form Dialog (if user chooses Edit Details) */}
       <TaskFormDialog
         open={fullFormOpen}
-        onOpenChange={setFullFormOpen}
-        initial={selectedTask}
+        onOpenChange={(open) => {
+          setFullFormOpen(open);
+          if (!open) {
+            setEditingTask(null);
+            setSelectedTask(null);
+          }
+        }}
+        initial={editingTask || selectedTask}
         userId={user?.id ?? ""}
         onSaved={() => {
           q.refetch();
-          handleTaskClick(selectedTask?.id ?? "");
+          const targetId = editingTask?.id || selectedTask?.id;
+          if (targetId) {
+            handleTaskClick(targetId);
+          }
         }}
       />
     </div>

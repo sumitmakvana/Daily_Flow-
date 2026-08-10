@@ -48,9 +48,14 @@ import {
   Filter,
   User,
   Calendar,
+  CalendarDays,
   ListFilter,
   BarChart2,
   Hourglass,
+  ArrowLeft,
+  Table,
+  Grid,
+  X,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -77,6 +82,8 @@ import {
 import type { Task, Profile, Project, EodCheckin } from "@/lib/types";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { formatDate, formatHoursMins } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/executive")({
   beforeLoad: async () => {
@@ -268,22 +275,29 @@ function ExecutivePage() {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [summary, eodProfiles, boot]);
 
-  // Dynamic Projects list for Project select (Combining Projects DB + Tasks table)
+  // Dynamic Projects list for Project select (Combining Projects DB + Tasks table, splitting merged names and strictly deduplicating)
   const availableProjects = useMemo(() => {
     const map = new Map<string, string>();
-    (summary?.filters.projects ?? []).forEach((p) => map.set(p.id, p.name));
-    projectsList.forEach((p) => map.set(p.id, p.name));
+    const addProjectName = (rawName: string) => {
+      const parts = rawName.split("|").map((s) => s.trim()).filter(Boolean);
+      parts.forEach((pName) => {
+        const key = pName.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, pName);
+        }
+      });
+    };
+
+    (summary?.filters.projects ?? []).forEach((p) => addProjectName(p.name));
+    projectsList.forEach((p) => addProjectName(p.name));
     eodTasks.forEach((t) => {
       if (t.project_name?.trim()) {
-        const pName = t.project_name.trim();
-        if (t.project_id && !map.has(t.project_id)) {
-          map.set(t.project_id, pName);
-        } else if (!map.has(pName)) {
-          map.set(pName, pName);
-        }
+        addProjectName(t.project_name.trim());
       }
     });
-    return Array.from(map.entries()).map(([id, name]) => [id, name] as [string, string]);
+
+    const sortedNames = Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+    return sortedNames.map((name) => [name, name] as [string, string]);
   }, [summary, projectsList, eodTasks]);
 
   // Work Types list
@@ -503,6 +517,8 @@ function ExecutiveRealDashboard({
   const [memberSearch, setMemberSearch] = useState("");
   const [taskFilter, setTaskFilter] = useState<"all" | "Completed" | "In Progress" | "Blocked" | "Pending">("all");
   const [showOnlyActiveMembers, setShowOnlyActiveMembers] = useState(false);
+  const [selectedStatusDetails, setSelectedStatusDetails] = useState<"Completed" | "In Progress" | "Blocked" | "Pending" | null>(null);
+  const [selectedAgingBucket, setSelectedAgingBucket] = useState<"0-3d" | "4-7d" | "8-14d" | "15d+" | null>(null);
 
   // 1. Dynamic Filtering for Profiles by Scope & Member Filter
   const filteredProfiles = useMemo(() => {
@@ -543,9 +559,12 @@ function ExecutiveRealDashboard({
       result = result.filter((t) => {
         return selectedProjects.some((sp) => {
           if (t.project_id === sp) return true;
-          if (t.project_name && t.project_name.trim().toLowerCase() === sp.trim().toLowerCase()) return true;
+          if (t.project_name) {
+            const parts = t.project_name.split("|").map((s) => s.trim().toLowerCase());
+            if (parts.includes(sp.trim().toLowerCase())) return true;
+          }
           const projObj = projects.find((p) => p.id === sp || p.name.trim().toLowerCase() === sp.trim().toLowerCase());
-          return projObj && t.project_name && t.project_name.trim().toLowerCase() === projObj.name.trim().toLowerCase();
+          return projObj && t.project_name && t.project_name.split("|").some((part) => part.trim().toLowerCase() === projObj.name.trim().toLowerCase());
         });
       });
     }
@@ -632,6 +651,7 @@ function ExecutiveRealDashboard({
       const planned = pTasks.reduce((s, t) => s + Number(t.planned_hours ?? 0), 0);
       const actual = pTasks.reduce((s, t) => s + Number(t.actual_hours ?? 0), 0);
       return {
+        id: p.id,
         name: p.display_name.includes("@") ? p.display_name.split("@")[0] : p.display_name.split(" ")[0],
         fullName: p.display_name,
         planned,
@@ -747,89 +767,161 @@ function ExecutiveRealDashboard({
   }, [filteredTasks, taskFilter]);
 
   return (
-    <div className="rounded-2xl bg-[#0c0d18] border border-[#1d1f36] p-4 md:p-6 text-[#e2e8f0] shadow-2xl space-y-6">
+    <div className="space-y-6">
       {/* 1. Top Real Metric Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Completed Tasks */}
-        <div className="bg-[#131424] border border-[#1e2038] rounded-xl p-4 flex items-center justify-between shadow-lg hover:border-emerald-500/50 hover:shadow-emerald-500/5 hover:-translate-y-0.5 transition-all duration-200">
+        <div
+          onClick={() => {
+            setTaskFilter("Completed");
+            setSelectedStatusDetails("Completed");
+          }}
+          className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-emerald-500/50 hover:shadow-emerald-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
+        >
           <div className="space-y-1">
-            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider">Completed Tasks</div>
+            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider group-hover:text-emerald-400 transition-colors">
+              Completed Tasks
+            </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-white">{metrics.completed}</span>
               <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
                 {metrics.completionRate}% rate
               </span>
             </div>
-            <div className="text-[11px] text-[#64748b]">Out of {metrics.total} total assigned</div>
+            <div className="text-[11px] text-[#64748b] group-hover:text-emerald-300/80 transition-colors flex items-center gap-1">
+              Out of {metrics.total} total assigned · Click for details →
+            </div>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-inner">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTaskFilter("Completed");
+              setSelectedStatusDetails("Completed");
+            }}
+            className="h-11 w-11 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-inner group-hover:bg-emerald-500/20 group-hover:scale-105 transition-all"
+          >
             <CheckCircle2 className="h-5 w-5" />
-          </div>
+          </button>
         </div>
 
         {/* Card 2: In Progress Tasks */}
-        <div className="bg-[#131424] border border-[#1e2038] rounded-xl p-4 flex items-center justify-between shadow-lg hover:border-indigo-500/50 hover:shadow-indigo-500/5 hover:-translate-y-0.5 transition-all duration-200">
+        <div
+          onClick={() => {
+            setTaskFilter("In Progress");
+            setSelectedStatusDetails("In Progress");
+          }}
+          className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-indigo-500/50 hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
+        >
           <div className="space-y-1">
-            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider">In Progress Tasks</div>
+            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider group-hover:text-indigo-400 transition-colors">
+              In Progress Tasks
+            </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-white">{metrics.inProgress}</span>
               <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/25">
                 Active Work
               </span>
             </div>
-            <div className="text-[11px] text-[#64748b]">Currently being worked on</div>
+            <div className="text-[11px] text-[#64748b] group-hover:text-indigo-300/80 transition-colors flex items-center gap-1">
+              Currently being worked on · Click for details →
+            </div>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTaskFilter("In Progress");
+              setSelectedStatusDetails("In Progress");
+            }}
+            className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner group-hover:bg-indigo-500/20 group-hover:scale-105 transition-all"
+          >
             <Clock className="h-5 w-5" />
-          </div>
+          </button>
         </div>
 
         {/* Card 3: Blocked Tasks */}
-        <div className="bg-[#131424] border border-[#1e2038] rounded-xl p-4 flex items-center justify-between shadow-lg hover:border-rose-500/50 hover:shadow-rose-500/5 hover:-translate-y-0.5 transition-all duration-200">
+        <div
+          onClick={() => {
+            setTaskFilter("Blocked");
+            setSelectedStatusDetails("Blocked");
+          }}
+          className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-rose-500/50 hover:shadow-rose-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
+        >
           <div className="space-y-1">
-            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider">Blocked Tasks</div>
+            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider group-hover:text-rose-400 transition-colors">
+              Blocked Tasks
+            </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-rose-400">{metrics.blocked}</span>
               <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/25">
                 Risk Alert
               </span>
             </div>
-            <div className="text-[11px] text-[#64748b]">Requires manager unblock</div>
+            <div className="text-[11px] text-[#64748b] group-hover:text-rose-300/80 transition-colors flex items-center gap-1">
+              Requires manager unblock · Click for details →
+            </div>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-inner">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTaskFilter("Blocked");
+              setSelectedStatusDetails("Blocked");
+            }}
+            className="h-11 w-11 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-inner group-hover:bg-rose-500/20 group-hover:scale-105 transition-all"
+          >
             <AlertOctagon className="h-5 w-5" />
-          </div>
+          </button>
         </div>
 
         {/* Card 4: Total Assigned & Active Members */}
-        <div className="bg-[#131424] border border-[#1e2038] rounded-xl p-4 flex items-center justify-between shadow-lg hover:border-slate-500/50 hover:shadow-slate-500/5 hover:-translate-y-0.5 transition-all duration-200">
+        <div
+          onClick={() => {
+            setTaskFilter("Pending");
+            setSelectedStatusDetails("Pending");
+          }}
+          className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-amber-500/50 hover:shadow-amber-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
+        >
           <div className="space-y-1">
-            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider">Pending Queue</div>
+            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider group-hover:text-amber-400 transition-colors">
+              Pending Queue
+            </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-white">{metrics.pending}</span>
-              <span className="text-xs font-bold text-slate-300 bg-slate-500/10 px-2 py-0.5 rounded-full border border-slate-500/25">
+              <span className="text-xs font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/25">
                 {filteredProfiles.length} Members
               </span>
             </div>
-            <div className="text-[11px] text-[#64748b]">To Do & Review queue</div>
+            <div className="text-[11px] text-[#64748b] group-hover:text-amber-300/80 transition-colors flex items-center gap-1">
+              To Do & Review queue · Click for details →
+            </div>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-slate-500/10 border border-slate-500/30 flex items-center justify-center text-slate-300 shadow-inner">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTaskFilter("Pending");
+              setSelectedStatusDetails("Pending");
+            }}
+            className="h-11 w-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-300 shadow-inner group-hover:bg-amber-500/20 group-hover:scale-105 transition-all"
+          >
             <Users className="h-5 w-5" />
-          </div>
+          </button>
         </div>
       </div>
 
       {/* 2. Top Charts Grid: Real Member Bar Chart (Left) + Completion Velocity Trend (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left: Memberwise Task Breakdown Bar Chart */}
-        <div className="lg:col-span-7 bg-[#161726] border border-[#25273e] rounded-xl p-5 shadow-md space-y-4">
+        <div className="lg:col-span-7 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">Memberwise Task Status</h3>
-              <p className="text-xs text-[#94a3b8]">Real task allocation per team member</p>
+              <h3 className="text-base font-bold text-foreground tracking-tight">Memberwise Task Status</h3>
+              <p className="text-xs text-muted-foreground">Real task allocation per team member</p>
             </div>
             <div className="flex items-center gap-3 text-xs">
-              <div className="flex items-center gap-1 bg-[#121320] border border-[#25273e] p-0.5 rounded-lg">
+              <div className="flex items-center gap-1 bg-background border border-input p-0.5 rounded-lg">
                 <Button
                   size="sm"
                   variant={!showOnlyActiveMembers ? "default" : "ghost"}
@@ -912,10 +1004,10 @@ function ExecutiveRealDashboard({
         </div>
 
         {/* Right: Team Completion Velocity Line Chart */}
-        <div className="lg:col-span-5 bg-[#161726] border border-[#25273e] rounded-xl p-5 shadow-md space-y-4">
+        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
           <div>
-            <h3 className="text-base font-bold text-white tracking-tight">Team Completion Velocity</h3>
-            <p className="text-xs text-[#94a3b8]">Daily task completions over {RANGE_LABEL[range as RangeKey]}</p>
+            <h3 className="text-base font-bold text-foreground tracking-tight">Team Completion Velocity</h3>
+            <p className="text-xs text-muted-foreground">Daily task completions over {RANGE_LABEL[range as RangeKey]}</p>
           </div>
 
           <div className="h-[290px] w-full pt-2">
@@ -956,13 +1048,13 @@ function ExecutiveRealDashboard({
       {/* 3. Original Reports Charts Grid: Planned vs Actual Hours & Task Aging */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Graph 1: Planned vs Actual Hours per Member */}
-        <div className="lg:col-span-7 bg-[#161726] border border-[#25273e] rounded-xl p-5 shadow-md space-y-4">
+        <div className="lg:col-span-7 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-indigo-400" /> Planned vs Actual Hours
+              <h3 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-primary" /> Planned vs Actual Hours
               </h3>
-              <p className="text-xs text-[#94a3b8]">Comparison of planned hours vs actual work logged</p>
+              <p className="text-xs text-muted-foreground">Comparison of planned hours vs actual work logged</p>
             </div>
             <div className="flex items-center gap-3 text-xs">
               <span className="flex items-center gap-1.5 text-indigo-300 font-medium">
@@ -970,6 +1062,9 @@ function ExecutiveRealDashboard({
               </span>
               <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
                 <span className="h-2.5 w-2.5 rounded-sm bg-[#10b981]" /> Actual
+              </span>
+              <span className="text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-md border border-indigo-500/25">
+                Click bar for member details
               </span>
             </div>
           </div>
@@ -984,7 +1079,7 @@ function ExecutiveRealDashboard({
                     if (active && payload && payload.length) {
                       const full = payload[0]?.payload?.fullName || label;
                       return (
-                        <div className="bg-[#1a1c2e]/95 border border-[#313454] rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[150px]">
+                        <div className="bg-[#1a1c2e]/95 border border-indigo-500/40 rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[170px]">
                           <div className="font-bold text-indigo-300 border-b border-[#313454] pb-1">{full}</div>
                           {payload.map((entry: any, i: number) => (
                             <div key={i} className="flex items-center justify-between gap-3">
@@ -992,26 +1087,56 @@ function ExecutiveRealDashboard({
                               <span className="font-bold text-white">{entry.value}h</span>
                             </div>
                           ))}
+                          <div className="text-[10px] text-indigo-300 pt-1 font-semibold flex items-center gap-1 border-t border-[#313454]/60 mt-1">
+                            <span>💡 Click bar to inspect member's tasks & hours</span>
+                          </div>
                         </div>
                       );
                     }
                     return null;
                   }}
                 />
-                <Bar dataKey="planned" fill="#6366f1" radius={[3, 3, 0, 0]} barSize={16} />
-                <Bar dataKey="actual" fill="#10b981" radius={[3, 3, 0, 0]} barSize={16} />
+                <Bar
+                  dataKey="planned"
+                  fill="#6366f1"
+                  radius={[3, 3, 0, 0]}
+                  barSize={16}
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(entry: any) => {
+                    if (entry && entry.id) {
+                      onSelectMember(entry.id);
+                    }
+                  }}
+                />
+                <Bar
+                  dataKey="actual"
+                  fill="#10b981"
+                  radius={[3, 3, 0, 0]}
+                  barSize={16}
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(entry: any) => {
+                    if (entry && entry.id) {
+                      onSelectMember(entry.id);
+                    }
+                  }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Graph 2: Task Aging (Open Tasks) */}
-        <div className="lg:col-span-5 bg-[#161726] border border-[#25273e] rounded-xl p-5 shadow-md space-y-4">
-          <div>
-            <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-              <Hourglass className="h-4 w-4 text-amber-400" /> Task Aging (Open Tasks)
-            </h3>
-            <p className="text-xs text-[#94a3b8]">Age distribution of active incomplete tasks</p>
+        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
+                <Hourglass className="h-4 w-4 text-amber-500" /> Task Aging (Open Tasks)
+              </h3>
+              <p className="text-xs text-muted-foreground">Age distribution of active incomplete tasks</p>
+            </div>
+            <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/25">
+              Click bar for details
+            </span>
           </div>
 
           <div className="h-[250px] w-full pt-2">
@@ -1024,10 +1149,15 @@ function ExecutiveRealDashboard({
                     if (active && payload && payload.length) {
                       return (
                         <div className="bg-[#1a1c2e]/95 border border-amber-500/40 rounded-xl p-3 shadow-2xl text-xs space-y-1">
-                          <div className="font-bold text-amber-300 border-b border-[#313454] pb-1">Age Bucket: {label}</div>
-                          <div className="flex items-center justify-between gap-4 font-bold text-white">
+                          <div className="font-bold text-amber-300 border-b border-[#313454] pb-1 flex items-center justify-between gap-2">
+                            <span>Age Bucket: {label}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4 font-bold text-white pt-0.5">
                             <span>Open Tasks:</span>
                             <span className="text-amber-400 font-extrabold">{payload[0]?.value}</span>
+                          </div>
+                          <div className="text-[10px] text-amber-300 pt-1 font-semibold flex items-center gap-1 border-t border-[#313454]/60 mt-1">
+                            <span>💡 Click bar to view detailed task list</span>
                           </div>
                         </div>
                       );
@@ -1035,7 +1165,25 @@ function ExecutiveRealDashboard({
                     return null;
                   }}
                 />
-                <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={32} />
+                <Bar
+                  dataKey="count"
+                  radius={[4, 4, 0, 0]}
+                  barSize={32}
+                  className="cursor-pointer"
+                  onClick={(data: any) => {
+                    if (data && data.bucket) {
+                      setSelectedAgingBucket(data.bucket as any);
+                    }
+                  }}
+                >
+                  {taskAgingData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={selectedAgingBucket === entry.bucket ? "#fbbf24" : "#f59e0b"}
+                      className="cursor-pointer hover:opacity-80 transition-all"
+                    />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1045,8 +1193,8 @@ function ExecutiveRealDashboard({
       {/* 4. Middle Section: Real Work Distribution Donut & Member Breakdown Table */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Donut Chart: Task Status Breakdown */}
-        <div className="lg:col-span-4 bg-[#161726] border border-[#25273e] rounded-xl p-5 shadow-md flex flex-col justify-between space-y-4">
-          <h3 className="text-base font-bold text-white tracking-tight">Workload Distribution</h3>
+        <div className="lg:col-span-4 bg-card border border-border rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+          <h3 className="text-base font-bold text-foreground tracking-tight">Workload Distribution</h3>
 
           <div className="relative h-[200px] w-full flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
@@ -1083,17 +1231,17 @@ function ExecutiveRealDashboard({
         </div>
 
         {/* Member Performance Breakdown Table (With Click Drilldown) */}
-        <div className="lg:col-span-8 bg-[#161726] border border-[#25273e] rounded-xl p-5 shadow-md space-y-4">
+        <div className="lg:col-span-8 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">Member Performance Breakdown</h3>
-              <p className="text-xs text-[#94a3b8]">Click any member row for full task & project inspection</p>
+              <h3 className="text-base font-bold text-foreground tracking-tight">Member Performance Breakdown</h3>
+              <p className="text-xs text-muted-foreground">Click any member row for full task & project inspection</p>
             </div>
             <Input
               placeholder="Filter members or projects..."
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
-              className="h-8 w-48 text-xs bg-[#121320] border-[#25273e]"
+              className="h-8 w-48 text-xs bg-background border-input text-foreground"
             />
           </div>
 
@@ -1104,6 +1252,7 @@ function ExecutiveRealDashboard({
                   <th className="py-3 px-3 font-semibold">Team Member</th>
                   <th className="py-3 px-3 font-semibold text-center">Completed</th>
                   <th className="py-3 px-3 font-semibold text-center">In Progress</th>
+                  <th className="py-3 px-3 font-semibold text-center">Pending</th>
                   <th className="py-3 px-3 font-semibold text-center">Blocked</th>
                   <th className="py-3 px-3 font-semibold text-center">Total</th>
                   <th className="py-3 px-3 font-semibold text-right">Action</th>
@@ -1144,6 +1293,11 @@ function ExecutiveRealDashboard({
                       </span>
                     </td>
                     <td className="py-3 px-3 text-center">
+                      <span className="bg-amber-500/10 text-amber-400 font-bold px-2 py-0.5 rounded border border-amber-500/20">
+                        {m.pending}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-center">
                       <span className="bg-rose-500/10 text-rose-400 font-bold px-2 py-0.5 rounded border border-rose-500/20">
                         {m.blocked}
                       </span>
@@ -1158,7 +1312,7 @@ function ExecutiveRealDashboard({
                 ))}
                 {memberPerformanceList.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-xs text-[#94a3b8]">
+                    <td colSpan={7} className="py-6 text-center text-xs text-[#94a3b8]">
                       No team members match your search query
                     </td>
                   </tr>
@@ -1170,11 +1324,11 @@ function ExecutiveRealDashboard({
       </div>
 
       {/* 5. Interactive Task Inspection List */}
-      <div className="bg-[#161726] border border-[#25273e] rounded-xl p-5 shadow-md space-y-4">
+      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-white tracking-tight">Interactive Task Inspection</h3>
-            <p className="text-xs text-[#94a3b8]">Review real task statuses, codes, priorities and blocker reasons</p>
+            <h3 className="text-base font-bold text-foreground tracking-tight">Interactive Task Inspection</h3>
+            <p className="text-xs text-muted-foreground">Review real task statuses, codes, priorities and blocker reasons</p>
           </div>
           <div className="flex items-center gap-2">
             {(["all", "Completed", "In Progress", "Blocked", "Pending"] as const).map((st) => (
@@ -1185,8 +1339,8 @@ function ExecutiveRealDashboard({
                 onClick={() => setTaskFilter(st)}
                 className={`h-7 text-xs ${
                   taskFilter === st
-                    ? "bg-indigo-600 text-white"
-                    : "bg-[#121320] border-[#25273e] text-[#94a3b8] hover:text-white"
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "bg-background border-input text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {st}
@@ -1199,27 +1353,27 @@ function ExecutiveRealDashboard({
           {inspectedTasks.slice(0, 14).map((t) => (
             <div
               key={t.id}
-              className="bg-[#121320] border border-[#25273e] rounded-xl p-3 space-y-2 hover:border-[#313454] transition-all text-xs"
+              className="bg-background border border-border rounded-xl p-3 space-y-2 hover:border-primary/50 transition-all text-xs"
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 font-medium text-white">
-                  <span className="font-mono text-indigo-400 font-bold">{t.task_code}</span>
-                  <span className="truncate max-w-[220px]">{t.task_name}</span>
+                <div className="flex items-center gap-2 font-medium text-foreground">
+                  <span className="font-mono text-primary font-bold">{t.task_code}</span>
+                  <span className="truncate max-w-[220px] font-semibold text-foreground">{t.task_name}</span>
                 </div>
                 <Badge
-                  variant="secondary"
+                  variant="outline"
                   className={
                     t.status === "Completed"
-                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-semibold text-[10px]"
                       : t.status === "Blocked"
-                      ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
-                      : "bg-blue-500/10 text-blue-400 border border-blue-500/30"
+                      ? "bg-rose-500/10 text-rose-400 border-rose-500/30 font-semibold text-[10px]"
+                      : "bg-indigo-500/10 text-indigo-300 border-indigo-500/30 font-semibold text-[10px]"
                   }
                 >
                   {t.status}
                 </Badge>
               </div>
-              <div className="flex flex-wrap items-center justify-between text-[11px] text-[#94a3b8]">
+              <div className="flex flex-wrap items-center justify-between text-[11px] text-muted-foreground">
                 <span>Project: {t.project_name || "General"}</span>
                 <span>Priority: {t.priority}</span>
               </div>
@@ -1231,12 +1385,34 @@ function ExecutiveRealDashboard({
             </div>
           ))}
           {inspectedTasks.length === 0 && (
-            <div className="col-span-2 py-6 text-center text-xs text-[#94a3b8]">
+            <div className="col-span-2 py-6 text-center text-xs text-muted-foreground">
               No tasks found under filter "{taskFilter}"
             </div>
           )}
         </div>
       </div>
+
+      {/* Status Details Full Page View Modal */}
+      <StatusDetailSheet
+        status={selectedStatusDetails}
+        onClose={() => setSelectedStatusDetails(null)}
+        profiles={profiles}
+        tasks={filteredTasks}
+        allTasks={tasks}
+        projects={projects}
+        range={range}
+        onSelectMember={onSelectMember}
+      />
+
+      {/* Task Aging Bucket Details Full Page View Modal */}
+      <TaskAgingDetailSheet
+        bucket={selectedAgingBucket}
+        onClose={() => setSelectedAgingBucket(null)}
+        profiles={profiles}
+        tasks={filteredTasks}
+        projects={projects}
+        onSelectMember={onSelectMember}
+      />
     </div>
   );
 }
@@ -1266,12 +1442,14 @@ function MultiSelectFilterPopover({
     }
   };
 
+  const pluralLabel = label.toLowerCase().endsWith("s") ? `${label}es` : `${label}s`;
+
   const displayText =
     selectedValues.length === 0
-      ? `All ${label}s`
+      ? `All ${pluralLabel}`
       : selectedValues.length === options.length
-      ? `All ${label}s`
-      : `${selectedValues.length} ${label}${selectedValues.length > 1 ? "s" : ""}`;
+      ? `All ${pluralLabel}`
+      : `${selectedValues.length} ${label}${selectedValues.length > 1 ? (label.toLowerCase().endsWith("s") ? "es" : "s") : ""}`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -1286,13 +1464,11 @@ function MultiSelectFilterPopover({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-52 p-2 bg-[#161726] border-[#25273e] text-white shadow-2xl z-[100]"
+        className="w-52 p-2 bg-[#161726] border-[#25273e] text-white shadow-2xl z-[9999]"
         align="start"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between border-b border-[#25273e] pb-1.5 mb-1.5 px-1">
-          <span className="text-[11px] font-bold text-[#94a3b8] uppercase">{label}s</span>
+          <span className="text-[11px] font-bold text-[#94a3b8] uppercase">{pluralLabel}</span>
           {selectedValues.length > 0 && (
             <button
               type="button"
@@ -1330,7 +1506,9 @@ function MultiSelectFilterPopover({
 /*            INTERACTIVE MEMBER DRILLDOWN SHEET / DRAWER COMPONENT          */
 /* -------------------------------------------------------------------------- */
 
-function MemberDetailSheet({
+export const ExecutiveMemberInspectionDrawer = MemberDetailSheet;
+
+export function MemberDetailSheet({
   memberId,
   onClose,
   profiles,
@@ -1349,6 +1527,7 @@ function MemberDetailSheet({
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [drawerRange, setDrawerRange] = useState("all");
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [dateSortOrder, setDateSortOrder] = useState<"desc" | "asc">("desc");
 
   const statusOptions = [
     { id: "In Progress", label: "In Progress" },
@@ -1369,34 +1548,31 @@ function MemberDetailSheet({
 
   const availableDrawerProjects = useMemo(() => {
     const map = new Map<string, { id: string; label: string }>();
-
-    // 1. Add projects directly from member's tasks (e.g. TicketTape, TerraCognita)
-    memberTasks.forEach((t) => {
-      if (t.project_name?.trim()) {
-        const name = t.project_name.trim();
-        const key = name.toLowerCase();
-        if (!map.has(key)) {
-          map.set(key, { id: name, label: name });
+    const addName = (rawName: string) => {
+      rawName.split("|").forEach((part) => {
+        const name = part.trim();
+        if (name) {
+          const key = name.toLowerCase();
+          if (!map.has(key)) {
+            map.set(key, { id: name, label: name });
+          }
         }
-      }
+      });
+    };
+
+    memberTasks.forEach((t) => {
+      if (t.project_name?.trim()) addName(t.project_name.trim());
     });
 
-    // 2. Add projects from master projects list
     projects.forEach((p) => {
-      if (p.name?.trim()) {
-        const name = p.name.trim();
-        const key = name.toLowerCase();
-        if (!map.has(key)) {
-          map.set(key, { id: name, label: name });
-        }
-      }
+      if (p.name?.trim()) addName(p.name.trim());
     });
 
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [memberTasks, projects]);
 
   const filteredTasks = useMemo(() => {
-    return memberTasks.filter((t) => {
+    const list = memberTasks.filter((t) => {
       // 1. Search text filter
       const matchSearch =
         !taskSearch.trim() ||
@@ -1411,7 +1587,7 @@ function MemberDetailSheet({
       // 3. Multi-select Project filter
       const matchProject =
         selectedProjects.length === 0 ||
-        (t.project_name && selectedProjects.some((sp) => sp.toLowerCase() === t.project_name?.toLowerCase())) ||
+        (t.project_name && selectedProjects.some((sp) => t.project_name?.split("|").some((part) => part.trim().toLowerCase() === sp.toLowerCase()))) ||
         (t.project_id && selectedProjects.includes(t.project_id));
 
       // 4. Range filter (Today, 7d, 14d, 30d, 90d, All Time)
@@ -1432,7 +1608,14 @@ function MemberDetailSheet({
 
       return matchSearch && matchStatus && matchProject && matchRange;
     });
-  }, [memberTasks, taskSearch, selectedStatuses, selectedProjects, drawerRange]);
+
+    // Date-wise sorting (Newest / Oldest)
+    return list.sort((a, b) => {
+      const timeA = new Date(a.due_date || a.completed_at || a.created_at || 0).getTime();
+      const timeB = new Date(b.due_date || b.completed_at || b.created_at || 0).getTime();
+      return dateSortOrder === "desc" ? timeB - timeA : timeA - timeB;
+    });
+  }, [memberTasks, taskSearch, selectedStatuses, selectedProjects, drawerRange, dateSortOrder]);
 
   const memberCheckins = useMemo(() => {
     if (!memberId) return [];
@@ -1462,40 +1645,52 @@ function MemberDetailSheet({
   if (!memberId || !member) return null;
 
   return (
-    <Sheet open={!!memberId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-2xl overflow-y-auto bg-[#0f101d] border-l border-[#25273e] text-[#e2e8f0] p-6 space-y-6"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
-      >
-        <SheetHeader className="space-y-3 border-b border-[#25273e] pb-4">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-14 w-14 border-2 border-indigo-500">
-              {member.avatar_url ? (
-                <AvatarImage src={member.avatar_url} alt={member.display_name} />
-              ) : (
-                <AvatarFallback className="bg-[#272942] text-white text-lg font-bold">
-                  {member.display_name.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              )}
-            </Avatar>
-            <div className="space-y-0.5">
-              <SheetTitle className="text-xl font-bold text-white flex items-center gap-2">
-                {member.display_name}
-                <Badge variant="outline" className="text-xs bg-[#241f3d] text-indigo-300 border-indigo-500/30">
-                  Team Member
-                </Badge>
-              </SheetTitle>
-              <SheetDescription className="text-xs text-[#94a3b8] flex items-center gap-3">
-                <span className="flex items-center gap-1">
-                  <Mail className="h-3.5 w-3.5 text-indigo-400" />
-                  {member.email || `${member.display_name.toLowerCase().replace(/\s+/g, ".")}@example.com`}
-                </span>
-              </SheetDescription>
-            </div>
+    <div className="fixed inset-0 z-40 w-full h-full min-h-screen bg-[#080914] overflow-y-auto text-[#e2e8f0] p-4 md:p-8 space-y-6 flex flex-col">
+      {/* Top Page Header Navigation */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#25273e] pb-4">
+        <div className="flex items-center gap-4">
+          <Button
+            size="sm"
+            onClick={onClose}
+            className="bg-[#181a2e] border border-[#2e3150] text-white hover:bg-indigo-600 transition-all gap-2 text-xs font-semibold px-3 py-2 shadow-lg"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+          </Button>
+          <div className="h-6 w-[1px] bg-[#25273e]" />
+          <Avatar className="h-12 w-12 border-2 border-indigo-500">
+            {member.avatar_url ? (
+              <AvatarImage src={member.avatar_url} alt={member.display_name} />
+            ) : (
+              <AvatarFallback className="bg-[#272942] text-white text-lg font-bold">
+                {member.display_name.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            )}
+          </Avatar>
+          <div className="space-y-0.5">
+            <h1 className="text-xl font-bold text-white flex items-center gap-2">
+              {member.display_name}
+              <Badge variant="outline" className="text-xs bg-[#241f3d] text-indigo-300 border-indigo-500/30">
+                Team Member Full Inspection
+              </Badge>
+            </h1>
+            <p className="text-xs text-[#94a3b8] flex items-center gap-3">
+              <span className="flex items-center gap-1">
+                <Mail className="h-3.5 w-3.5 text-indigo-400" />
+                {member.email || `${member.display_name.toLowerCase().replace(/\s+/g, ".")}@example.com`}
+              </span>
+            </p>
           </div>
-        </SheetHeader>
+        </div>
+
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onClose}
+          className="h-8 w-8 p-0 rounded-full text-slate-400 hover:text-white hover:bg-[#1a1c30]"
+        >
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
 
         {/* Member Filters Bar (Range, Project, Status & Search) */}
         <div className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-2">
@@ -1507,7 +1702,7 @@ function MemberDetailSheet({
               <SelectTrigger className="h-7 w-28 text-xs bg-[#121320] border-[#25273e] text-white">
                 <SelectValue placeholder="Timeframe" />
               </SelectTrigger>
-              <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white">
+              <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white z-[9999]">
                 <SelectItem value="all">All Time</SelectItem>
                 <SelectItem value="1">Today</SelectItem>
                 <SelectItem value="7">7 Days</SelectItem>
@@ -1530,6 +1725,25 @@ function MemberDetailSheet({
               onChange={setSelectedStatuses}
             />
 
+            <Select value={dateSortOrder} onValueChange={(v) => setDateSortOrder(v as "desc" | "asc")}>
+              <SelectTrigger className="h-7 w-[138px] text-xs bg-[#121320] border-[#25273e] text-white font-medium gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                <span>{dateSortOrder === "desc" ? "Newest Date" : "Oldest Date"}</span>
+              </SelectTrigger>
+              <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white z-[9999]">
+                <SelectItem value="desc">
+                  <div className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-indigo-400" /> Newest Date
+                  </div>
+                </SelectItem>
+                <SelectItem value="asc">
+                  <div className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-indigo-400" /> Oldest Date
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
             <Input
               placeholder="Search tasks..."
               value={taskSearch}
@@ -1551,7 +1765,7 @@ function MemberDetailSheet({
           </div>
           <div className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-1">
             <div className="text-[11px] font-medium text-[#94a3b8]">Work Hours</div>
-            <div className="text-xl font-bold text-indigo-300">{stats.actualHours}h / {stats.plannedHours}h</div>
+            <div className="text-xl font-bold text-indigo-300">{formatHoursMins(stats.actualHours)} / {formatHoursMins(stats.plannedHours)}</div>
           </div>
           <div className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-1">
             <div className="text-[11px] font-medium text-[#94a3b8]">Active Blockers</div>
@@ -1584,7 +1798,7 @@ function MemberDetailSheet({
             <h4 className="text-xs font-bold uppercase tracking-wider text-[#94a3b8] flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Member Tasks ({filteredTasks.length})
             </h4>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Input
                 placeholder="Search tasks..."
                 value={taskSearch}
@@ -1603,6 +1817,24 @@ function MemberDetailSheet({
                 selectedValues={selectedStatuses}
                 onChange={setSelectedStatuses}
               />
+              <Select value={dateSortOrder} onValueChange={(v) => setDateSortOrder(v as "desc" | "asc")}>
+                <SelectTrigger className="h-7 w-[138px] text-xs bg-[#161726] border-[#25273e] text-white font-medium gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                  <span>{dateSortOrder === "desc" ? "Newest Date" : "Oldest Date"}</span>
+                </SelectTrigger>
+                <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white z-[9999]">
+                  <SelectItem value="desc">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarDays className="h-3.5 w-3.5 text-indigo-400" /> Newest Date
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="asc">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarDays className="h-3.5 w-3.5 text-indigo-400" /> Oldest Date
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -1610,28 +1842,39 @@ function MemberDetailSheet({
             <div className="max-h-64 overflow-y-auto divide-y divide-[#25273e]/50">
               {filteredTasks.length > 0 ? (
                 filteredTasks.map((t) => (
-                  <div key={t.id} className="p-3 hover:bg-[#1f2136] transition-colors space-y-1 text-xs">
+                  <div key={t.id} className="p-3 hover:bg-[#1f2136] transition-colors space-y-1.5 text-xs">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 font-medium text-white">
-                        <span className="font-mono text-indigo-400 text-[11px]">{t.task_code}</span>
-                        <span>{t.task_name}</span>
+                      <div className="flex items-center gap-2 font-medium text-white min-w-0">
+                        <span className="font-mono text-indigo-400 text-[11px] font-bold shrink-0">{t.task_code}</span>
+                        <span className="truncate">{t.task_name}</span>
                       </div>
                       <Badge
                         variant="secondary"
-                        className={
+                        className={cn(
+                          "shrink-0 font-semibold px-2 py-0.5 text-[10px]",
                           t.status === "Completed"
                             ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
                             : t.status === "Blocked"
                             ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
                             : "bg-indigo-500/10 text-indigo-300 border border-indigo-500/30"
-                        }
+                        )}
                       >
                         {t.status}
                       </Badge>
                     </div>
-                    <div className="flex flex-wrap items-center justify-between text-[11px] text-[#94a3b8] pt-1">
-                      <span>Project: {t.project_name || "General"}</span>
-                      <span>Hours: {t.actual_hours ?? 0}h / {t.planned_hours ?? 0}h</span>
+                    <div className="flex flex-wrap items-center justify-between text-[11px] text-[#94a3b8] pt-0.5 gap-2">
+                      <span className="flex items-center gap-1">
+                        <Briefcase className="h-3 w-3 text-slate-500" /> {t.project_name || "General"}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-indigo-300 font-mono flex items-center gap-1 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 text-[10px]">
+                          <Calendar className="h-3 w-3 text-indigo-400" />
+                          {formatDate(t.due_date || t.completed_at || t.created_at)}
+                        </span>
+                        <span className="font-mono text-slate-300">
+                          Hours: <strong>{formatHoursMins(t.actual_hours ?? 0)}</strong> / {formatHoursMins(t.planned_hours ?? 0)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -1662,8 +1905,7 @@ function MemberDetailSheet({
             )}
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+    </div>
   );
 }
 
@@ -2230,5 +2472,976 @@ function ExecutiveInsights({ s }: { s: ExecSummary }) {
         </div>
       </Card>
     </Section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*            STATUS DETAIL FULL PAGE VIEW COMPONENT                          */
+/* -------------------------------------------------------------------------- */
+
+function StatusDetailSheet({
+  status,
+  onClose,
+  profiles,
+  tasks,
+  allTasks,
+  projects,
+  range = "7",
+  onSelectMember,
+}: {
+  status: "Completed" | "In Progress" | "Blocked" | "Pending" | null;
+  onClose: () => void;
+  profiles: Profile[];
+  tasks: Task[];
+  allTasks: Task[];
+  projects: Project[];
+  range?: string;
+  onSelectMember: (memberId: string) => void;
+}) {
+  const [useAllTime, setUseAllTime] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<string | null>(null);
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+
+  const activeSourceTasks = useAllTime ? allTasks : tasks;
+
+  const profilesMap = useMemo(() => {
+    const map = new Map<string, Profile>();
+    profiles.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [profiles]);
+
+  const statusTasks = useMemo(() => {
+    if (!status) return [];
+    if (status === "Pending") {
+      return activeSourceTasks.filter(
+        (t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked",
+      );
+    }
+    return activeSourceTasks.filter((t) => t.status === status);
+  }, [activeSourceTasks, status]);
+
+  const availableProjectsInStatus = useMemo(() => {
+    const set = new Set<string>();
+    statusTasks.forEach((t) => {
+      if (t.project_name?.trim()) {
+        t.project_name.split("|").forEach((part) => {
+          const name = part.trim();
+          if (name) set.add(name);
+        });
+      }
+    });
+    return Array.from(set).sort();
+  }, [statusTasks]);
+
+  const filteredTasks = useMemo(() => {
+    return statusTasks.filter((t) => {
+      const assigned = t.assigned_to ? profilesMap.get(t.assigned_to)?.display_name ?? "" : "";
+      const matchSearch =
+        !search.trim() ||
+        t.task_name.toLowerCase().includes(search.toLowerCase()) ||
+        t.task_code.toLowerCase().includes(search.toLowerCase()) ||
+        (t.project_name && t.project_name.toLowerCase().includes(search.toLowerCase())) ||
+        assigned.toLowerCase().includes(search.toLowerCase()) ||
+        (t.blocker_reason && t.blocker_reason.toLowerCase().includes(search.toLowerCase()));
+
+      const matchProject =
+        !selectedProjectFilter ||
+        (t.project_name &&
+          t.project_name
+            .split("|")
+            .some((part) => part.trim().toLowerCase() === selectedProjectFilter.toLowerCase())) ||
+        t.project_id === selectedProjectFilter;
+
+      const matchPriority = priorityFilter === "all" || t.priority === priorityFilter;
+
+      return matchSearch && matchProject && matchPriority;
+    });
+  }, [statusTasks, search, selectedProjectFilter, priorityFilter, profilesMap]);
+
+  const summary = useMemo(() => {
+    const total = filteredTasks.length;
+    const plannedHours = filteredTasks.reduce((s, t) => s + Number(t.planned_hours ?? 0), 0);
+    const actualHours = filteredTasks.reduce((s, t) => s + Number(t.actual_hours ?? 0), 0);
+    const uniqueMembers = new Set(filteredTasks.map((t) => t.assigned_to).filter(Boolean)).size;
+    const uniqueProjects = new Set(filteredTasks.map((t) => t.project_name).filter(Boolean)).size;
+    const highPriorityCount = filteredTasks.filter((t) => t.priority === "High").length;
+
+    return { total, plannedHours, actualHours, uniqueMembers, uniqueProjects, highPriorityCount };
+  }, [filteredTasks]);
+
+  if (!status) return null;
+
+  const headerConfig = {
+    Completed: {
+      title: "Completed Tasks — Full Page Details & Audit",
+      badge: "Completed",
+      badgeCls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+      icon: CheckCircle2,
+      iconCls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+    },
+    "In Progress": {
+      title: "In Progress Tasks — Active Operations & Tracking",
+      badge: "Active Work",
+      badgeCls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/40",
+      icon: Clock,
+      iconCls: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30",
+    },
+    Blocked: {
+      title: "Blocked Tasks & Risk Analysis Page",
+      badge: "Risk Alert",
+      badgeCls: "bg-rose-500/20 text-rose-400 border-rose-500/40",
+      icon: AlertOctagon,
+      iconCls: "text-rose-400 bg-rose-500/10 border-rose-500/30",
+    },
+    Pending: {
+      title: "Pending Queue — Work Backlog & Assignments",
+      badge: "To Do & Review",
+      badgeCls: "bg-amber-500/20 text-amber-400 border-amber-500/40",
+      icon: Users,
+      iconCls: "text-amber-400 bg-amber-500/10 border-amber-500/30",
+    },
+  }[status];
+
+  const IconComp = headerConfig.icon;
+
+  return (
+    <div className="fixed inset-0 z-50 w-full h-full bg-[#080914] overflow-y-auto text-[#e2e8f0] p-4 md:p-8 space-y-6 flex flex-col">
+      {/* Top Page Header Navigation */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#25273e] pb-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <Button
+            size="sm"
+            onClick={onClose}
+            className="bg-[#181a2e] border border-[#2e3150] text-white hover:bg-indigo-600 transition-all gap-2 text-xs font-semibold px-3 py-2 shadow-lg"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+          </Button>
+          <div className="h-6 w-[1px] bg-[#25273e]" />
+          <div className="flex items-center gap-2">
+            <div className={cn("h-9 w-9 rounded-lg border flex items-center justify-center shrink-0", headerConfig.iconCls)}>
+              <IconComp className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-lg md:text-xl font-black text-white flex items-center gap-2">
+                {headerConfig.title}
+                <Badge variant="outline" className={cn("text-xs", headerConfig.badgeCls)}>
+                  {headerConfig.badge}
+                </Badge>
+              </h1>
+              <p className="text-xs text-[#94a3b8]">
+                Complete full page inspection for all {filteredTasks.length} tasks under {status} status
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onClose}
+          className="h-8 w-8 p-0 rounded-full text-slate-400 hover:text-white hover:bg-[#1a1c30]"
+        >
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
+
+      {/* KPI Cards Row (Full Page Width) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 shrink-0">
+        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Tasks</div>
+          <div className="text-2xl font-black text-foreground">{summary.total}</div>
+          <div className="text-[11px] text-muted-foreground">Filtered items count</div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Work Hours</div>
+          <div className="text-2xl font-black text-primary">{summary.actualHours}h <span className="text-xs text-muted-foreground font-normal">/ {summary.plannedHours}h plan</span></div>
+          <div className="text-[11px] text-muted-foreground">Actual vs Planned logged</div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Assigned Team</div>
+          <div className="text-2xl font-black text-emerald-400">{summary.uniqueMembers}</div>
+          <div className="text-[11px] text-muted-foreground">Active team members</div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Projects</div>
+          <div className="text-2xl font-black text-amber-400">{summary.uniqueProjects}</div>
+          <div className="text-[11px] text-muted-foreground">Active projects</div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">High Priority</div>
+          <div className="text-2xl font-black text-rose-400">{summary.highPriorityCount}</div>
+          <div className="text-[11px] text-muted-foreground">High urgency items</div>
+        </div>
+      </div>
+
+      {/* Advanced Filters & View Mode Switcher Toolbar */}
+      <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm shrink-0">
+        <div className="flex flex-wrap items-center gap-3 flex-1">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by code, title, member, project or blocker..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-9 text-xs bg-background border-input text-foreground focus:border-ring"
+            />
+          </div>
+
+          <Select value={selectedProjectFilter || "all"} onValueChange={(v) => setSelectedProjectFilter(v === "all" ? null : v)}>
+            <SelectTrigger className="h-9 w-44 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+              <SelectValue placeholder="All Projects" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+              <SelectItem value="all">All Projects</SelectItem>
+              {availableProjectsInStatus.map((p) => (
+                <SelectItem key={p} value={p}>{p}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <SelectTrigger className="h-9 w-36 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="High">High Priority</SelectItem>
+              <SelectItem value="Medium">Medium Priority</SelectItem>
+              <SelectItem value="Low">Low Priority</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {(search || selectedProjectFilter || priorityFilter !== "all") && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSearch("");
+                setSelectedProjectFilter(null);
+                setPriorityFilter("all");
+              }}
+              className="h-9 text-xs text-indigo-400 hover:text-white"
+            >
+              Reset Filters
+            </Button>
+          )}
+        </div>
+
+        {/* View Mode Toggle & Scope Mode Toggle */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 bg-[#0b0c18] border border-[#22243d] p-1 rounded-lg">
+            <Button
+              size="sm"
+              variant={!useAllTime ? "default" : "ghost"}
+              onClick={() => setUseAllTime(false)}
+              className={`h-7 text-xs px-2.5 ${!useAllTime ? "bg-indigo-600 text-white font-bold" : "text-[#94a3b8]"}`}
+            >
+              Active Dashboard Scope ({tasks.length})
+            </Button>
+            <Button
+              size="sm"
+              variant={useAllTime ? "default" : "ghost"}
+              onClick={() => setUseAllTime(true)}
+              className={`h-7 text-xs px-2.5 ${useAllTime ? "bg-indigo-600 text-white font-bold" : "text-[#94a3b8]"}`}
+            >
+              All Time ({allTasks.length})
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1 bg-[#0b0c18] border border-[#22243d] p-1 rounded-lg">
+            <Button
+              size="sm"
+              variant={viewMode === "table" ? "default" : "ghost"}
+              onClick={() => setViewMode("table")}
+              className={`h-7 text-xs px-3 gap-1.5 ${viewMode === "table" ? "bg-indigo-600 text-white" : "text-[#94a3b8]"}`}
+            >
+              <Table className="h-3.5 w-3.5" /> Table View
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === "grid" ? "default" : "ghost"}
+              onClick={() => setViewMode("grid")}
+              className={`h-7 text-xs px-3 gap-1.5 ${viewMode === "grid" ? "bg-indigo-600 text-white" : "text-[#94a3b8]"}`}
+            >
+              <Grid className="h-3.5 w-3.5" /> Grid View
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Full Page Task Details Content */}
+      {viewMode === "table" ? (
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm flex-1 mb-8">
+          <div className="max-h-[60vh] overflow-y-auto overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 bg-muted/40 z-10 shadow-sm">
+                <tr className="border-b border-border text-muted-foreground uppercase tracking-wider text-[11px]">
+                  <th className="py-3.5 px-4 font-bold bg-muted/40">Code</th>
+                  <th className="py-3.5 px-4 font-bold bg-muted/40">Task Name & Details</th>
+                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Assigned Member</th>
+                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Project</th>
+                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Priority</th>
+                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Logged / Plan</th>
+                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Due Date</th>
+                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Blocker / Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#22243d]/60">
+                {filteredTasks.map((t) => {
+                  const profile = t.assigned_to ? profilesMap.get(t.assigned_to) : null;
+                  return (
+                    <tr key={t.id} className="hover:bg-[#181a30] transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-black text-indigo-400">
+                        {t.task_code}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-white max-w-xs">
+                        <div className="font-bold text-sm text-slate-100">{t.task_name}</div>
+                        {t.remarks && <div className="text-[11px] text-[#64748b] truncate mt-0.5">{t.remarks}</div>}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {profile ? (
+                          <div
+                            onClick={() => onSelectMember(profile.id)}
+                            className="flex items-center gap-2 cursor-pointer group hover:text-indigo-300 transition-colors"
+                          >
+                            <Avatar className="h-7 w-7 border border-indigo-500/40">
+                              {profile.avatar_url ? (
+                                <AvatarImage src={profile.avatar_url} alt={profile.display_name} />
+                              ) : (
+                                <AvatarFallback className="bg-[#252845] text-white text-xs font-bold">
+                                  {profile.display_name.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              )}
+                            </Avatar>
+                            <span className="font-semibold text-slate-200 group-hover:underline">
+                              {profile.display_name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[#64748b] italic">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-slate-300">
+                        {t.project_name || "General Workspace"}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] px-2 py-0.5 font-bold",
+                            t.priority === "High"
+                              ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                              : t.priority === "Medium"
+                              ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                              : "bg-slate-500/10 text-slate-400 border-slate-500/30"
+                          )}
+                        >
+                          {t.priority}
+                        </Badge>
+                      </td>
+                      <td className="py-3.5 px-4 font-medium">
+                        <span className="text-emerald-400 font-bold">{t.actual_hours ?? 0}h</span>
+                        <span className="text-[#64748b]"> / {t.planned_hours ?? 0}h</span>
+                      </td>
+                      <td className="py-3.5 px-4 text-[#94a3b8]">
+                        {t.due_date ? new Date(t.due_date).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="py-3.5 px-4 max-w-xs">
+                        {t.status === "Blocked" && t.blocker_reason ? (
+                          <span className="bg-rose-500/10 text-rose-300 border border-rose-500/30 px-2 py-1 rounded text-[11px] font-medium block">
+                            🚨 {t.blocker_reason}
+                          </span>
+                        ) : (
+                          <span className="text-[#64748b] truncate block">{t.remarks || "—"}</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredTasks.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-slate-400 text-sm italic">
+                      No tasks found matching your search or filters under {status} status.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
+          {filteredTasks.map((t) => {
+            const profile = t.assigned_to ? profilesMap.get(t.assigned_to) : null;
+            return (
+              <div
+                key={t.id}
+                className="bg-[#121324] border border-[#22243d] hover:border-indigo-500/50 rounded-xl p-5 space-y-4 shadow-md transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-indigo-400 font-black text-xs px-2.5 py-1 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+                      {t.task_code}
+                    </span>
+                    <Badge
+                      className={cn(
+                        "text-xs px-2.5 py-0.5 font-bold",
+                        t.status === "Completed"
+                          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                          : t.status === "Blocked"
+                          ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                          : t.status === "In Progress"
+                          ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/40"
+                          : "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                      )}
+                    >
+                      {t.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-white">{t.task_name}</h3>
+                    <p className="text-xs text-[#94a3b8] mt-1">{t.project_name || "General Workspace"}</p>
+                  </div>
+                  {t.status === "Blocked" && t.blocker_reason && (
+                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 text-xs text-rose-300 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-rose-400">
+                        <AlertOctagon className="h-4 w-4 shrink-0" /> Blocker Reason:
+                      </div>
+                      <p>{t.blocker_reason}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-[#22243d] flex items-center justify-between text-xs">
+                  {profile ? (
+                    <div
+                      onClick={() => onSelectMember(profile.id)}
+                      className="flex items-center gap-2 cursor-pointer group hover:text-indigo-300"
+                    >
+                      <Avatar className="h-7 w-7 border border-indigo-500/40">
+                        {profile.avatar_url ? (
+                          <AvatarImage src={profile.avatar_url} alt={profile.display_name} />
+                        ) : (
+                          <AvatarFallback className="bg-[#252845] text-white text-xs font-bold">
+                            {profile.display_name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <span className="font-semibold text-slate-200 group-hover:underline">
+                        {profile.display_name}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[#64748b] italic">Unassigned</span>
+                  )}
+                  <div className="text-right">
+                    <div className="font-bold text-white">{t.actual_hours ?? 0}h / {t.planned_hours ?? 0}h</div>
+                    <div className="text-[10px] text-[#64748b]">Logged / Plan</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {filteredTasks.length === 0 && (
+            <div className="col-span-full py-12 text-center text-slate-400 text-sm italic">
+              No tasks found matching your search or filters under {status} status.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*            TASK AGING BUCKET DETAILS INSPECTION MODAL                      */
+/* -------------------------------------------------------------------------- */
+
+function TaskAgingDetailSheet({
+  bucket,
+  onClose,
+  profiles,
+  tasks,
+  projects,
+  onSelectMember,
+}: {
+  bucket: "0-3d" | "4-7d" | "8-14d" | "15d+" | null;
+  onClose: () => void;
+  profiles: Profile[];
+  tasks: Task[];
+  projects: Project[];
+  onSelectMember: (memberId: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<string | null>(null);
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+
+  const profilesMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
+
+  // Filter tasks belonging to the selected age bucket
+  const bucketTasks = useMemo(() => {
+    if (!bucket) return [];
+    const now = Date.now();
+    return tasks.filter((t) => {
+      if (t.status === "Completed") return false;
+      const createdTime = new Date(t.created_at).getTime();
+      const age = Math.floor((now - createdTime) / 86400000);
+      if (bucket === "0-3d") return age <= 3;
+      if (bucket === "4-7d") return age > 3 && age <= 7;
+      if (bucket === "8-14d") return age > 7 && age <= 14;
+      if (bucket === "15d+") return age > 14;
+      return false;
+    });
+  }, [tasks, bucket]);
+
+  // Extract projects available in this bucket
+  const availableProjects = useMemo(() => {
+    const set = new Set<string>();
+    bucketTasks.forEach((t) => {
+      if (t.project_name?.trim()) {
+        t.project_name.split("|").forEach((part) => {
+          const name = part.trim();
+          if (name) set.add(name);
+        });
+      }
+    });
+    return Array.from(set).sort();
+  }, [bucketTasks]);
+
+  // Apply sub-filters inside modal
+  const filteredTasks = useMemo(() => {
+    return bucketTasks.filter((t) => {
+      const assigned = t.assigned_to ? profilesMap.get(t.assigned_to)?.display_name ?? "" : "";
+      const matchSearch =
+        !search.trim() ||
+        t.task_name.toLowerCase().includes(search.toLowerCase()) ||
+        t.task_code.toLowerCase().includes(search.toLowerCase()) ||
+        (t.project_name && t.project_name.toLowerCase().includes(search.toLowerCase())) ||
+        assigned.toLowerCase().includes(search.toLowerCase()) ||
+        (t.blocker_reason && t.blocker_reason.toLowerCase().includes(search.toLowerCase()));
+
+      const matchProject =
+        !selectedProjectFilter ||
+        (t.project_name &&
+          t.project_name
+            .split("|")
+            .some((part) => part.trim().toLowerCase() === selectedProjectFilter.toLowerCase())) ||
+        t.project_id === selectedProjectFilter;
+
+      const matchPriority = priorityFilter === "all" || t.priority === priorityFilter;
+      const matchStatus = statusFilter === "all" || t.status === statusFilter;
+
+      return matchSearch && matchProject && matchPriority && matchStatus;
+    });
+  }, [bucketTasks, search, selectedProjectFilter, priorityFilter, statusFilter, profilesMap]);
+
+  const summary = useMemo(() => {
+    const total = filteredTasks.length;
+    const plannedHours = filteredTasks.reduce((s, t) => s + Number(t.planned_hours ?? 0), 0);
+    const actualHours = filteredTasks.reduce((s, t) => s + Number(t.actual_hours ?? 0), 0);
+    const uniqueMembers = new Set(filteredTasks.map((t) => t.assigned_to).filter(Boolean)).size;
+    const highPriorityCount = filteredTasks.filter((t) => t.priority === "High").length;
+    const blockedCount = filteredTasks.filter((t) => t.status === "Blocked").length;
+
+    return { total, plannedHours, actualHours, uniqueMembers, highPriorityCount, blockedCount };
+  }, [filteredTasks]);
+
+  if (!bucket) return null;
+
+  const bucketConfig = {
+    "0-3d": {
+      title: "Fresh Open Tasks (0–3 Days Old)",
+      subtitle: "Recent incomplete tasks created within the last 3 days",
+      badge: "0-3 Days",
+      badgeCls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+    },
+    "4-7d": {
+      title: "Aging Open Tasks (4–7 Days Old)",
+      subtitle: "Active incomplete tasks in queue for 4 to 7 days",
+      badge: "4-7 Days",
+      badgeCls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/40",
+    },
+    "8-14d": {
+      title: "Delayed Tasks (8–14 Days Old)",
+      subtitle: "Older incomplete tasks requiring follow up and management review",
+      badge: "8-14 Days",
+      badgeCls: "bg-amber-500/20 text-amber-400 border-amber-500/40",
+    },
+    "15d+": {
+      title: "Critical Aged Tasks (15+ Days Old)",
+      subtitle: "Long outstanding incomplete tasks requiring immediate escalation",
+      badge: "15+ Days (Critical)",
+      badgeCls: "bg-rose-500/20 text-rose-400 border-rose-500/40",
+    },
+  }[bucket];
+
+  return (
+    <div className="fixed inset-0 z-50 w-full h-full bg-[#080914] overflow-y-auto text-[#e2e8f0] p-4 md:p-8 space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#25273e] pb-4">
+        <div className="flex items-center gap-3">
+          <Button
+            size="sm"
+            onClick={onClose}
+            className="bg-[#181a2e] border border-[#2e3150] text-white hover:bg-indigo-600 transition-all gap-2 text-xs font-semibold px-3 py-2 shadow-lg"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+          </Button>
+          <div className="h-6 w-[1px] bg-[#25273e]" />
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-lg border border-indigo-500/30 bg-indigo-500/10 flex items-center justify-center shrink-0 text-indigo-400">
+              <Hourglass className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-lg md:text-xl font-black text-white flex items-center gap-2">
+                {bucketConfig.title}
+                <Badge variant="outline" className={cn("text-xs font-bold", bucketConfig.badgeCls)}>
+                  {bucketConfig.badge}
+                </Badge>
+              </h1>
+              <p className="text-xs text-[#94a3b8]">
+                {bucketConfig.subtitle} — showing {filteredTasks.length} tasks
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onClose}
+          className="h-8 w-8 p-0 rounded-full text-slate-400 hover:text-white hover:bg-[#1a1c30]"
+        >
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
+          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">Open Tasks</div>
+          <div className="text-2xl font-black text-indigo-400">{summary.total}</div>
+          <div className="text-[11px] text-[#64748b]">In bucket {bucket}</div>
+        </div>
+        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
+          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">Logged / Plan</div>
+          <div className="text-2xl font-black text-indigo-400">{summary.actualHours}h <span className="text-xs text-[#94a3b8] font-normal">/ {summary.plannedHours}h</span></div>
+          <div className="text-[11px] text-[#64748b]">Actual vs planned hours</div>
+        </div>
+        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
+          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">Assigned Members</div>
+          <div className="text-2xl font-black text-emerald-400">{summary.uniqueMembers}</div>
+          <div className="text-[11px] text-[#64748b]">Team members assigned</div>
+        </div>
+        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
+          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">High Priority</div>
+          <div className="text-2xl font-black text-rose-400">{summary.highPriorityCount}</div>
+          <div className="text-[11px] text-[#64748b]">High priority tasks</div>
+        </div>
+        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
+          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">Blocked Tasks</div>
+          <div className="text-2xl font-black text-rose-300">{summary.blockedCount}</div>
+          <div className="text-[11px] text-[#64748b]">Tasks with blocker</div>
+        </div>
+      </div>
+
+      {/* Filters & View Toggle Bar */}
+      <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-md">
+        <div className="flex flex-wrap items-center gap-3 flex-1">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#94a3b8]" />
+            <Input
+              placeholder="Search by code, title, member, project or blocker..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-9 text-xs bg-[#0b0c18] border-[#22243d] text-white focus:border-indigo-500"
+            />
+          </div>
+
+          <Select value={selectedProjectFilter || "all"} onValueChange={(v) => setSelectedProjectFilter(v === "all" ? null : v)}>
+            <SelectTrigger className="h-9 w-44 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+              <SelectValue placeholder="All Projects" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+              <SelectItem value="all">All Projects</SelectItem>
+              {availableProjects.map((p) => (
+                <SelectItem key={p} value={p}>{p}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-9 w-36 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="In Progress">In Progress</SelectItem>
+              <SelectItem value="Blocked">Blocked</SelectItem>
+              <SelectItem value="Pending">Pending</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <SelectTrigger className="h-9 w-36 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="High">High Priority</SelectItem>
+              <SelectItem value="Medium">Medium Priority</SelectItem>
+              <SelectItem value="Low">Low Priority</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {(search || selectedProjectFilter || priorityFilter !== "all" || statusFilter !== "all") && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSearch("");
+                setSelectedProjectFilter(null);
+                setPriorityFilter("all");
+                setStatusFilter("all");
+              }}
+              className="h-9 text-xs text-indigo-400 hover:text-white"
+            >
+              Reset Filters
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 bg-[#0b0c18] border border-[#22243d] p-1 rounded-lg">
+          <Button
+            size="sm"
+            variant={viewMode === "table" ? "default" : "ghost"}
+            onClick={() => setViewMode("table")}
+            className={`h-7 text-xs px-3 gap-1.5 ${viewMode === "table" ? "bg-indigo-600 text-white font-bold" : "text-[#94a3b8]"}`}
+          >
+            <Table className="h-3.5 w-3.5" /> Table View
+          </Button>
+          <Button
+            size="sm"
+            variant={viewMode === "grid" ? "default" : "ghost"}
+            onClick={() => setViewMode("grid")}
+            className={`h-7 text-xs px-3 gap-1.5 ${viewMode === "grid" ? "bg-indigo-600 text-white font-bold" : "text-[#94a3b8]"}`}
+          >
+            <Grid className="h-3.5 w-3.5" /> Grid View
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      {viewMode === "table" ? (
+        <div className="bg-[#121324] border border-[#22243d] rounded-xl overflow-hidden shadow-xl mb-6">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-[#22243d] bg-[#0d0e1b] text-[#94a3b8] uppercase tracking-wider text-[11px]">
+                  <th className="py-3.5 px-4 font-bold">Code</th>
+                  <th className="py-3.5 px-4 font-bold">Task Name & Details</th>
+                  <th className="py-3.5 px-4 font-bold">Age (Days)</th>
+                  <th className="py-3.5 px-4 font-bold">Status</th>
+                  <th className="py-3.5 px-4 font-bold">Assigned Member</th>
+                  <th className="py-3.5 px-4 font-bold">Project</th>
+                  <th className="py-3.5 px-4 font-bold">Priority</th>
+                  <th className="py-3.5 px-4 font-bold">Logged / Plan</th>
+                  <th className="py-3.5 px-4 font-bold">Due Date</th>
+                  <th className="py-3.5 px-4 font-bold">Blocker / Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#22243d]/60">
+                {filteredTasks.map((t) => {
+                  const profile = t.assigned_to ? profilesMap.get(t.assigned_to) : null;
+                  const ageDays = Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400000);
+                  return (
+                    <tr key={t.id} className="hover:bg-[#181a30] transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-black text-indigo-400">
+                        {t.task_code}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-white max-w-xs">
+                        <div className="font-bold text-sm text-slate-100">{t.task_name}</div>
+                        {t.remarks && <div className="text-[11px] text-[#64748b] truncate mt-0.5">{t.remarks}</div>}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <Badge variant="outline" className="bg-indigo-500/10 text-indigo-300 border-indigo-500/30 text-[11px] font-bold">
+                          {ageDays} {ageDays === 1 ? "day" : "days"} old
+                        </Badge>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] px-2 py-0.5 font-bold",
+                            t.status === "Blocked"
+                              ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                              : t.status === "In Progress"
+                              ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/40"
+                              : "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                          )}
+                        >
+                          {t.status}
+                        </Badge>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {profile ? (
+                          <div
+                            onClick={() => onSelectMember(profile.id)}
+                            className="flex items-center gap-2 cursor-pointer group hover:text-indigo-300 transition-colors"
+                          >
+                            <Avatar className="h-7 w-7 border border-indigo-500/40">
+                              {profile.avatar_url ? (
+                                <AvatarImage src={profile.avatar_url} alt={profile.display_name} />
+                              ) : (
+                                <AvatarFallback className="bg-[#252845] text-white text-xs font-bold">
+                                  {profile.display_name.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              )}
+                            </Avatar>
+                            <span className="font-semibold text-slate-200 group-hover:underline">
+                              {profile.display_name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[#64748b] italic">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-slate-300">
+                        {t.project_name || "General Workspace"}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] px-2 py-0.5 font-bold",
+                            t.priority === "High"
+                              ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                              : t.priority === "Medium"
+                              ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                              : "bg-slate-500/10 text-slate-400 border-slate-500/30"
+                          )}
+                        >
+                          {t.priority}
+                        </Badge>
+                      </td>
+                      <td className="py-3.5 px-4 font-medium">
+                        <span className="text-emerald-400 font-bold">{t.actual_hours ?? 0}h</span>
+                        <span className="text-[#64748b]"> / {t.planned_hours ?? 0}h</span>
+                      </td>
+                      <td className="py-3.5 px-4 text-[#94a3b8]">
+                        {t.due_date ? new Date(t.due_date).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="py-3.5 px-4 max-w-xs">
+                        {t.status === "Blocked" && t.blocker_reason ? (
+                          <span className="bg-rose-500/10 text-rose-300 border border-rose-500/30 px-2 py-1 rounded text-[11px] font-medium block">
+                            🚨 {t.blocker_reason}
+                          </span>
+                        ) : (
+                          <span className="text-[#64748b] truncate block">{t.remarks || "—"}</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredTasks.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="py-12 text-center text-slate-400 text-sm italic">
+                      No open tasks found matching your search or filters in age bucket {bucket}.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {filteredTasks.map((t) => {
+            const profile = t.assigned_to ? profilesMap.get(t.assigned_to) : null;
+            const ageDays = Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400000);
+            return (
+              <div
+                key={t.id}
+                className="bg-[#121324] border border-[#22243d] hover:border-indigo-500/50 rounded-xl p-5 space-y-4 shadow-md transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-indigo-400 font-black text-xs px-2.5 py-1 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+                      {t.task_code}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="bg-indigo-500/10 text-indigo-300 border-indigo-500/30 text-[10px] font-bold">
+                        {ageDays}d old
+                      </Badge>
+                      <Badge
+                        className={cn(
+                          "text-xs px-2.5 py-0.5 font-bold",
+                          t.status === "Blocked"
+                            ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                            : t.status === "In Progress"
+                            ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/40"
+                            : "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                        )}
+                      >
+                        {t.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-white">{t.task_name}</h3>
+                    <p className="text-xs text-[#94a3b8] mt-1">{t.project_name || "General Workspace"}</p>
+                  </div>
+                  {t.status === "Blocked" && t.blocker_reason && (
+                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 text-xs text-rose-300 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-rose-400">
+                        <AlertOctagon className="h-4 w-4 shrink-0" /> Blocker Reason:
+                      </div>
+                      <p>{t.blocker_reason}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-[#22243d] flex items-center justify-between text-xs">
+                  {profile ? (
+                    <div
+                      onClick={() => onSelectMember(profile.id)}
+                      className="flex items-center gap-2 cursor-pointer group hover:text-indigo-300"
+                    >
+                      <Avatar className="h-7 w-7 border border-indigo-500/40">
+                        {profile.avatar_url ? (
+                          <AvatarImage src={profile.avatar_url} alt={profile.display_name} />
+                        ) : (
+                          <AvatarFallback className="bg-[#252845] text-white text-xs font-bold">
+                            {profile.display_name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <span className="font-semibold text-slate-200 group-hover:underline">
+                        {profile.display_name}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[#64748b] italic">Unassigned</span>
+                  )}
+                  <div className="text-right">
+                    <div className="font-bold text-white">{t.actual_hours ?? 0}h / {t.planned_hours ?? 0}h</div>
+                    <div className="text-[10px] text-[#64748b]">Logged / Plan</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {filteredTasks.length === 0 && (
+            <div className="col-span-full py-12 text-center text-slate-400 text-sm italic">
+              No open tasks found matching your search or filters under age bucket {bucket}.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
