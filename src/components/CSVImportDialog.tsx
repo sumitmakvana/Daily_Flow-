@@ -458,16 +458,21 @@ export function CSVImportDialog({
     if (!val) return false;
 
     const lines = val.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (lines.length <= 1) return false;
+    if (lines.length > 1) {
+      // Check for numbered list (1... and 2...)
+      const hasOne = lines.some(l => /^(1[\)\.]|\[1\])/.test(l));
+      const hasTwo = lines.some(l => /^(2[\)\.]|\[2\])/.test(l));
+      if (hasOne && hasTwo) return true;
 
-    // Check for numbered list (1... and 2...)
-    const hasOne = lines.some(l => /^(1[\)\.]|\[1\])/.test(l));
-    const hasTwo = lines.some(l => /^(2[\)\.]|\[2\])/.test(l));
-    if (hasOne && hasTwo) return true;
+      // Check for bullet list (at least two lines starting with bullet character)
+      const bulletCount = lines.filter(l => /^[-*•☐]\s+/.test(l)).length;
+      if (bulletCount >= 2) return true;
+    }
 
-    // Check for bullet list (at least two lines starting with bullet character)
-    const bulletCount = lines.filter(l => /^[-*•☐]\s+/.test(l)).length;
-    if (bulletCount >= 2) return true;
+    // Check for inline numbered list (e.g., "1) Task A 2) Task B" or "1. Task A 2. Task B")
+    if (/(?:^|\s+)1[\)\.]\s+.*?(?:\s+)2[\)\.]\s+/.test(val)) {
+      return true;
+    }
 
     return false;
   };
@@ -479,9 +484,15 @@ export function CSVImportDialog({
     if (taskDelimiter) {
       // For tasks, split only if strict numbering/bullet patterns are matched
       if (detectMultipleTasks(val)) {
-        const lines = val.split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+        let items: string[] = [];
+        if (val.includes("\n")) {
+          items = val.split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+        } else {
+          // Split inline numbers "1) ... 2) ... 3) ..."
+          items = val.split(/(?:^|\s+)(?=\d+[\)\.]\s+)/).map(p => p.trim()).filter(Boolean);
+        }
         // Clean up list markers
-        return lines.map(p => p.replace(/^(?:\d+[\)\.]|[-*•☐])\s*/, "").trim()).filter(Boolean);
+        return items.map(p => p.replace(/^(?:\d+[\)\.]|[-*•☐])\s*/, "").trim()).filter(Boolean);
       }
       // Otherwise, return as a single task
       return [val];
@@ -656,6 +667,38 @@ export function CSVImportDialog({
       let updated = 0;
       let skipped = 0;
       let rejected = 0;
+
+      // Automatically sync all unique project names from CSV into projects master table
+      const uniqueProjects = new Map<string, { name: string; client: string | null }>();
+      payload.forEach((t) => {
+        if (t.project_name?.trim()) {
+          const key = t.project_name.trim().toLowerCase();
+          if (!uniqueProjects.has(key)) {
+            uniqueProjects.set(key, { name: t.project_name.trim(), client: t.client?.trim() || null });
+          }
+        }
+      });
+
+      for (const { name: projName, client: projClient } of uniqueProjects.values()) {
+        try {
+          const { data: existing } = await supabase
+            .from("projects")
+            .select("id")
+            .ilike("name", projName)
+            .maybeSingle();
+
+          if (!existing) {
+            await supabase.from("projects").insert({
+              name: projName,
+              client: projClient,
+              status: "active",
+              sla_days: 3,
+            });
+          }
+        } catch (e) {
+          console.warn("Auto-creation of master project from CSV skipped:", projName, e);
+        }
+      }
 
       const promises = payload.map(async (task) => {
         try {

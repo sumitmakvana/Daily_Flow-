@@ -1,0 +1,490 @@
+?? DAILY TASK TRACKER — JULY 2026,,,,,,,,,,,
+Team members log their morning plan and end-of-day status here. Update daily.,,,,,,,,,,,
+,,,,,,,,,,,
+Date,Day,Employee Name,Client,Project Name,Morning Plan (What I'll work on today),? Done?,Git Pushed?,EOD Status,Tasks Completed,Pending / Carry Forward,Remarks
+"?? Wednesday, July 1",,,,,,,,,,,
+01/Jul/2026,Wed,Miraj Shah,Product,Eris,Working on Eris,?,,,,,
+01/Jul/2026,Wed,Milan Patel,XPRO AI,TicketTape,"(Continue) :
+Split and Share functionality for tickets. (Completed).",?,,,,,
+01/Jul/2026,Wed,Krupali Joshi,Eris,Recon,Understand the data and make the preprocess script for the Source For GST Payable and Receivable,?,,,,,
+01/Jul/2026,Wed,Riddhi Patel,,TerraCognita | Eris,"osm Data mining , eris QA",?,,,,,
+01/Jul/2026,Wed,Aaditya Desai,Product,TerraCognita,Beat Planning understanding,?,,,,,
+01/Jul/2026,Wed,Het Gohel,MRF,TMS,"1. Database QA Migration (Conexus)
+2. Scalability & Performance Tuning of Truck Availability (Conexus)",?,,,,,
+01/Jul/2026,Wed,Sumit Makwana,Product,Daily flow,1) Check the code implement in Keycloak auth,?,,,,,
+01/Jul/2026,Wed,Mann Shah,,,On Leave,?,,,,,
+01/Jul/2026,Wed,Meet Patel,Product,Recon,"1) setup ticket tape Organizer app.
+2) changes for the 360 view multi client",?,,,,,
+01/Jul/2026,Wed,Dharmesh Chauhan,Terra Cognita,,,?,,,,,
+01/Jul/2026,Wed,Vishwa Saraiya,,,,?,,,,,
+"?? Thursday, July 2",,,,,,,,,,,
+02/Jul/2026,Thu,Miraj Shah,Product,Eris,Working on Eris,?,,,,,
+02/Jul/2026,Thu,Milan Patel,XPRO AI,TicketTape,"1. UI Bug fixes (View and details update on Event Details Page, checkout, select tickets).
+2. Payment failure page, try again button.",?,,,,,
+02/Jul/2026,Thu,Krupali Joshi,Eris ,Recon,"MTC Recon : Check for Ingestion details 
+GST Recon : Test the preprocessing script for source validate it
+Run recon for GST Payable vs Outward data and GST Receivable vs Inward Data",?,,,,,
+02/Jul/2026,Thu,Riddhi Patel,,TerraCognita | Eris,"osm Data validation RND , eris QA",?,,,,,
+02/Jul/2026,Thu,Aaditya Desai,"MRF
+Product","Conexus
+TerraCognita","1) Create restore script for mrf qa db
+2) Beat Planning changes
+3) Cluster mode debug",?,,,,,
+02/Jul/2026,Thu,Het Gohel,MRF,TMS,"3. SSL Certificate Connection Fix  and deployment(Existing App)
+4. PWA (Progressive Web App) Manifest Integration (Conexus)",?,,,,,
+02/Jul/2026,Thu,Sumit Makwana,Product,Daily flow,1) role assign error in user create in key cloak database ,?,,,,,
+02/Jul/2026,Thu,Mann Shah,,,On Leave,?,,,,,
+02/Jul/2026,Thu,Meet Patel,Product,Recon,"1) Deploy ticket tape Organizer app. v9
+2) Changes code 360 view for clinet - 3",?,,,,,
+02/Jul/2026,Thu,Dharmesh Chauhan,,,,?,,,,,
+02/Jul/2026,Thu,Vishwa Saraiya,,,,?,,,,,
+"?? Friday, July 3",,,,,,,,,,,
+03/Jul/2026,Fri,Miraj Shah,Product,Eris,Working on Eris,?,,,,,
+03/Jul/2026,Fri,Milan Patel,XPRO AI,TicketTape,1. UI Bug fixes and Enhancements.,?,,,,,
+03/Jul/2026,Fri,Krupali Joshi,Eris ,Recon,Run Recon for the 5 use_case and validate it,?,,,,,
+03/Jul/2026,Fri,Riddhi Patel,,TerraCognita,osm Data validation Pipline,?,,,,,
+03/Jul/2026,Fri,Aaditya Desai,"MRF
+Product","Conexus
+TerraCognita","1) Check the restored data for Conexus
+2) Beat Planning understanding
+3) Cluster mode debug",?,,,,,
+03/Jul/2026,Fri,Het Gohel,MRF,TMS,5. Upcoming Dashboard & Status Formatting Fixes (Conexus),?,,,,,
+03/Jul/2026,Fri,Sumit Makwana,Product,Daily flow,1) Database Implement in Keycloak in table view ,?,,,,,
+03/Jul/2026,Fri,Mann Shah,,,On Leave,?,,,,,
+03/Jul/2026,Fri,Meet Patel,Product,Recon,"1) redeploy ticket tape after app setup
+2) MTC - changes for add total duaration in UI of Airflow",?,,,,,
+03/Jul/2026,Fri,Dharmesh Chauhan,,,,?,,,,,
+03/Jul/2026,Fri,Vishwa Saraiya,,,,?,,,,,
+"?? Saturday, July 4 — WEEKEND",,,,,,,,,,,
+"?? Sunday, July 5 — WEEKEND",,,,,,,,,,,
+"?? Monday, July 6",,,,,,,,,,,
+06/Jul/2026,Mon,Miraj Shah,Product,Eris,Working on Eris,?,,,,,
+06/Jul/2026,Mon,Milan Patel,XPRO AI,TicketTape,"1. Fix and check the error for multiple ticket booking.
+2. Start with the organizer platform code.",?,,,,,
+06/Jul/2026,Mon,Krupali Joshi,Eris,GST Recon,"MTC Recon : Check For Ingestion Details 
+GST Recon : Run recon for GST Revenue Ledger Vs Outward Data
+Make document for the same.",?,,,,,
+06/Jul/2026,Mon,Riddhi Patel,,TerraCognita | MRF_TMS,Data pipline osm | mrf_tms Qa,?,,,,,
+06/Jul/2026,Mon,Aaditya Desai,Product,TerraCognita,Beat Planning Changes,?,,,,,
+06/Jul/2026,Mon,Het Gohel,MRF,TMS,8. AddRemoveFlag Validation for Truck Submissions (Conexus),?,,,,,
+06/Jul/2026,Mon,Sumit Makwana,Product,Daily Flow,1)logout and new user create issue in open in lovable solve this problem url key cloak database,?,,,,,
+06/Jul/2026,Mon,Mann Shah,Eris ,Eris,"1.) Removed the generic erosion from the adjust data
+2.) Added the Other filter for the adjust data 
+3.) Restore and Reset functionality added",?,,,,,
+06/Jul/2026,Mon,Meet Patel,Product,Recon,"1) Deploy ticket tape Organizer app.
+2) MTC UI total duration changes",?,,,,,
+06/Jul/2026,Mon,Dharmesh Chauhan,,,,?,,,,,
+06/Jul/2026,Mon,Vishwa Saraiya,,,,?,,,,,
+"?? Tuesday, July 7",,,,,,,,,,,
+07/Jul/2026,Tue,Miraj Shah,Product,Eris,Working on Eris,?,,,,,
+07/Jul/2026,Tue,Milan Patel,XPRO AI,TicketTape,1. Update and check the flow for recommendation engine code and add database for action tracking.,?,,,,,
+07/Jul/2026,Tue,Krupali Joshi,Eris,Recon,Validate the data for the recon,?,,,,,
+07/Jul/2026,Tue,Riddhi Patel,,TerraCognita | Eris,"Data pipline osm,  eris QA",?,,,,,
+07/Jul/2026,Tue,Aaditya Desai,Product,TerraCognita,Beat Planning Changes,?,,,,,
+07/Jul/2026,Tue,Het Gohel,MRF,TMS,1) Depolymet of the Exisitng app with the new reassimgnet working according to the plant,?,,,,,
+07/Jul/2026,Tue,Sumit Makwana,Product,Daily flow,1) Database Implement and Login and Dashboard Ui Changes ,?,,,,,
+07/Jul/2026,Tue,Mann Shah,,,"1.)  Added the brand filter in both nsm and coreplanner ui
+2.) ",?,,,,,
+07/Jul/2026,Tue,Meet Patel,Product,Recon,"1) MTC - UI added duration , last run and not accessible running usecase",?,,,,,
+07/Jul/2026,Tue,Dharmesh Chauhan,,,,?,,,,,
+07/Jul/2026,Tue,Vishwa Saraiya,,,,?,,,,,
+"?? Wednesday, July 8",,,,,,,,,,,
+08/Jul/2026,Wed,Miraj Shah,Product,Eris,Working on Eris,?,,,,,
+08/Jul/2026,Wed,Milan Patel,Product,TerraCognita,Working on TerraCognita V2,?,,,,,
+08/Jul/2026,Wed,Krupali Joshi,Eris,Recon,understaning of filing for gstr1,?,,,,,
+08/Jul/2026,Wed,Riddhi Patel,,TerraCognita | Eris,"Data pipline osm,  eris QA",?,,,,,
+08/Jul/2026,Wed,Aaditya Desai,Product,TerraCognita,Beat Planning Changes implementation,?,,,,,
+08/Jul/2026,Wed,Het Gohel,MRF,TMS,"1) Implimentation plan of the L15 or more in the tms
+2) truck avaliblity in the exising app
+3) user management in the Conexus",?,,,,,
+08/Jul/2026,Wed,Sumit Makwana,Product,TerraCognita,1)create user and task flow complated and working in task ,?,,,,,
+08/Jul/2026,Wed,Mann Shah,,Eris,1.) removed the nsm permission to update the values once changed and updated the backend for the same,?,,,,,
+08/Jul/2026,Wed,Meet Patel,Product,Recon,"1) Deploy code of MTC UI changes
+2) 360 view client wise changes",?,,,,,
+08/Jul/2026,Wed,Dharmesh Chauhan,,,,?,,,,,
+08/Jul/2026,Wed,Vishwa Saraiya,,,,?,,,,,
+"?? Thursday, July 9",,,,,,,,,,,
+09/Jul/2026,Thu,Miraj Shah,Product,Eris,Working on Eris,?,,,,,
+09/Jul/2026,Thu,Milan Patel,Product,TerraCognita,"TerraCognita V2 :
+1. Add basic styling code for the data for the common geometry types.
+2. Add basic analytics tab with card and trend view in the Intelligence Panel.
+
+TerraCognita V1 :
+1. Resolve the bugs for TerraCognita V1, add Beat Plan Analytics Dashboard, and test for any UI bugs.",?,,,,,
+09/Jul/2026,Thu,Krupali Joshi,Product,Recon,"MTC : Check the PCRF problems 
+Add the email utility
+GST: Run the recon with new params
+Add the knok-off logic in the expection reports",?,,,,,
+09/Jul/2026,Thu,Riddhi Patel,,TerraCognita | MRF_TMS,"beat plan testing, tms testing",?,,,,,
+09/Jul/2026,Thu,Aaditya Desai,Product,"TerraCognita
+GST Recon","1) Beat Planning enhancements
+2) Scientific Notation values - conversion",?,,,,,
+09/Jul/2026,Thu,Het Gohel,MRF,TMS,1) Ui and the backend bug fixing ,?,,,,,
+09/Jul/2026,Thu,Sumit Makwana,Product,TerraCognita,1) style panel in hover isuue in data filed (properties),?,,,,,
+09/Jul/2026,Thu,Mann Shah,,Eris,"1.) Changed the workspace ui for the value size
+2.) Added the remark trail where ever values can be changed",?,,,,,
+09/Jul/2026,Thu,Meet Patel,Product,Recon,1) admin panel changes recon app,?,,,,,
+09/Jul/2026,Thu,Dharmesh Chauhan,Terra Cognita,Dubai & Saudi Arabia Intelligence,"1) Complete dubai and Saudi Arabia Intelligence;
+2) Demo;",?,,,"1) Complete dubai and Saudi Arabia Intelligence;
+2) Demo;",,
+09/Jul/2026,Thu,Vishwa Saraiya,,,,?,,,,,
+"?? Friday, July 10",,,,,,,,,,,
+10/Jul/2026,Fri,Miraj Shah,Product,Eris,Working on Eris (Forecasting model),?,,,,,
+10/Jul/2026,Fri,Milan Patel,Product,TerraCognita,"TerraCognita V2 :
+1. Add support for upto 2GB files.
+
+TerraCognita V1 :
+1. Add and enable chatbot and generate metadata while we click on the chatbot icon.",?,,,,,
+10/Jul/2026,Fri,Krupali Joshi,Product,Eris,Adding preprocessing tab for Recon,?,,,,,
+10/Jul/2026,Fri,Riddhi Patel,,TerraCognita | MRF_TMS,"beat plan testing, tms testing",?,,,,,
+10/Jul/2026,Fri,Aaditya Desai,"MRF
+Product","TMS
+TerraCognita","1) Re-generate summary reports for 8th and 9th to validate for Negative Balance LF
+2) Test beat planning change - service time multiplier",?,,,,,
+10/Jul/2026,Fri,Het Gohel,MRF,TMS,1) Level logic change refectoring the code base ,?,,,,,
+10/Jul/2026,Fri,Sumit Makwana,Product,Daily Flow,1)Notificatione Changee the query and code Table issue.,?,,,,,
+10/Jul/2026,Fri,Mann Shah,Eris,Eris,"1.) History AI values Plot added to the show data analytics page
+2.) Updated the Export excel with the changes as per the eris task list",?,,,,,
+10/Jul/2026,Fri,Meet Patel,Product,Recon,"1) deploy recon app 360 view for GSTR
+2) deploy handle of multi client user by admin panel",?,,,,,
+10/Jul/2026,Fri,Dharmesh Chauhan,Terra Cognita,Netherlands Intelligence,1) Complete the pipelinel,?,,,"1) Completed data analysis;
+2) Layer creation in terra cognita;
+3) Analysed and researched for quick commerce;",,
+10/Jul/2026,Fri,Vishwa Saraiya,,,,?,,,,,
+"?? Saturday, July 11 — WEEKEND",,,,,,,,,,,
+"?? Sunday, July 12 — WEEKEND",,,,,,,,,,,
+"?? Monday, July 13",,,,,,,,,,,
+13/Jul/2026,Mon,Miraj Shah,Product,TerraCognita,Working on TerraCognita Bugs (Beat planning bugs),?,,,,,
+13/Jul/2026,Mon,Milan Patel,Product,TerraCognita,"TerraCognita V1 :
+1. Add and enable chatbot and generate metadata while we click on the chatbot icon.
+
+TerraCognita V2 :
+1. Add support for upto 2GB files.",?,,,,,
+13/Jul/2026,Mon,Krupali Joshi,,,Leave,?,,,,,
+13/Jul/2026,Mon,Riddhi Patel,,TMS | Eris,testing,?,,,,,
+13/Jul/2026,Mon,Aaditya Desai,"MRF
+Product","TMS
+TerraCognita","1) Cleanup QA Server
+2) Beat Planning Validation",?,,,,,
+13/Jul/2026,Mon,Het Gohel,MRF,TMS,"1) Email intigration for the transporter to reset the password 
+2) Bidding phase problem fixed",?,,,,,
+13/Jul/2026,Mon,Sumit Makwana,Product,Daily Flow,1)Notificatione crone job and manger role all asisgn user ..,?,,,,,
+13/Jul/2026,Mon,Mann Shah,,,"1.) Add remark button for coreplanner before publish
+2.) Added User Management system
+3.) Updated the UI for the workspace and added AI Var in it",?,Yes,,,,
+13/Jul/2026,Mon,Meet Patel,Product,Recon,"1) recon app usecase running status and download all code changes
+2) add, manage, edit usecase by the admin panel new tab in recon app",?,,,,,
+13/Jul/2026,Mon,Dharmesh Chauhan,Sick Leave,Sick Leave,Sick Leave,?,,,,,
+13/Jul/2026,Mon,Vishwa Saraiya,,,,?,,,,,
+"?? Tuesday, July 14",,,,,,,,,,,
+14/Jul/2026,Tue,Miraj Shah,Product,"TerraCognita
+ERIS",Working on TerraCognita Bugs (Beat planning bugs) and ERIS Forecasting and GST Recon,?,,,,,
+14/Jul/2026,Tue,Milan Patel,Product,TerraCognita,"TerraCognita V1 :
+1. Go through the Cognis repository code and the APIs.
+2. Add required APIs to generate metadata.
+
+TerraCognita V2 :
+1. Add support for upto 2GB files.",?,,,,,
+14/Jul/2026,Tue,Krupali Joshi,,,Leave,?,,,,,
+14/Jul/2026,Tue,Riddhi Patel,,Eris | TMS_MRF,testing ,?,,,,,
+14/Jul/2026,Tue,Aaditya Desai,Product,"TerraCognita
+GST Recon","1) Beat Planning Validation, enhancement and test cases.",?,,,,,
+14/Jul/2026,Tue,Het Gohel,MRF,TMS,"1) Mannual intervantion of the exising app fix
+2) Testing",?,,,,,
+14/Jul/2026,Tue,Sumit Makwana,Product,Daily Flow ,"1) task modal added config in choose the fild
+2) task commnet and notificatione goto spefic task 
+3) attchement is working and ngnix changes like",?,,,,,
+14/Jul/2026,Tue,Mann Shah,,Eris,"1.) To add the Expiry and PTS/NRV option in the config tool.
+2.) To add the custom variance flow in the admin config",?,,,,,
+14/Jul/2026,Tue,Meet Patel,Product,Recon,"1) nginx, routing for recon-engine and 360-view.
+2) Airflow mapping, based on db, instead of current airflowDAGMapping.js constants implementation.
+3) User list excel. Test for all client with SuperAdmin, Admin, Viewer. (Firefighter).",?,,,,,
+14/Jul/2026,Tue,Dharmesh Chauhan,Terra Cognita,Netherland Intelligence,"1) Quick Commerce;
+2) Demo",?,,,"1) Fix the pipeline formulas;
+2) Sanity checks;
+3) Quick Commerce;
+4) Night light data integration - phase 1;
+5) Netherlands presentation deck;",,
+14/Jul/2026,Tue,Vishwa Saraiya,,,,?,,,,,
+"?? Wednesday, July 15",,,,,,,,,,,
+15/Jul/2026,Wed,Miraj Shah,Product,"TerraCognita
+ERIS",Working on TerraCognita Bugs (Beat planning bugs) and ERIS Forecasting,?,,,,,
+15/Jul/2026,Wed,Milan Patel,Product,TerraCognita,"TerraCognita V2 :
+1. Add support for upto 2GB files.
+
+TerraCognita V1 :
+1. Debug the code for LLM Config in JS.
+2. And check for the models.",?,,,,,
+15/Jul/2026,Wed,Krupali Joshi,,,Leave,?,,,,,
+15/Jul/2026,Wed,Riddhi Patel,,Eris | TMS_MRF,testing ,?,,,,,
+15/Jul/2026,Wed,Aaditya Desai,Product,TerraCognita,"1) Beat Planning Multi Tech Validation, enhancement and test cases",?,,,,,
+15/Jul/2026,Wed,Het Gohel,MRF,TMS,"1) Bug resolve 
+2) Truck Availability duplicate entries gettting handled
+3) Bidding lable changes",?,,,,,
+15/Jul/2026,Wed,Sumit Makwana,Product,Daily flow,1) file attchements and notificatione dynamic set in admin panel ,?,,,,,
+15/Jul/2026,Wed,Mann Shah,,Eris,1.) Bulk edit feature Added,?,,,,,
+15/Jul/2026,Wed,Meet Patel,Product,Recon,"1) add admin panel create usecase tab instead change constant file
+2) nginx, routing for recon-engine and 360-view.
+3) manage control of access 360-view and recon-engien through Admin Panel",?,,,"1) add admin panel create usecase tab instead change constant file
+3) manage control of access 360-view and recon-engien through Admin Panel",,
+15/Jul/2026,Wed,Dharmesh Chauhan,Terra Cognita,Netherland Intelligence,1) Netherland Demo Story & Demo creation in Storylane;,?,,,,,
+15/Jul/2026,Wed,Vishwa Saraiya,,,,?,,,,,
+"?? Thursday, July 16",,,,,,,,,,,
+16/Jul/2026,Thu,Miraj Shah,,,Working on TerraCognita Bugs (Beat planning bugs) and ERIS Forecasting,?,,,,,
+16/Jul/2026,Thu,Milan Patel,On Planned Leave,,,?,,,,,
+16/Jul/2026,Thu,Krupali Joshi,MTC,RECON,SV Data Bug,?,,,,,
+16/Jul/2026,Thu,Riddhi Patel,,Eris | TMS_MRF,"testing , osm ETL piplene modify",?,,,,,
+16/Jul/2026,Thu,Aaditya Desai,Product,TerraCognita,"1) Re-build time aware route clustering and assignment algo
+2) Test time aware mode",?,,,,,
+16/Jul/2026,Thu,Het Gohel,,,1,?,,,,,
+16/Jul/2026,Thu,Sumit Makwana,Product,TerraCognita | tickettape,1)  Bugs : Filter is not working and Rename layer very slow ,?,,,,,
+16/Jul/2026,Thu,Mann Shah,,Eris,"1.) remark chat module for coreplanner added
+2.) UI Changes for the coreplanner and nsm workspace and consensus lock page",?,,,,,
+16/Jul/2026,Thu,Meet Patel,Product,Recon,"1) Add a pre-processing step in recon-engine for Financial understand
+2) admin panel changes , fix and search bar aequitas
+3) make firefighter switch client global variable to session based bug fix",?,,,,,
+16/Jul/2026,Thu,Dharmesh Chauhan,,,,?,,,,,
+16/Jul/2026,Thu,Vishwa Saraiya,,,,?,,,,,
+"?? Friday, July 17",,,,,,,,,,,
+17/Jul/2026,Fri,Miraj Shah,,,Working on TerraCognita Bugs (Beat planning bugs) and ERIS Forecasting,?,,,,,
+17/Jul/2026,Fri,Milan Patel,Product,TerraCognita,"TerraCognita V1 :
+1. Go through the document of the Cognis code of LLM.
+
+TerraCognita V2 :
+1. Update the geo converter code for the out of memory issue and update steppers UI.",?,,,,,
+17/Jul/2026,Fri,Krupali Joshi,MTC,RECON,SV Data Bug,?,,,,,
+17/Jul/2026,Fri,Riddhi Patel,,Eris | TMS_MRF | Terracognita,"testing , osm ETL piplene modify",?,,,,,
+17/Jul/2026,Fri,Aaditya Desai,Product,TerraCognita,"1) cluster preprocessing and assignment 
+2) Multi - tech required on a plant
+3) Road map integration",?,,,,,
+17/Jul/2026,Fri,Het Gohel,,,,?,,,,,
+17/Jul/2026,Fri,Sumit Makwana,Product,tickettape || Daily Flow,"1) Ui changes theme ongoing event based and manul change theme.
+2) ads sectione added in the tickit tape .
+3) task create and  show the notificatione .",?,,,,,
+17/Jul/2026,Fri,Mann Shah,,Eris,"1.) Dropdown changed to common ui across ui
+2.) SKU config added in admin",?,,,,,
+17/Jul/2026,Fri,Meet Patel,Product,Recon,,?,,,2) MTC and Aequitas Admin Panel changes,,
+17/Jul/2026,Fri,Dharmesh Chauhan,Terra Cognita,Beat Plan,"1) Netherlands market analysis;
+2) Beat plan Demo",?,,,,,
+17/Jul/2026,Fri,Vishwa Saraiya,,,,?,,,,,
+"?? Saturday, July 18 — WEEKEND",,,,,,,,,,,
+"?? Sunday, July 19 — WEEKEND",,,,,,,,,,,
+"?? Monday, July 20",,,,,,,,,,,
+20/Jul/2026,Mon,Miraj Shah,,,Working on TerraCognita Bugs (Beat planning bugs) and ERIS Forecasting,?,,,,,
+20/Jul/2026,Mon,Milan Patel,Product,TerraCognita,"TerraCognita V1 :
+1. Go through the document of the Cognis code of LLM.
+
+Recon :
+Test the recon code for a new client and note what processes are currently manual and what are automated.",?,,,,,
+20/Jul/2026,Mon,Krupali Joshi,MTC,Recon,Validate the SV Data,?,,,,,
+20/Jul/2026,Mon,Riddhi Patel,,Eris | TerraCognita | MRF_TMS,"Testing , osm pipline ",?,,,,,
+20/Jul/2026,Mon,Aaditya Desai,Product,"RECON
+TerraCognita","1) OCS-PCRF Denorm
+2) Clustering and pre-processing ",?,,,,,
+20/Jul/2026,Mon,Het Gohel,,,,?,,,,,
+20/Jul/2026,Mon,Sumit Makwana,,,,?,,,,,
+20/Jul/2026,Mon,Mann Shah,,Eris,1.) Socket Enabled for notification and sku adjustment,?,,,,,
+20/Jul/2026,Mon,Meet Patel,Product,TerraCognita,1) explore terra Cognita - V2,?,,,,,
+20/Jul/2026,Mon,Dharmesh Chauhan,Terra Cognita,Beat Plan,"1) Terra Cognita Market research;
+2) General TMS meeting and discussion;
+3) Office task app;
+4) Enrichment of building footprints data pipeline;",?,,,"1) Terra Cognita Market research;
+2) General TMS meeting and discussion;
+3) Office task app;
+4) Enrichment of building footprints data pipeline;",,
+20/Jul/2026,Mon,Vishwa Saraiya,,,,?,,,,,
+"?? Tuesday, July 21",,,,,,,,,,,
+21/Jul/2026,Tue,Miraj Shah,,,Working on Eris,?,,,,,
+21/Jul/2026,Tue,Milan Patel,Product,TerraCognita,"TerraCognita V1 / V2 :
+1. Go through the document of the Cognis code of LLM.
+
+Recon :
+Test the recon code for a new client and note what processes are currently manual and what are automated.",?,,,,,
+21/Jul/2026,Tue,Krupali Joshi,MTC,Recon ,"Add OCS vs PCRF new use case into the daily recon
+Add tbl_pcrf_denorm in ingestion
+
+GST Recon: Go Through Eris meeting recording",?,,,,,
+21/Jul/2026,Tue,Riddhi Patel,,aequitas(recon) | MRF_TMS,Testing ,?,,,,,
+21/Jul/2026,Tue,Aaditya Desai,Product,Terra Cognita,1) Plant clustering and reassignment,?,,,,,
+21/Jul/2026,Tue,Het Gohel,MRF,TMS,"1) Bidding notification fixing 
+2) Testing",?,,,,,
+21/Jul/2026,Tue,Sumit Makwana,Product,TickeTtape || Daily_Flow,"1) Ticketape ui theme in date wise festival config 
+2) daily attchement working in png,jpg,pdf etc ..",?,,,,,
+21/Jul/2026,Tue,Mann Shah,,,"1.) Socket add for bulk edit
+2.) Added a login path
+3.) UI changes",?,,,,,
+21/Jul/2026,Tue,Meet Patel,Product,Recon ,"1) Add client tab to edit and manage clients.
+2) Create use-case update the created_by column (remove system_seed to recon admin).
+3) Add Use Case tab : Select All button bug (assigned use-case also gets selected).
+4) Create User - client switch dropdown (mostly stale state).",?,,,"2) Create use-case update the created_by column (remove system_seed to recon admin).
+3) Add Use Case tab : Select All button bug (assigned use-case also gets selected).
+4) Create User - client switch dropdown (mostly stale state).",,
+21/Jul/2026,Tue,Dharmesh Chauhan,Terra Cognita,Terra Cognita,"1) Terra Cognita Market research;
+2) Office task app;
+3) Enrichment of building footprints data pipeline;",?,,,,,
+21/Jul/2026,Tue,Vishwa Saraiya,,,,?,,,,,
+"?? Wednesday, July 22",,,,,,,,,,,
+22/Jul/2026,Wed,Miraj Shah,,,Creating Learning doc and Architecture doc for ERIS,?,,,,,
+22/Jul/2026,Wed,Milan Patel,Product,TerraCognita,"TerraCognita V1 / V2 :
+1. Make the code generic to support new layers uploaded.
+2. Test for both geojson and tile server data representation.
+
+Recon :
+Test the recon code for a new client and note what processes are currently manual and what are automated.",?,,,,,
+22/Jul/2026,Wed,Krupali Joshi,Product,Recon ,"MTC Recon : Add sysdate between effective start date and end date filtering
+
+GST Recon : Preprocessing Of GL records
+Logic for 3 way recon for gstr2b",?,,,,,
+22/Jul/2026,Wed,Riddhi Patel,,MRF | TerraCognita,"testing , pipline osm",?,,,,,
+22/Jul/2026,Wed,Aaditya Desai,Product,TerraCognita,"1) OriginalAllocation Model test without 32MA TruckType
+2) TerraCognita Bug fix for clustering and re-assignment",?,,,,,
+22/Jul/2026,Wed,Het Gohel,MRF,TMS,"1) Adding new Truck adding flow 
+2) OTP auth SMTP intigration",?,,,,,
+22/Jul/2026,Wed,Sumit Makwana,Product,Daily Flow,1)excel to mapings in task list ...,?,,,,,
+22/Jul/2026,Wed,Mann Shah,,Eris,"1.) Chat module changes to now send the value update table for trackong 
+2.) added the username and role in the chat module",?,,,,,
+22/Jul/2026,Wed,Meet Patel,Product,Recon ,"1) MTC - recon changes , Usecase added and bug fix for dag run status
+2) aequitas bug fix
+3) Create New Client Tab added In Admin Panel",?,,,"1) MTC - recon changes , Usecase added and bug fix for dag run status
+2) aequitas bug fix
+3) Create New Client Tab added In Admin Panel",,
+22/Jul/2026,Wed,Dharmesh Chauhan,Product,Terra Cognita,"1) Aequitas competitive research;
+2) Task tracker app development;
+3) Terra Cognita research presentation;",?,,,"1) Aequitas competitive research;
+2) Task tracker app development;
+3) Terra Cognita research presentation;",,
+22/Jul/2026,Wed,Vishwa Saraiya,,,,?,,,,,
+"?? Thursday, July 23",,,,,,,,,,,
+23/Jul/2026,Thu,Miraj Shah,,,Working on Eris - Improvement of forecasting and testing,?,,,,,
+23/Jul/2026,Thu,Milan Patel,Product,TerraCognita,"TerraCognita V1 / V2 :
+1. Make the code generic to support new layers uploaded.
+2. Test for both geojson and tile server data representation.",?,,,,,
+23/Jul/2026,Thu,Krupali Joshi,Product,Eris GSt Recon,"Adding preprocessing step in Recon
+R&D for IMS gstr2b and Three way recon for the same.
+
+Check TNM connections for MTC",?,,,,,
+23/Jul/2026,Thu,Riddhi Patel,,daily tracker | MRF_TMS | Eris,"Testing
+Automation 
+OSM data -> ongoing",?,,,,,
+23/Jul/2026,Thu,Aaditya Desai,,,,?,,,,,
+23/Jul/2026,Thu,Het Gohel,MRF,TMS,1) Transporter dedicated flow,?,,,,,
+23/Jul/2026,Thu,Sumit Makwana,Product,Daily_flow,"1) Notificatione Not receivet in inbox is empty
+2) daily flow eod of the day module not working proper and notificatione navigate chnage ",?,,,,,
+23/Jul/2026,Thu,Mann Shah,,Eris,"1.) Chat module and challenge configured to latest values
+2.) new upload and progress tab added and division tracking feature enabled
+3.) added the new sku and division record for each cycle",?,,,,,
+23/Jul/2026,Thu,Meet Patel,,,Leave,?,,,,,
+23/Jul/2026,Thu,Dharmesh Chauhan,Product,Terra Cognita | Noesis,"1) Aequitas competitive research;
+2) Task tracker app development;",?,,,"1) Aequitas competitive research;
+2) Task tracker app development;",,
+23/Jul/2026,Thu,Vishwa Saraiya,,,,?,,,,,
+"?? Friday, July 24",,,,,,,,,,,
+24/Jul/2026,Fri,Miraj Shah,,,,?,,,,,
+24/Jul/2026,Fri,Milan Patel,Product,TerraCognita,"TerraCognita V1 / V2 :
+1. Test for dynamic column approach for the data for TerraCognita V1.
+2. Integrate the metadata API and update Q/A.",?,,,,,
+24/Jul/2026,Fri,Krupali Joshi,Product,Recon,"GST Recon : Test the preprocessing step 
+
+MTC Recon : Monitor SV Denorm and check for the error 
+Make a script for restarting airflow and recon-app to clear tmp space",?,,,,,
+24/Jul/2026,Fri,Riddhi Patel,,MRF_TMS | Eris |daily tracker | recon,testing,?,,,,,
+24/Jul/2026,Fri,Aaditya Desai,MRF,TMS,"1) Debug model run without 32 MA truck type
+2) Maker checker db fetch and validation.",?,,,,,
+24/Jul/2026,Fri,Het Gohel,MRF,TMS,1) Adding dedicated priority P0 in the level assigment flow,?,,,,,
+24/Jul/2026,Fri,Sumit Makwana,Product,Tickit Tape ,"1)icon, banner , advertisement different
+favicon, background color and  theme",?,,,,,
+24/Jul/2026,Fri,Mann Shah,,Eris,"1.) Added the m0 month in the excel
+2.) Adjusted the coreplanner planning workspace bug through chat module
+3.) Added the open division feature for the coreplanner",?,,,,,
+24/Jul/2026,Fri,Meet Patel,Product,Recon ,"1) Aequitas - Manage users bug fix
+2) Aequitas - add soft delete in admin panel users, usecases, and clients
+3) Add email login in Aequitas test and deploy
+4) DB approach to handle constant.js value from UI",?,,,"1) Aequitas - Manage users bug fix
+2) Aequitas - add soft delete in admin panel users, usecases, and clients
+3) Add email login in Aequitas test and deploy",,
+24/Jul/2026,Fri,Dharmesh Chauhan,Product,Terra Cognita | Noesis,"1) Office tracker new feature additions and bug fixes;
+2) Beat Plan presentation deck;",?,,,,,
+24/Jul/2026,Fri,Vishwa Saraiya,,,,?,,,,,
+"?? Saturday, July 25 — WEEKEND",,,,,,,,,,,
+"?? Sunday, July 26 — WEEKEND",,,,,,,,,,,
+"?? Monday, July 27",,,,,,,,,,,
+27/Jul/2026,Mon,Miraj Shah,,,,?,,,,,
+27/Jul/2026,Mon,Milan Patel,Product,TerraCognita,"TerraCognita V1 : 
+1. Integrate the metadata API and update Q/A.
+
+TerraCognita V2 :
+1. Start with the metrics for the right panel including basic cards for KPIs, trends charts, etc.",?,,,,,
+27/Jul/2026,Mon,Krupali Joshi,,,,?,,,,,
+27/Jul/2026,Mon,Riddhi Patel,,,,?,,,,,
+27/Jul/2026,Mon,Aaditya Desai,MRF,TMS ,"1) Maker Checker Validation against actual Shipping Transfers
+2) Conexus App deployment DB Handling",?,,,,,
+27/Jul/2026,Mon,Het Gohel,MRF,TMS,1) Deployment of Conexus,?,,,,,
+27/Jul/2026,Mon,Sumit Makwana,Product,Daily_Flow,1) enhacement and bugs in noitfication keycloak eod submit ,?,,,,,
+27/Jul/2026,Mon,Mann Shah,,Eris,"1.) Cancel Forecast run flow
+2.) Meta Data columns added in the db for eris",?,,,,,
+27/Jul/2026,Mon,Meet Patel,Product,Terra Cognita V2,"1) Password : eye icon.
+2) Map : Update, Delete (delete the map as well as layers).
+3) Basemap change functionality : update.
+4) Soft Delete for both Map and Layers.",?,,,,,
+27/Jul/2026,Mon,Dharmesh Chauhan,,,,?,,,,,
+27/Jul/2026,Mon,Vishwa Saraiya,,,,?,,,,,
+"?? Tuesday, July 28",,,,,,,,,,,
+28/Jul/2026,Tue,Miraj Shah,,,,?,,,,,
+28/Jul/2026,Tue,Milan Patel,Product,TerraCognita,"TerraCognita V1 : 
+1. Update the view for Beat Planner and technician for default analytics dashboard.",?,,,,,
+28/Jul/2026,Tue,Krupali Joshi,,,,?,,,,,
+28/Jul/2026,Tue,Riddhi Patel,,,,?,,,,,
+28/Jul/2026,Tue,Aaditya Desai,"MRF
+Product","TMS 
+TerraCognita","1) Understanding of new SAP Migration
+2) Beat planning enhancements",?,,,,,
+28/Jul/2026,Tue,Het Gohel,,,,?,,,,,
+28/Jul/2026,Tue,Sumit Makwana,Product,Daily Flow,1) Complete Application Testing and Functional Verification,?,,,,,
+28/Jul/2026,Tue,Mann Shah,,,,?,,,,,
+28/Jul/2026,Tue,Meet Patel,,,,?,,,,,
+28/Jul/2026,Tue,Dharmesh Chauhan,,,,?,,,,,
+28/Jul/2026,Tue,Vishwa Saraiya,,,,?,,,,,
+"?? Wednesday, July 29",,,,,,,,,,,
+29/Jul/2026,Wed,Miraj Shah,,,,?,,,,,
+29/Jul/2026,Wed,Milan Patel,,,,?,,,,,
+29/Jul/2026,Wed,Krupali Joshi,,,,?,,,,,
+29/Jul/2026,Wed,Riddhi Patel,,,,?,,,,,
+29/Jul/2026,Wed,Aaditya Desai,,,,?,,,,,
+29/Jul/2026,Wed,Het Gohel,,,,?,,,,,
+29/Jul/2026,Wed,Sumit Makwana,,,,?,,,,,
+29/Jul/2026,Wed,Mann Shah,,,,?,,,,,
+29/Jul/2026,Wed,Meet Patel,,,,?,,,,,
+29/Jul/2026,Wed,Dharmesh Chauhan,,,,?,,,,,
+29/Jul/2026,Wed,Vishwa Saraiya,,,,?,,,,,
+"?? Thursday, July 30",,,,,,,,,,,
+30/Jul/2026,Thu,Miraj Shah,,,,?,,,,,
+30/Jul/2026,Thu,Milan Patel,,,,?,,,,,
+30/Jul/2026,Thu,Krupali Joshi,,,,?,,,,,
+30/Jul/2026,Thu,Riddhi Patel,,,,?,,,,,
+30/Jul/2026,Thu,Aaditya Desai,,,,?,,,,,
+30/Jul/2026,Thu,Het Gohel,,,,?,,,,,
+30/Jul/2026,Thu,Sumit Makwana,,,,?,,,,,
+30/Jul/2026,Thu,Mann Shah,,,,?,,,,,
+30/Jul/2026,Thu,Meet Patel,,,,?,,,,,
+30/Jul/2026,Thu,Dharmesh Chauhan,,,,?,,,,,
+30/Jul/2026,Thu,Vishwa Saraiya,,,,?,,,,,
+"?? Friday, July 31",,,,,,,,,,,
+31/Jul/2026,Fri,Miraj Shah,,,,?,,,,,
+31/Jul/2026,Fri,Milan Patel,,,,?,,,,,
+31/Jul/2026,Fri,Krupali Joshi,,,,?,,,,,
+31/Jul/2026,Fri,Riddhi Patel,,,,?,,,,,
+31/Jul/2026,Fri,Aaditya Desai,,,,?,,,,,
+31/Jul/2026,Fri,Het Gohel,,,,?,,,,,
+31/Jul/2026,Fri,Sumit Makwana,,,,?,,,,,
+31/Jul/2026,Fri,Mann Shah,,,,?,,,,,
+31/Jul/2026,Fri,Meet Patel,,,,?,,,,,
+31/Jul/2026,Fri,Dharmesh Chauhan,,,,?,,,,,
+31/Jul/2026,Fri,Vishwa Saraiya,,,,?,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,
+,,,,,,,,,,,

@@ -414,6 +414,11 @@ export function TaskFormDialog({
       }
       setSaving(true);
       try {
+        for (const r of validRows) {
+          if (r.project_name?.trim()) {
+            await ensureMasterProject(r.project_name, r.client);
+          }
+        }
         await Promise.all(
           validRows.map((row) =>
             tasksService.create(
