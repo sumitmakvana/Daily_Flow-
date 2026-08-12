@@ -80,14 +80,7 @@ export function generateEodHtmlReport(data: EodReportData): string {
     .sort((a, b) => b.progress - a.progress || b.completedCount - a.completedCount)
     .slice(0, 3);
 
-  // Fallback upcoming deadlines if not passed
-  const defaultUpcomingDeadlines = [
-    { dateLabel: "Today", name: "Beat Planner Release", priority: "High Priority" },
-    { dateLabel: "Tomorrow", name: "Geo Dashboard QA", priority: "Medium Priority" },
-    { dateLabel: "12 Aug", name: "Micro Market Deployment", priority: "Medium Priority" },
-  ];
-  const upcomingDeadlines =
-    passedDeadlines && passedDeadlines.length > 0 ? passedDeadlines : defaultUpcomingDeadlines;
+  const upcomingDeadlines = passedDeadlines ?? [];
 
   // Format Member rows HTML for the table (Outlook MSO compatible)
   const memberRowsHtml = enrichedMembers
@@ -272,31 +265,7 @@ export function generateEodHtmlReport(data: EodReportData): string {
         .join("")
     : `<div style="font-size: 11px; color: #16a34a; background: #f0fdf4; padding: 8px; border-radius: 6px; text-align: center; font-family: Arial, sans-serif;">No blocked tasks!</div>`;
 
-  // Upcoming Deadlines Column HTML
-  const deadlinesHtml = upcomingDeadlines
-    .slice(0, 3)
-    .map((d, idx) => {
-      const labelColor = idx === 0 ? "#dc2626" : idx === 1 ? "#d97706" : "#2563eb";
-      return `
-      <div style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #f1f5f9; padding: 8px 10px; border-radius: 8px;">
-        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
-          <tr>
-            <td style="width: 65px; vertical-align: middle;">
-              <span style="font-size: 10px; font-weight: 800; color: ${labelColor}; display: inline-block; font-family: Arial, sans-serif;">${escapeHtml(d.dateLabel)}</span>
-            </td>
-            <td style="vertical-align: middle; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-              <div style="font-size: 11px; font-weight: 700; color: #1e293b;">${escapeHtml(d.name)}</div>
-              <div style="font-size: 9px; color: #94a3b8;">${escapeHtml(d.priority)}</div>
-            </td>
-            <td align="right" style="text-align: right; vertical-align: middle; width: 15px; color: #cbd5e1; font-weight: 700; font-size: 12px; font-family: Arial, sans-serif;">
-              &rsaquo;
-            </td>
-          </tr>
-        </table>
-      </div>
-    `;
-    })
-    .join("");
+
 
   return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" lang="en">
@@ -516,11 +485,11 @@ export function generateEodHtmlReport(data: EodReportData): string {
                 </tbody>
               </table>
 
-              <!-- SECTION 4: 3-COLUMN BOTTOM GRID -->
+              <!-- SECTION 4: 2-COLUMN BOTTOM GRID -->
               <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px; border-collapse: collapse;">
                 <tr>
                   <!-- Column 1: Top Performers -->
-                  <td width="33.33%" valign="top" style="padding: 4px; vertical-align: top;" class="stack-column">
+                  <td width="50%" valign="top" style="padding: 4px; vertical-align: top;" class="stack-column">
                     <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; border-collapse: separate;">
                       <tr>
                         <td style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
@@ -537,7 +506,7 @@ export function generateEodHtmlReport(data: EodReportData): string {
                   </td>
 
                   <!-- Column 2: Blocked Tasks -->
-                  <td width="33.33%" valign="top" style="padding: 4px; vertical-align: top;" class="stack-column">
+                  <td width="50%" valign="top" style="padding: 4px; vertical-align: top;" class="stack-column">
                     <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #fff1f2; border: 1px solid #fecdd3; border-radius: 12px; border-collapse: separate;">
                       <tr>
                         <td style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
@@ -547,23 +516,6 @@ export function generateEodHtmlReport(data: EodReportData): string {
                           ${blockedColumnHtml}
                           <div style="text-align: center; margin-top: 10px; font-family: Arial, sans-serif;">
                             <a href="${dashboardUrl}" style="font-size: 10px; font-weight: 700; color: #dc2626; text-decoration: none;">View Blocked &rarr;</a>
-                          </div>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-
-                  <!-- Column 3: Upcoming Deadlines -->
-                  <td width="33.33%" valign="top" style="padding: 4px; vertical-align: top;" class="stack-column">
-                    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; border-collapse: separate;">
-                      <tr>
-                        <td style="padding: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-                          <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">
-                            📅 DEADLINES
-                          </div>
-                          ${deadlinesHtml}
-                          <div style="text-align: center; margin-top: 10px; font-family: Arial, sans-serif;">
-                            <a href="${dashboardUrl}" style="font-size: 10px; font-weight: 700; color: #2563eb; text-decoration: none;">View Calendar &rarr;</a>
                           </div>
                         </td>
                       </tr>
