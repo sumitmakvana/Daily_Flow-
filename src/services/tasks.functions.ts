@@ -27,6 +27,15 @@ export const createTaskFn = createServerFn({ method: "POST" })
         created_by: context.userId,
         updated_by: context.userId,
       };
+
+      // Clean up auto-generated/system columns that shouldn't be explicitly inserted as null/empty
+      const keysToClean = ["id", "task_code", "created_at", "updated_at", "version"];
+      for (const key of keysToClean) {
+        if (key in payload && (payload[key] === null || payload[key] === undefined || payload[key] === "")) {
+          delete payload[key];
+        }
+      }
+
       const keys = Object.keys(payload);
       if (keys.length === 0) throw new Error("Empty task payload");
       const cols = keys.map((k) => `"${k}"`).join(", ");

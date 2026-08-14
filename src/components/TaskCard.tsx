@@ -27,6 +27,7 @@ import {
   Pencil,
   Trash2,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
@@ -37,7 +38,7 @@ import { TaskHistorySheet } from "./TaskHistorySheet";
 import { WorkItemTypeBadge } from "./WorkItemTypeBadge";
 import { TaskFormDialog } from "./TaskFormDialog";
 import { inlineCompleteStore } from "@/services/inline-complete-store";
-import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue } from "@/lib/format";
+import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue, getDefaultStartDate } from "@/lib/format";
 import type { Profile, Task, TaskStatus, WorkItemType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
@@ -72,6 +73,7 @@ export function TaskCard({
   const [blockOpen, setBlockOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
 
   const planned = Number(task.planned_hours ?? 0);
   const currentActual = Number(task.actual_hours ?? 0);
@@ -203,6 +205,9 @@ export function TaskCard({
                       <Pencil className="mr-2 h-3.5 w-3.5" /> Edit task
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuItem onClick={() => setDuplicateOpen(true)}>
+                    <Copy className="mr-2 h-3.5 w-3.5" /> Duplicate task
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
                     <History className="mr-2 h-3.5 w-3.5" /> History & comments
                   </DropdownMenuItem>
@@ -452,6 +457,25 @@ export function TaskCard({
         open={formOpen}
         onOpenChange={setFormOpen}
         initial={task}
+        userId={userId}
+        onSaved={onChanged}
+      />
+
+      <TaskFormDialog
+        open={duplicateOpen}
+        onOpenChange={setDuplicateOpen}
+        initial={{
+          ...task,
+          id: undefined,
+          task_code: undefined,
+          task_name: `${task.task_name} (Copy)`,
+          status: "To Do",
+          actual_hours: 0,
+          done: false,
+          completed_at: null,
+          start_date: getDefaultStartDate(),
+          planned_hours: task.planned_hours !== undefined && task.planned_hours !== null ? task.planned_hours : 4,
+        }}
         userId={userId}
         onSaved={onChanged}
       />

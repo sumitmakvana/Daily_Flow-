@@ -34,6 +34,15 @@ describe("services/tasks", () => {
     expect(mockSupabase.calls.ops[0].op).toBe("insert");
   });
 
+  it("create cleans up nullish or empty system columns from insert payload", async () => {
+    mockSupabase.queueResponse("insert", { data: baseTask({ id: "new" }) });
+    await tasksService.create({ task_name: "X", id: null as any, task_code: "" }, "user1");
+    expect(mockSupabase.calls.ops[0].op).toBe("insert");
+    const payload = mockSupabase.calls.ops[0].payload as Record<string, unknown>;
+    expect(payload.id).toBeUndefined();
+    expect(payload.task_code).toBeUndefined();
+  });
+
   it("create throws on error", async () => {
     mockSupabase.queueResponse("insert", { error: { message: "boom" } });
     await expect(tasksService.create({}, "u")).rejects.toBeTruthy();

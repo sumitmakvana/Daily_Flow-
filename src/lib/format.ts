@@ -54,6 +54,55 @@ export function nextWorkingDay(fromISO?: string): string {
   return new Date(base.getTime() - tz).toISOString().slice(0, 10);
 }
 
+/**
+ * Calculates the default start date:
+ * Returns the current date (today), or if today is a holiday (or weekend),
+ * advances to the next available working date.
+ */
+export function getDefaultStartDate(
+  fromISO?: string | null,
+  apiHolidays: Record<string, Holiday> = {},
+  customHolidays: Array<{ calendar_date?: string; date?: string }> = []
+): string {
+  let base: Date;
+  if (fromISO) {
+    if (fromISO.length === 10 && fromISO.includes("-")) {
+      const [y, m, d] = fromISO.split("-").map(Number);
+      base = new Date(y, m - 1, d);
+    } else {
+      base = new Date(fromISO);
+    }
+  } else {
+    base = new Date();
+  }
+  const customSet = new Set(
+    customHolidays
+      .map((h) => (h.calendar_date || h.date || "").slice(0, 10))
+      .filter(Boolean)
+  );
+
+  for (let i = 0; i < 60; i++) {
+    const y = base.getFullYear();
+    const mStr = String(base.getMonth() + 1).padStart(2, "0");
+    const dStr = String(base.getDate()).padStart(2, "0");
+    const isoDate = `${y}-${mStr}-${dStr}`;
+    const dayOfWeek = base.getDay(); // 0 is Sunday, 6 is Saturday
+
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isHoliday = !!getLocalHoliday(isoDate, apiHolidays) || customSet.has(isoDate);
+
+    if (!isWeekend && !isHoliday) {
+      return isoDate;
+    }
+    base.setDate(base.getDate() + 1);
+  }
+
+  const y = base.getFullYear();
+  const mStr = String(base.getMonth() + 1).padStart(2, "0");
+  const dStr = String(base.getDate()).padStart(2, "0");
+  return `${y}-${mStr}-${dStr}`;
+}
+
 export interface Holiday {
   name: string;
   emoji: string;
