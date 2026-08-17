@@ -28,6 +28,9 @@ import {
   Trash2,
   Loader2,
   Copy,
+  FileText,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
@@ -88,6 +91,7 @@ export function TaskCard({
   const [inlineHours, setInlineHours] = useState<string>("");
   const [inlineNote, setInlineNote] = useState<string>("");
   const [inlineBusy, setInlineBusy] = useState(false);
+  const [expandedRemarks, setExpandedRemarks] = useState(false);
 
   const overdue = isOverdue(task.due_date, task.status);
   const isOwner = task.assigned_to === userId;
@@ -294,6 +298,51 @@ export function TaskCard({
             {task.status === "Blocked" && task.blocker_reason && (
               <div className="mt-2 rounded-md border border-status-blocked/30 bg-status-blocked/5 px-2 py-1 text-xs text-status-blocked">
                 <strong className="font-medium">Blocked:</strong> {task.blocker_reason}
+              </div>
+            )}
+
+            {/* Remarks / Description preview with Expand/Collapse */}
+            {task.remarks && (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedRemarks((prev) => !prev);
+                }}
+                className={cn(
+                  "mt-2 rounded-lg bg-secondary/50 hover:bg-secondary/70 border border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-all cursor-pointer select-text",
+                  expandedRemarks ? "bg-secondary/80 shadow-inner" : ""
+                )}
+                title={expandedRemarks ? "Click to collapse" : "Click to view full description"}
+              >
+                <div className="flex items-start gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={cn(
+                        "leading-relaxed whitespace-pre-wrap",
+                        expandedRemarks ? "text-foreground font-normal" : "line-clamp-2"
+                      )}
+                    >
+                      {task.remarks}
+                    </p>
+                  </div>
+                  {task.remarks.length > 60 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedRemarks((prev) => !prev);
+                      }}
+                      className="shrink-0 text-[10px] font-semibold text-primary hover:underline flex items-center gap-0.5 mt-0.5 ml-1 select-none"
+                    >
+                      {expandedRemarks ? (
+                        <>Less <ChevronUp className="h-3 w-3" /></>
+                      ) : (
+                        <>More <ChevronDown className="h-3 w-3" /></>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
