@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Upload, Download, User, Users, Trash2, Calendar, ArrowUpDown } from "lucide-react";
+import { Plus, Search, Upload, Download, User, Users, Trash2, Calendar, ArrowUpDown, Copy } from "lucide-react";
 import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task } from "@/lib/types";
+import { getDefaultStartDate } from "@/lib/format";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -236,6 +237,41 @@ function TasksPage() {
     }
   };
 
+  const handleBulkDuplicate = async () => {
+    try {
+      const tasksToDuplicate = tasks.filter((t) => selectedTaskIds.has(t.id));
+      if (tasksToDuplicate.length === 0) return;
+      const defaultStartDate = getDefaultStartDate();
+      await Promise.all(
+        tasksToDuplicate.map((t) =>
+          tasksService.create(
+            {
+              task_name: `${t.task_name} (Copy)`,
+              assigned_to: t.assigned_to,
+              type_id: t.type_id,
+              client: t.client,
+              project_name: t.project_name,
+              project_id: t.project_id,
+              priority: t.priority,
+              status: "To Do",
+              start_date: defaultStartDate,
+              due_date: t.due_date,
+              planned_hours: t.planned_hours !== undefined && t.planned_hours !== null ? t.planned_hours : 4,
+              remarks: t.remarks,
+              sprint_week: t.sprint_week,
+              custom_fields: t.custom_fields || {},
+            },
+            user?.id || ""
+          )
+        )
+      );
+      toast.success(`Successfully duplicated ${tasksToDuplicate.length} tasks`);
+      setSelectedTaskIds(new Set());
+      load();
+    } catch (err) {
+      toast.error("Failed to duplicate tasks: " + (err as Error).message);
+    }
+  };
 
   const handleDeleteAll = async () => {
     try {
@@ -613,6 +649,15 @@ function TasksPage() {
               Set Project
             </Button>
 
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px] sm:text-xs px-2.5 rounded-full cursor-pointer hover:bg-muted bg-background gap-1"
+              onClick={handleBulkDuplicate}
+              title="Duplicate selected tasks"
+            >
+              <Copy className="h-3 w-3" /> Duplicate
+            </Button>
 
             <Button
               size="sm"

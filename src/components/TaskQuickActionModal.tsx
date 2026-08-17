@@ -18,6 +18,7 @@ import {
   CalendarClock,
   Folder,
   Loader2,
+  FileText,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
@@ -158,6 +159,24 @@ export function TaskQuickActionModal({
               </Badge>
             </DialogDescription>
           </DialogHeader>
+
+          {/* Description / Remarks Section */}
+          {task.remarks ? (
+            <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 space-y-1.5 shadow-sm">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <FileText className="h-3.5 w-3.5 text-primary" />
+                <span>Description / Remarks</span>
+              </div>
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed select-text font-normal max-h-48 overflow-y-auto">
+                {task.remarks}
+              </p>
+            </div>
+          ) : (
+            <div className="p-2.5 rounded-xl bg-muted/20 border border-dashed border-border/60 text-[11px] text-muted-foreground/70 flex items-center gap-1.5 italic">
+              <FileText className="h-3.5 w-3.5 opacity-50 shrink-0" />
+              <span>No description or remarks provided.</span>
+            </div>
+          )}
 
           {/* Quick Actions Panel */}
           <div className="space-y-3">

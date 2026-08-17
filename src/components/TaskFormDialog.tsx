@@ -25,12 +25,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task, type TaskHistory, type WorkItemType } from "@/lib/types";
+import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task, type TaskHistory, type WorkItemType, type HolidayCalendar } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { getLocalHoliday, fetchIndianHolidays, formatRelative, type Holiday } from "@/lib/format";
+import { getLocalHoliday, fetchIndianHolidays, formatRelative, getDefaultStartDate, type Holiday } from "@/lib/format";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { workItemTypesService } from "@/services/work-item-types";
+import { holidaysService } from "@/services/operations";
 import { dynamicFieldsService, type WorkItemFieldDef } from "@/services/dynamic-fields";
 import { DynamicFieldsForm } from "@/components/DynamicFieldsForm";
 import { CommentsPanel } from "@/components/CommentsPanel";
@@ -56,6 +57,7 @@ import {
   ArrowRightCircle,
   Pencil,
   List,
+  Copy,
 } from "lucide-react";
 
 const NONE = "__none";
@@ -86,18 +88,36 @@ export function TaskFormDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  initial?: Task | null;
+  initial?: Partial<Task> | null;
   userId: string;
   onSaved: () => void;
 }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [types, setTypes] = useState<WorkItemType[]>([]);
   const [projects, setProjects] = useState<Array<{ id: string; name: string; client: string | null }>>([]);
-  const [form, setForm] = useState<Partial<Task>>(
-    initial ?? { priority: "Medium", status: "To Do", custom_fields: {}, assigned_to: userId ?? null }
+  const [holidayCalendar, setHolidayCalendar] = useState<HolidayCalendar[]>([]);
+  const [apiHolidays, setApiHolidays] = useState<Record<string, Holiday>>({});
+  const [form, setForm] = useState<Partial<Task>>(() =>
+    initial
+      ? {
+          priority: "Medium",
+          status: "To Do",
+          custom_fields: {},
+          assigned_to: initial.assigned_to ?? userId ?? null,
+          start_date: initial.start_date ?? getDefaultStartDate(),
+          planned_hours: initial.planned_hours !== undefined && initial.planned_hours !== null ? initial.planned_hours : 4,
+          ...initial,
+        }
+      : {
+          priority: "Medium",
+          status: "To Do",
+          custom_fields: {},
+          assigned_to: userId ?? null,
+          start_date: getDefaultStartDate(),
+          planned_hours: 4,
+        }
   );
   const [fieldDefs, setFieldDefs] = useState<WorkItemFieldDef[]>([]);
-  const [apiHolidays, setApiHolidays] = useState<Record<string, Holiday>>({});
 
   // UI State
   const [isExpanded, setIsExpanded] = useState(false);
@@ -112,18 +132,21 @@ export function TaskFormDialog({
   const [isCustomClient, setIsCustomClient] = useState(false);
 
   // Multi-Task Grid State
-  const [gridRows, setGridRows] = useState<GridRow[]>([
-    { id: "1", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-    { id: "2", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-    { id: "3", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-  ]);
+  const [gridRows, setGridRows] = useState<GridRow[]>(() => {
+    const defaultStart = getDefaultStartDate();
+    return [
+      { id: "1", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: null, planned_hours: 4 },
+      { id: "2", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: null, planned_hours: 4 },
+      { id: "3", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: null, planned_hours: 4 },
+    ];
+  });
 
   const [prevOpen, setPrevOpen] = useState(false);
   const [prevInitialId, setPrevInitialId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    if (open && form.due_date) {
-      const year = new Date(form.due_date).getFullYear();
+    if (open) {
+      const year = form.due_date ? new Date(form.due_date).getFullYear() : new Date().getFullYear();
       if (!isNaN(year)) {
         fetchIndianHolidays(year).then(setApiHolidays).catch(() => {});
       }
@@ -136,7 +159,28 @@ export function TaskFormDialog({
       const isDifferentTask = initial?.id !== prevInitialId;
       if (isNewOpen || isDifferentTask) {
         const defaultAssignee = initial ? initial.assigned_to : (userId ?? null);
-        setForm(initial ?? { priority: "Medium", status: "To Do", custom_fields: {}, assigned_to: defaultAssignee });
+        const defaultStartDate = initial?.start_date ?? getDefaultStartDate(null, apiHolidays, holidayCalendar);
+        const defaultPlannedHours = initial?.planned_hours !== undefined && initial?.planned_hours !== null ? initial.planned_hours : 4;
+        setForm(
+          initial
+            ? {
+                priority: "Medium",
+                status: "To Do",
+                custom_fields: {},
+                assigned_to: defaultAssignee,
+                start_date: defaultStartDate,
+                planned_hours: defaultPlannedHours,
+                ...initial,
+              }
+            : {
+                priority: "Medium",
+                status: "To Do",
+                custom_fields: {},
+                assigned_to: defaultAssignee,
+                start_date: defaultStartDate,
+                planned_hours: 4,
+              }
+        );
         setCreationMode("single");
         setSelectedAssignees(
           initial?.assigned_to
@@ -146,15 +190,15 @@ export function TaskFormDialog({
             : []
         );
         setGridRows([
-          { id: "1", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-          { id: "2", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
-          { id: "3", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+          { id: "1", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate, due_date: null, planned_hours: 4 },
+          { id: "2", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate, due_date: null, planned_hours: 4 },
+          { id: "3", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate, due_date: null, planned_hours: 4 },
         ]);
       }
     }
     setPrevOpen(open);
     setPrevInitialId(initial?.id);
-  }, [open, initial, userId]);
+  }, [open, initial, userId, apiHolidays, holidayCalendar]);
 
   useEffect(() => {
     if (!open) return;
@@ -165,6 +209,7 @@ export function TaskFormDialog({
         setProfiles((data ?? []) as Profile[]);
       });
     workItemTypesService.list().then(setTypes).catch(() => setTypes([]));
+    holidaysService.list().then(setHolidayCalendar).catch(() => {});
 
     // Fetch both projects table AND distinct project/client names from tasks table
     Promise.all([
@@ -210,19 +255,19 @@ export function TaskFormDialog({
 
   // Load task history timeline when task exists
   useEffect(() => {
-    if (!open || !initial?.id) {
+    if (!open || !form.id) {
       setTaskHistoryItems([]);
       return;
     }
     supabase
       .from("task_history")
       .select("*")
-      .eq("task_id", initial.id)
+      .eq("task_id", form.id)
       .order("created_at", { ascending: false })
       .then(({ data }) => {
         setTaskHistoryItems((data ?? []) as TaskHistory[]);
       });
-  }, [open, initial?.id]);
+  }, [open, form.id]);
 
   const uniqueClients = useMemo(() => {
     const set = new Set<string>();
@@ -286,6 +331,7 @@ export function TaskFormDialog({
   };
 
   const addGridRow = () => {
+    const defaultStart = form.start_date ?? getDefaultStartDate(null, apiHolidays, holidayCalendar);
     setGridRows((rows) => [
       ...rows,
       {
@@ -296,9 +342,9 @@ export function TaskFormDialog({
         client: form.client ?? "",
         project_name: form.project_name ?? "",
         priority: "Medium",
-        start_date: form.start_date ?? null,
+        start_date: defaultStart,
         due_date: form.due_date ?? null,
-        planned_hours: 0,
+        planned_hours: 4,
       },
     ]);
   };
@@ -312,9 +358,31 @@ export function TaskFormDialog({
   };
 
   const clearGridRows = () => {
+    const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
     setGridRows([
-      { id: String(Date.now()), task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: null, due_date: null, planned_hours: 0 },
+      { id: String(Date.now()), task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: null, planned_hours: 4 },
     ]);
+  };
+
+  // Duplicate current task in-dialog
+  const handleDuplicateSelf = () => {
+    const defaultStartDate = getDefaultStartDate(null, apiHolidays, holidayCalendar);
+    setForm((prev) => {
+      const next = { ...prev };
+      delete next.id;
+      delete next.task_code;
+      return {
+        ...next,
+        task_name: prev.task_name ? `${prev.task_name} (Copy)` : "Task (Copy)",
+        status: "To Do",
+        done: false,
+        completed_at: null,
+        start_date: defaultStartDate,
+        planned_hours: prev.planned_hours !== undefined && prev.planned_hours !== null ? prev.planned_hours : 4,
+        actual_hours: 0,
+      };
+    });
+    toast.success("Task cloned into new creation form. Adjust fields and click Create Task.");
   };
 
   // Toggle Completion Status
@@ -361,7 +429,7 @@ export function TaskFormDialog({
       await ensureMasterProject(form.project_name, form.client);
     }
     // 1. Edit existing task
-    if (initial?.id) {
+    if (form.id) {
       if (!form.task_name?.trim()) {
         toast.error("Task name required");
         return;
@@ -377,13 +445,13 @@ export function TaskFormDialog({
       setSaving(true);
       try {
         try {
-          await tasksService.update(initial, form, userId);
+          await tasksService.update({ ...(initial ?? {}), id: form.id } as Task, form, userId);
         } catch (e) {
           if (e instanceof TaskConflictError) {
             const { data: freshRows } = await supabase
               .from("tasks")
               .select("*")
-              .eq("id", initial.id)
+              .eq("id", form.id)
               .single();
             if (freshRows) {
               await tasksService.update(freshRows as any, form, userId);
@@ -424,9 +492,9 @@ export function TaskFormDialog({
                 client: row.client || form.client || null,
                 project_name: row.project_name || form.project_name || null,
                 priority: row.priority,
-                start_date: row.start_date || form.start_date || null,
+                start_date: row.start_date || form.start_date || getDefaultStartDate(null, apiHolidays, holidayCalendar),
                 due_date: row.due_date,
-                planned_hours: Number(row.planned_hours) || 0,
+                planned_hours: Number(row.planned_hours) || 4,
                 status: "To Do",
                 remarks: form.remarks || null,
                 custom_fields: form.custom_fields || {},
@@ -531,7 +599,7 @@ export function TaskFormDialog({
           "flex flex-col p-0 overflow-hidden transition-all duration-200 shadow-2xl bg-background text-foreground border border-border",
           isExpanded
             ? "w-[98vw] h-[95vh] max-h-[95vh] sm:max-w-[98vw] rounded-xl"
-            : creationMode === "grid" && !initial
+            : creationMode === "grid" && !form.id
             ? "w-[96vw] max-h-[90vh] sm:max-w-6xl rounded-xl"
             : "w-[90vw] max-h-[85vh] sm:max-w-4xl lg:max-w-5xl rounded-xl"
         )}
@@ -558,15 +626,30 @@ export function TaskFormDialog({
                 <span>{form.status === "Completed" ? "Completed ✓" : "Mark as completed"}</span>
               </Button>
 
+              {/* Duplicate Task Button (when editing existing task) */}
+              {form.id && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs font-semibold rounded-lg bg-secondary text-foreground border-border hover:bg-muted"
+                  onClick={handleDuplicateSelf}
+                  title="Clone this task into a new draft"
+                >
+                  <Copy className="w-3.5 h-3.5 text-primary" />
+                  <span>Duplicate</span>
+                </Button>
+              )}
+
               {/* Task Code Badge */}
               <Badge variant="outline" className="bg-secondary text-primary border-primary/30 font-mono text-xs px-2.5 py-1">
-                {initial?.task_code || "NEW TASK"}
+                {form.task_code || (form.id ? "TASK" : "NEW TASK")}
               </Badge>
             </div>
 
             {/* Right Header Controls (Expand, Mode Switcher) */}
             <div className="flex items-center gap-1 pr-8 sm:pr-9">
-              {!initial && (
+              {!form.id && (
                 <div className="flex items-center gap-1 bg-secondary border border-border p-1 rounded-lg text-xs font-medium mr-2">
                   <button
                     type="button"
@@ -626,7 +709,7 @@ export function TaskFormDialog({
         {/* Scrollable Dialog Body (Flex-1 overflow-y-auto) */}
         <div className="flex-1 overflow-y-auto p-4 md:p-5">
           {/* MODE 3: MULTI-TASK GRID VIEW */}
-          {!initial && creationMode === "grid" ? (
+          {!form.id && creationMode === "grid" ? (
             <div className="space-y-3">
               <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl text-xs text-primary flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
@@ -1337,7 +1420,7 @@ export function TaskFormDialog({
                   defs={fieldDefs}
                   values={(form.custom_fields ?? {}) as Record<string, unknown>}
                   onChange={(next) => setForm({ ...form, custom_fields: next })}
-                  workItemId={initial?.id ?? form.id ?? null}
+                  workItemId={form.id ?? null}
                 />
               </div>
 
@@ -1358,8 +1441,8 @@ export function TaskFormDialog({
 
                   {/* TAB 1: COMMENTS PANEL */}
                   <TabsContent value="comments" className="flex-1 mt-3 space-y-3">
-                    {initial?.id ? (
-                      <CommentsPanel workItemId={initial.id} userId={userId} profiles={profiles} canModerate={true} />
+                    {form.id ? (
+                      <CommentsPanel workItemId={form.id} userId={userId} profiles={profiles} canModerate={true} />
                     ) : (
                       <div className="bg-card border border-border rounded-xl p-4 text-center space-y-2 text-muted-foreground my-auto">
                         <MessageSquare className="w-8 h-8 text-primary mx-auto opacity-80" />
@@ -1371,8 +1454,8 @@ export function TaskFormDialog({
 
                   {/* TAB 2: ATTACHMENTS PANEL */}
                   <TabsContent value="files" className="flex-1 mt-3 space-y-3">
-                    {initial?.id ? (
-                      <AttachmentsPanel workItemId={initial.id} userId={userId} canDeleteAny={true} />
+                    {form.id ? (
+                      <AttachmentsPanel workItemId={form.id} userId={userId} canDeleteAny={true} />
                     ) : (
                       <div className="bg-card border border-border rounded-xl p-4 text-center space-y-2 text-muted-foreground my-auto">
                         <Paperclip className="w-8 h-8 text-amber-400 mx-auto opacity-80" />
@@ -1422,7 +1505,7 @@ export function TaskFormDialog({
           <Button onClick={handleSave} disabled={saving} className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md px-5">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             <span>
-              {initial
+              {form.id
                 ? "Save Changes"
                 : creationMode === "grid"
                 ? `Create ${validGridRowCount} Task${validGridRowCount === 1 ? "" : "s"}`

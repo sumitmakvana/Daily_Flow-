@@ -11,6 +11,7 @@
  *   updated, a `TaskConflictError` is thrown so callers can re-fetch.
  */
 import type { Task, TaskStatus, TaskPriority } from "@/lib/types";
+import { getDefaultStartDate } from "@/lib/format";
 import {
   createTaskFn,
   updateTaskFn,
@@ -42,8 +43,23 @@ export const tasksService = {
       (globalThis as any).__test_user_id = _userId;
     }
     const cleanedPayload = { ...payload };
+
+    // Clean up empty/nullish system-generated primary keys and codes
+    const keysToClean = ["id", "task_code", "created_at", "updated_at", "version"];
+    for (const key of keysToClean) {
+      if (key in cleanedPayload && (cleanedPayload[key as keyof Task] === null || cleanedPayload[key as keyof Task] === undefined || (cleanedPayload[key as keyof Task] as unknown) === "")) {
+        delete cleanedPayload[key as keyof Task];
+      }
+    }
+
     if (cleanedPayload.assigned_to === undefined && _userId) {
       cleanedPayload.assigned_to = _userId;
+    }
+    if (cleanedPayload.planned_hours === undefined || cleanedPayload.planned_hours === null) {
+      cleanedPayload.planned_hours = 4;
+    }
+    if (cleanedPayload.start_date === undefined) {
+      cleanedPayload.start_date = getDefaultStartDate();
     }
     if ("project_id" in cleanedPayload) {
       cleanedPayload.project_id = cleanProjectId(cleanedPayload.project_id) as any;
