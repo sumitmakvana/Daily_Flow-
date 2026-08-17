@@ -321,25 +321,44 @@ function ExecutivePage() {
   const handleExportGlobalReport = () => {
     const completedTasks = eodTasks.filter((t) => t.status === "Completed").length;
     const inProgressTasks = eodTasks.filter((t) => t.status === "In Progress").length;
-    const blockedTasks = eodTasks.filter((t) => t.status === "Blocked").length;
-    const pendingTasks = eodTasks.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked").length;
+    const inReviewTasks = eodTasks.filter((t) => t.status === "In Review").length;
+    const todoTasks = eodTasks.filter((t) => t.status === "To Do").length;
+    const blockedTasks = eodTasks.filter((t) => t.status === "Blocked" || t.status === "On Hold").length;
+    const pendingTasks = eodTasks.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold").length + todoTasks;
     const totalTasks = eodTasks.length;
     const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
+    const today = new Date().toISOString().slice(0, 10);
+    const overdueTotal = eodTasks.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today).length;
+
     const memberSummaries = eodProfiles.map((p) => {
       const pTasks = eodTasks.filter((t) => t.assigned_to === p.id);
+      const cCount = pTasks.filter((t) => t.status === "Completed").length;
+      const ipCount = pTasks.filter((t) => t.status === "In Progress").length;
+      const irCount = pTasks.filter((t) => t.status === "In Review").length;
+      const tdCount = pTasks.filter((t) => t.status === "To Do").length;
+      const bCount = pTasks.filter((t) => t.status === "Blocked" || t.status === "On Hold").length;
+      const pCount = pTasks.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold").length + tdCount;
+      const overdueTasks = pTasks.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today);
+      const overdueDates = Array.from(new Set(overdueTasks.map((t) => formatDate(t.due_date)).filter(Boolean))).join(", ");
+
       return {
         name: p.display_name,
-        completedCount: pTasks.filter((t) => t.status === "Completed").length,
-        inProgressCount: pTasks.filter((t) => t.status === "In Progress").length,
-        blockedCount: pTasks.filter((t) => t.status === "Blocked").length,
-        pendingCount: pTasks.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked").length,
-        tasks: pTasks.map((t) => ({ code: t.task_code, name: t.task_name, status: t.status, remarks: t.remarks })),
+        completedCount: cCount,
+        inProgressCount: ipCount,
+        inReviewCount: irCount,
+        todoCount: tdCount,
+        blockedCount: bCount,
+        pendingCount: pCount,
+        overdueCount: overdueTasks.length,
+        overdueDates: overdueDates || undefined,
+        totalCount: pTasks.length,
+        tasks: pTasks.map((t) => ({ code: t.task_code, name: t.task_name, status: t.status, dueDate: t.due_date, remarks: t.remarks })),
       };
     });
 
     const blockedAlerts = eodTasks
-      .filter((t) => t.status === "Blocked" && t.blocker_reason)
+      .filter((t) => (t.status === "Blocked" || t.status === "On Hold") && t.blocker_reason)
       .map((t) => {
         const p = eodProfiles.find((x) => x.id === t.assigned_to);
         return {
@@ -355,8 +374,11 @@ function ExecutivePage() {
       totalTasks,
       completedTasks,
       inProgressTasks,
+      inReviewTasks,
+      todoTasks,
       blockedTasks,
       pendingTasks,
+      overdueTasks: overdueTotal,
       completionRate,
       memberSummaries,
       blockedAlerts,
@@ -582,14 +604,16 @@ function ExecutiveRealDashboard({
         const createdDay = t.created_at ? t.created_at.slice(0, 10) : "";
         const completedDay = t.completed_at ? t.completed_at.slice(0, 10) : "";
         const dueDay = t.due_date ? t.due_date.slice(0, 10) : "";
-        return createdDay === today || completedDay === today || dueDay === today;
+        const isActiveToday = t.status !== "Completed" && t.status !== "On Hold";
+        return createdDay === today || completedDay === today || dueDay === today || isActiveToday;
       });
     } else {
       const cutoff = Date.now() - days * 86400000;
       result = result.filter((t) => {
         const createdTime = new Date(t.created_at).getTime();
         const completedTime = t.completed_at ? new Date(t.completed_at).getTime() : 0;
-        return createdTime >= cutoff || completedTime >= cutoff;
+        const isActive = t.status !== "Completed" && t.status !== "On Hold";
+        return createdTime >= cutoff || completedTime >= cutoff || isActive;
       });
     }
 
@@ -613,6 +637,7 @@ function ExecutiveRealDashboard({
   // 4. Dynamic Memberwise Bar Chart Data
   const memberBarChartData = useMemo(() => {
     const targetProfiles = filteredProfiles.length > 0 ? filteredProfiles : profiles;
+    const today = new Date().toISOString().slice(0, 10);
     const list = targetProfiles.map((p) => {
       const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
       const completed = pTasks.filter((t) => t.status === "Completed").length;
@@ -620,6 +645,9 @@ function ExecutiveRealDashboard({
       const blocked = pTasks.filter((t) => t.status === "Blocked").length;
       const pending = pTasks.filter(
         (t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked",
+      ).length;
+      const overdue = pTasks.filter(
+        (t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today,
       ).length;
 
       const cleanName = p.display_name.includes("@")
@@ -633,6 +661,7 @@ function ExecutiveRealDashboard({
         InProgress: inProgress,
         Blocked: blocked,
         Pending: pending,
+        overdue: overdue,
         total: pTasks.length,
       };
     });
@@ -717,6 +746,7 @@ function ExecutiveRealDashboard({
   // 9. Member Performance Table Data
   const memberPerformanceList = useMemo(() => {
     const targetProfiles = filteredProfiles.length > 0 ? filteredProfiles : profiles;
+    const today = new Date().toISOString().slice(0, 10);
     return targetProfiles
       .map((p) => {
         const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
@@ -725,6 +755,9 @@ function ExecutiveRealDashboard({
         const blocked = pTasks.filter((t) => t.status === "Blocked").length;
         const pending = pTasks.filter(
           (t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked",
+        ).length;
+        const overdue = pTasks.filter(
+          (t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today,
         ).length;
         const total = pTasks.length;
         const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -742,6 +775,7 @@ function ExecutiveRealDashboard({
           inProgress,
           blocked,
           pending,
+          overdue,
           total,
           completionRate,
           userProjects,
@@ -976,6 +1010,7 @@ function ExecutiveRealDashboard({
                     if (active && payload && payload.length) {
                       const full = payload[0]?.payload?.fullName || label;
                       const tot = payload[0]?.payload?.total || 0;
+                      const overdueCount = payload[0]?.payload?.overdue || 0;
                       return (
                         <div className="bg-[#1a1c2e]/95 border border-[#313454] rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[160px]">
                           <div className="font-bold text-indigo-300 border-b border-[#313454] pb-1.5 flex items-center justify-between">
@@ -988,6 +1023,12 @@ function ExecutiveRealDashboard({
                               <span className="font-bold text-white">{entry.value}</span>
                             </div>
                           ))}
+                          {overdueCount > 0 && (
+                            <div className="flex items-center justify-between gap-3 pt-1 border-t border-[#313454]/60 text-amber-400 font-medium">
+                              <span>Overdue:</span>
+                              <span className="font-bold">{overdueCount}</span>
+                            </div>
+                          )}
                         </div>
                       );
                     }
@@ -1288,9 +1329,19 @@ function ExecutiveRealDashboard({
                       </span>
                     </td>
                     <td className="py-3 px-3 text-center">
-                      <span className="bg-blue-500/10 text-blue-400 font-bold px-2 py-0.5 rounded border border-blue-500/20">
-                        {m.inProgress}
-                      </span>
+                      <div className="inline-flex items-center gap-1.5 justify-center">
+                        <span className="bg-blue-500/10 text-blue-400 font-bold px-2 py-0.5 rounded border border-blue-500/20">
+                          {m.inProgress}
+                        </span>
+                        {m.overdue > 0 && (
+                          <span
+                            className="bg-amber-500/10 text-amber-400 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-500/20"
+                            title={`${m.overdue} task(s) past due date`}
+                          >
+                            {m.overdue} overdue
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-3 text-center">
                       <span className="bg-amber-500/10 text-amber-400 font-bold px-2 py-0.5 rounded border border-amber-500/20">
@@ -1597,13 +1648,15 @@ export function MemberDetailSheet({
         const createdDay = t.created_at ? t.created_at.slice(0, 10) : "";
         const completedDay = t.completed_at ? t.completed_at.slice(0, 10) : "";
         const dueDay = t.due_date ? t.due_date.slice(0, 10) : "";
-        matchRange = createdDay === today || completedDay === today || dueDay === today;
+        const isActiveToday = t.status !== "Completed" && t.status !== "On Hold";
+        matchRange = createdDay === today || completedDay === today || dueDay === today || isActiveToday;
       } else if (drawerRange !== "all") {
         const days = Number(drawerRange) || 7;
         const cutoff = Date.now() - days * 86400000;
         const createdTime = new Date(t.created_at).getTime();
         const completedTime = t.completed_at ? new Date(t.completed_at).getTime() : 0;
-        matchRange = createdTime >= cutoff || completedTime >= cutoff;
+        const isActive = t.status !== "Completed" && t.status !== "On Hold";
+        matchRange = createdTime >= cutoff || completedTime >= cutoff || isActive;
       }
 
       return matchSearch && matchStatus && matchProject && matchRange;
@@ -1848,19 +1901,29 @@ export function MemberDetailSheet({
                         <span className="font-mono text-indigo-400 text-[11px] font-bold shrink-0">{t.task_code}</span>
                         <span className="truncate">{t.task_name}</span>
                       </div>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "shrink-0 font-semibold px-2 py-0.5 text-[10px]",
-                          t.status === "Completed"
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                            : t.status === "Blocked"
-                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
-                            : "bg-indigo-500/10 text-indigo-300 border border-indigo-500/30"
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10) && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold px-1.5 py-0.5 text-[9px]"
+                          >
+                            Overdue
+                          </Badge>
                         )}
-                      >
-                        {t.status}
-                      </Badge>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "shrink-0 font-semibold px-2 py-0.5 text-[10px]",
+                            t.status === "Completed"
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                              : t.status === "Blocked"
+                              ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                              : "bg-indigo-500/10 text-indigo-300 border border-indigo-500/30"
+                          )}
+                        >
+                          {t.status}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-between text-[11px] text-[#94a3b8] pt-0.5 gap-2">
                       <span className="flex items-center gap-1">
