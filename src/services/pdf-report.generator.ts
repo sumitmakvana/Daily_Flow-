@@ -3,16 +3,24 @@ export interface EodReportData {
   totalTasks: number;
   completedTasks: number;
   inProgressTasks: number;
+  inReviewTasks?: number;
+  todoTasks?: number;
   blockedTasks: number;
   pendingTasks: number;
+  overdueTasks?: number;
   completionRate: number;
   memberSummaries: Array<{
     name: string;
     completedCount: number;
     inProgressCount: number;
+    inReviewCount?: number;
+    todoCount?: number;
     blockedCount: number;
     pendingCount: number;
-    tasks?: Array<{ code: string; name: string; status: string; remarks?: string | null }>;
+    overdueCount?: number;
+    overdueDates?: string;
+    totalCount?: number;
+    tasks?: Array<{ code: string; name: string; status: string; dueDate?: string | null; remarks?: string | null }>;
   }>;
   blockedAlerts: Array<{ code: string; name: string; memberName: string; reason: string; duration?: string }>;
   todayCompletedTasksList?: Array<{ code: string; name: string; memberName: string }>;
@@ -31,8 +39,11 @@ export function generateEodHtmlReport(data: EodReportData): string {
     totalTasks,
     completedTasks,
     inProgressTasks,
+    inReviewTasks = 0,
+    todoTasks = 0,
     blockedTasks,
     pendingTasks,
+    overdueTasks = 0,
     completionRate,
     memberSummaries,
     blockedAlerts,
@@ -61,8 +72,12 @@ export function generateEodHtmlReport(data: EodReportData): string {
 
   // Calculate member progress percentages & sort for Top Performers
   const enrichedMembers = memberSummaries.map((m) => {
+    const inReview = m.inReviewCount ?? 0;
+    const todo = m.todoCount ?? (m.pendingCount !== undefined ? m.pendingCount : 0);
     const totalMemberTasks =
-      m.completedCount + m.inProgressCount + m.blockedCount + m.pendingCount;
+      m.totalCount !== undefined
+        ? m.totalCount
+        : m.completedCount + m.inProgressCount + inReview + todo + m.blockedCount;
     const progress =
       totalMemberTasks > 0 ? Math.round((m.completedCount / totalMemberTasks) * 100) : 0;
     const initials =
@@ -72,7 +87,16 @@ export function generateEodHtmlReport(data: EodReportData): string {
         .join("")
         .toUpperCase()
         .slice(0, 2) || "TM";
-    return { ...m, totalMemberTasks, progress, initials };
+    return {
+      ...m,
+      inReviewCount: inReview,
+      todoCount: todo,
+      overdueCount: m.overdueCount ?? 0,
+      overdueDates: m.overdueDates,
+      totalMemberTasks,
+      progress,
+      initials,
+    };
   });
 
   // Top Performers (sorted by progress desc then completedCount desc)
@@ -94,7 +118,6 @@ export function generateEodHtmlReport(data: EodReportData): string {
         { bg: "#dcfce7", text: "#166534" },
       ];
       const colorScheme = avatarColors[idx % avatarColors.length];
-      const barColor = m.progress > 50 ? "#16a34a" : m.progress > 20 ? "#2563eb" : "#cbd5e1";
 
       return `
       <tr style="background-color: ${bgColor}; border-bottom: 1px solid #f1f5f9;">
@@ -110,40 +133,30 @@ export function generateEodHtmlReport(data: EodReportData): string {
             </tr>
           </table>
         </td>
-        <td align="center" style="padding: 10px 6px; text-align: center; vertical-align: middle; font-weight: 700; color: #2563eb; font-size: 13px; font-family: Arial, sans-serif;">
-          ${m.inProgressCount}
-        </td>
         <td align="center" style="padding: 10px 6px; text-align: center; vertical-align: middle; font-weight: 700; color: #16a34a; font-size: 13px; font-family: Arial, sans-serif;">
           ${m.completedCount}
         </td>
+        <td align="center" style="padding: 10px 6px; text-align: center; vertical-align: middle; font-weight: 700; color: #2563eb; font-size: 13px; font-family: Arial, sans-serif;">
+          ${m.inProgressCount}
+        </td>
+        <td align="center" style="padding: 10px 6px; text-align: center; vertical-align: middle; font-weight: 700; color: #7c3aed; font-size: 13px; font-family: Arial, sans-serif;">
+          ${m.inReviewCount}
+        </td>
         <td align="center" style="padding: 10px 6px; text-align: center; vertical-align: middle; font-weight: 700; color: #d97706; font-size: 13px; font-family: Arial, sans-serif;">
-          ${m.pendingCount}
+          ${m.todoCount}
         </td>
         <td align="center" style="padding: 10px 6px; text-align: center; vertical-align: middle; font-weight: 700; color: #dc2626; font-size: 13px; font-family: Arial, sans-serif;">
           ${m.blockedCount}
         </td>
-        <td align="right" style="padding: 10px 12px; text-align: right; vertical-align: middle; width: 120px; font-family: Arial, sans-serif;">
-          <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td style="font-size: 11px; font-weight: 700; color: #334155; text-align: right; padding-right: 6px; width: 35px; vertical-align: middle; font-family: Arial, sans-serif;">${m.progress}%</td>
-              <td style="vertical-align: middle;">
-                <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="width: 100%; background-color: #e2e8f0; border-radius: 4px; height: 7px; border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt;">
-                  <tr>
-                    ${
-                      m.progress > 0
-                        ? `<td bgcolor="${barColor}" style="background-color: ${barColor}; width: ${m.progress}%; height: 7px; border-radius: 4px; line-height: 1px; font-size: 1px;">&nbsp;</td>`
-                        : ""
-                    }
-                    ${
-                      m.progress < 100
-                        ? `<td bgcolor="#e2e8f0" style="background-color: #e2e8f0; width: ${100 - m.progress}%; height: 7px; border-radius: 4px; line-height: 1px; font-size: 1px;">&nbsp;</td>`
-                        : ""
-                    }
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
+        <td align="center" style="padding: 10px 6px; text-align: center; vertical-align: middle; font-size: 12px; font-family: Arial, sans-serif;">
+          ${
+            m.overdueCount > 0
+              ? `<span style="display: inline-block; background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${m.overdueCount}${m.overdueDates ? ` (${escapeHtml(m.overdueDates)})` : ' overdue'}</span>`
+              : `<span style="color: #94a3b8; font-weight: 600;">0</span>`
+          }
+        </td>
+        <td align="center" style="padding: 10px 8px; text-align: center; vertical-align: middle; font-weight: 800; color: #0f172a; font-size: 13px; font-family: Arial, sans-serif;">
+          ${m.totalMemberTasks}
         </td>
       </tr>
       `;
@@ -473,15 +486,17 @@ export function generateEodHtmlReport(data: EodReportData): string {
                 <thead>
                   <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
                     <th style="padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Member</th>
-                    <th style="padding: 10px 6px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Active</th>
                     <th style="padding: 10px 6px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Completed</th>
-                    <th style="padding: 10px 6px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Pending</th>
+                    <th style="padding: 10px 6px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">In Progress</th>
+                    <th style="padding: 10px 6px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">In Review</th>
+                    <th style="padding: 10px 6px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">To Do</th>
                     <th style="padding: 10px 6px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Blocked</th>
-                    <th style="padding: 10px 12px; text-align: right; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Progress</th>
+                    <th style="padding: 10px 6px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Overdue</th>
+                    <th style="padding: 10px 8px; text-align: center; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">Total</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${memberRowsHtml || `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px; font-family: Arial, sans-serif;">No active members found.</td></tr>`}
+                  ${memberRowsHtml || `<tr><td colspan="8" style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px; font-family: Arial, sans-serif;">No active members found.</td></tr>`}
                 </tbody>
               </table>
 

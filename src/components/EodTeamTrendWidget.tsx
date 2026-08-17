@@ -128,7 +128,6 @@ export function EodTeamTrendWidget({ tasks, profiles }: EodTeamTrendWidgetProps)
   const totalToday = todayTasks.length;
   const completionPct = totalToday > 0 ? Math.round((completedToday.length / totalToday) * 100) : 0;
 
-  // 2. Member-wise Stacked Bar Data
   const { memberChartData, memberDetailedList } = useMemo(() => {
     const countsMap = new Map<
       string,
@@ -138,11 +137,17 @@ export function EodTeamTrendWidget({ tasks, profiles }: EodTeamTrendWidgetProps)
         name: string;
         Completed: number;
         InProgress: number;
+        InReview: number;
+        ToDo: number;
         Blocked: number;
         Pending: number;
+        Overdue: number;
+        OverdueDates: string;
         Total: number;
       }
     >();
+
+    const todayIso = new Date().toISOString().slice(0, 10);
 
     for (const t of todayTasks) {
       const uId = t.assigned_to || "unassigned";
@@ -154,15 +159,29 @@ export function EodTeamTrendWidget({ tasks, profiles }: EodTeamTrendWidgetProps)
         name: uName.split(" ")[0],
         Completed: 0,
         InProgress: 0,
+        InReview: 0,
+        ToDo: 0,
         Blocked: 0,
         Pending: 0,
+        Overdue: 0,
+        OverdueDates: "",
         Total: 0,
       };
 
       if (t.status === "Completed") entry.Completed += 1;
-      else if (t.status === "In Progress" || t.status === "In Review") entry.InProgress += 1;
+      else if (t.status === "In Progress") entry.InProgress += 1;
+      else if (t.status === "In Review") entry.InReview += 1;
+      else if (t.status === "To Do") entry.ToDo += 1;
       else if (t.status === "Blocked" || t.status === "On Hold") entry.Blocked += 1;
       else entry.Pending += 1;
+
+      if (t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < todayIso) {
+        entry.Overdue += 1;
+        const dStr = formatDate(t.due_date);
+        if (dStr && !entry.OverdueDates.includes(dStr)) {
+          entry.OverdueDates = entry.OverdueDates ? `${entry.OverdueDates}, ${dStr}` : dStr;
+        }
+      }
 
       entry.Total += 1;
       countsMap.set(uId, entry);
@@ -172,7 +191,6 @@ export function EodTeamTrendWidget({ tasks, profiles }: EodTeamTrendWidgetProps)
     return { memberChartData: list, memberDetailedList: list };
   }, [todayTasks, profileMap]);
 
-  // Filtered task inspection list (combining status filter & member filter)
   const filteredTasks = useMemo(() => {
     return todayTasks.filter((t) => {
       const matchesMember =
@@ -184,13 +202,13 @@ export function EodTeamTrendWidget({ tasks, profiles }: EodTeamTrendWidgetProps)
         matchesStatus = t.status === "In Progress" || t.status === "In Review";
       else if (statusFilter === "Blocked")
         matchesStatus = t.status === "Blocked" || t.status === "On Hold";
-      else if (statusFilter === "Pending") matchesStatus = t.status === "To Do";
+      else if (statusFilter === "Pending")
+        matchesStatus = t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold";
 
       return matchesMember && matchesStatus;
     });
   }, [todayTasks, statusFilter, memberFilter]);
 
-  // 3. 7-Day Velocity Line Chart Data
   const velocityData = useMemo(() => {
     const days: { date: string; label: string; completed: number }[] = [];
     const now = new Date();
@@ -211,14 +229,24 @@ export function EodTeamTrendWidget({ tasks, profiles }: EodTeamTrendWidgetProps)
     return days;
   }, [tasks]);
 
-  // Handle PDF/HTML Download for Manager
   const handleDownloadPdf = () => {
+    const inReviewToday = todayTasks.filter((t) => t.status === "In Review");
+    const todoToday = todayTasks.filter((t) => t.status === "To Do");
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const overdueTasksCount = todayTasks.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < todayIso).length;
+
     const memberSummaries = memberDetailedList.map((m) => ({
       name: m.fullName,
       completedCount: m.Completed,
       inProgressCount: m.InProgress,
+      inReviewCount: m.InReview,
+      todoCount: m.ToDo,
       blockedCount: m.Blocked,
       pendingCount: m.Pending,
+      overdueCount: m.Overdue,
+      overdueDates: m.OverdueDates || undefined,
+      totalCount: m.Total,
       tasks: [],
     }));
 
@@ -234,8 +262,11 @@ export function EodTeamTrendWidget({ tasks, profiles }: EodTeamTrendWidgetProps)
       totalTasks: totalToday,
       completedTasks: completedToday.length,
       inProgressTasks: inProgressToday.length,
+      inReviewTasks: inReviewToday.length,
+      todoTasks: todoToday.length,
       blockedTasks: blockedToday.length,
       pendingTasks: pendingToday.length,
+      overdueTasks: overdueTasksCount,
       completionRate: completionPct,
       memberSummaries,
       blockedAlerts,

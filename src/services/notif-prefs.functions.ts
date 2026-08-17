@@ -222,18 +222,27 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
 
     let completedCount = 0;
     let inProgressCount = 0;
+    let inReviewCount = 0;
+    let todoCount = 0;
     let blockedCount = 0;
     let pendingCount = 0;
 
     const memberSummaries = (profiles ?? []).map((p) => {
       const mine = plateByUser.get(p.id) ?? [];
       const completed = mine.filter((t) => t.status === "Completed");
-      const inProgress = mine.filter((t) => t.status === "In Progress" || t.status === "In Review");
+      const inProgress = mine.filter((t) => t.status === "In Progress");
+      const inReview = mine.filter((t) => t.status === "In Review");
+      const todo = mine.filter((t) => t.status === "To Do");
       const blocked = mine.filter((t) => t.status === "Blocked" || t.status === "On Hold");
-      const pending = mine.filter((t) => t.status === "To Do");
+      const pending = mine.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold");
+
+      const overdueTasks = mine.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today);
+      const overdueDates = Array.from(new Set(overdueTasks.map((t) => t.due_date?.slice(5, 10)).filter(Boolean))).join(", ");
 
       completedCount += completed.length;
       inProgressCount += inProgress.length;
+      inReviewCount += inReview.length;
+      todoCount += todo.length;
       blockedCount += blocked.length;
       pendingCount += pending.length;
 
@@ -241,13 +250,18 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
         name: p.display_name || "Team Member",
         completedCount: completed.length,
         inProgressCount: inProgress.length,
+        inReviewCount: inReview.length,
+        todoCount: todo.length,
         blockedCount: blocked.length,
-        pendingCount: pending.length,
+        pendingCount: pending.length + todo.length,
+        overdueCount: overdueTasks.length,
+        overdueDates: overdueDates || undefined,
+        totalCount: mine.length,
         tasks: [],
       };
     });
 
-    const totalCount = completedCount + inProgressCount + blockedCount + pendingCount;
+    const totalCount = completedCount + inProgressCount + inReviewCount + todoCount + blockedCount + pendingCount;
     const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
     const blockedAlerts: Array<{
@@ -278,6 +292,8 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
       totalTasks: totalCount,
       completedTasks: completedCount,
       inProgressTasks: inProgressCount,
+      inReviewTasks: inReviewCount,
+      todoTasks: todoCount,
       blockedTasks: blockedCount,
       pendingTasks: pendingCount,
       completionRate,

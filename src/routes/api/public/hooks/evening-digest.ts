@@ -88,38 +88,52 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
 
         const summarize = (mine: NonNullable<typeof tasks>) => {
           const completed = mine.filter((t) => t.status === "Completed");
-          const inProgress = mine.filter(
-            (t) => t.status === "In Progress" || t.status === "In Review",
-          );
+          const inProgress = mine.filter((t) => t.status === "In Progress");
+          const inReview = mine.filter((t) => t.status === "In Review");
+          const todo = mine.filter((t) => t.status === "To Do");
           const blocked = mine.filter((t) => t.status === "Blocked" || t.status === "On Hold");
-          const pending = mine.filter((t) => t.status === "To Do");
-          return { completed, inProgress, blocked, pending };
+          const pending = mine.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold");
+          return { completed, inProgress, inReview, todo, blocked, pending };
         };
 
         const computeTodayDigestData = () => {
           let completedCount = 0;
           let inProgressCount = 0;
+          let inReviewCount = 0;
+          let todoCount = 0;
           let blockedCount = 0;
-          let pendingCount = 0;
+          let overdueTotal = 0;
 
           const memberSummaries = (profiles ?? []).map((p) => {
             const mine = plateByUser.get(p.id) ?? [];
             const s = summarize(mine);
+            const overdueTasks = mine.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today);
+            const overdueDates = Array.from(new Set(overdueTasks.map((t) => t.due_date?.slice(5, 10)).filter(Boolean))).join(", ");
+
             completedCount += s.completed.length;
             inProgressCount += s.inProgress.length;
+            inReviewCount += s.inReview.length;
+            todoCount += s.todo.length;
             blockedCount += s.blocked.length;
             pendingCount += s.pending.length;
+            overdueTotal += overdueTasks.length;
+
             return {
               name: p.display_name || "Team Member",
               completedCount: s.completed.length,
               inProgressCount: s.inProgress.length,
+              inReviewCount: s.inReview.length,
+              todoCount: s.todo.length,
               blockedCount: s.blocked.length,
-              pendingCount: s.pending.length,
+              pendingCount: s.pending.length + s.todo.length,
+              overdueCount: overdueTasks.length,
+              overdueDates: overdueDates || undefined,
+              totalCount: mine.length,
               tasks: [],
             };
           });
 
-          const totalCount = completedCount + inProgressCount + blockedCount + pendingCount;
+          const totalCount = completedCount + inProgressCount + inReviewCount + todoCount + blockedCount + pendingCount;
           const completionRate =
             totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -331,6 +345,8 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             totalTasks: digestData.totalCount,
             completedTasks: digestData.completedCount,
             inProgressTasks: digestData.inProgressCount,
+            inReviewTasks: digestData.inReviewCount,
+            todoTasks: digestData.todoCount,
             blockedTasks: digestData.blockedCount,
             pendingTasks: digestData.pendingCount,
             completionRate: digestData.completionRate,
