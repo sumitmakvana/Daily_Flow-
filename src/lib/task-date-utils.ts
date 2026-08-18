@@ -69,13 +69,10 @@ export function isTaskCompletedToday(task: TaskLike, targetDateStr?: string): bo
   let compDate: string | null = null;
   if (task.completed_at) {
     compDate = formatToDateStr(task.completed_at) || task.completed_at.slice(0, 10);
-  } else if (task.updated_at) {
-    compDate = formatToDateStr(task.updated_at) || task.updated_at.slice(0, 10);
-  } else if (task.due_date) {
-    compDate = formatToDateStr(task.due_date) || task.due_date.slice(0, 10);
   }
 
-  if (!compDate) return true; // If no date recorded, include as completed today
+  // If no completed_at date recorded, do not assume it was completed today
+  if (!compDate) return false;
 
   return compDate === today || compDate === utcToday;
 }
