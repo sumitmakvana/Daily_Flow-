@@ -3,6 +3,7 @@ import { Outlet, createRootRouteWithContext, HeadContent, Scripts, Link, useRout
 import { useEffect } from "react";
 import { auth } from "@/integrations/backend/auth";
 import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -73,6 +74,27 @@ function RootComponent() {
     });
     return () => subscription.unsubscribe();
   }, [router, queryClient]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const toastMsg = params.get("toast_message");
+      const toastErr = params.get("toast_error");
+      if (toastMsg) {
+        toast.success(toastMsg);
+        params.delete("toast_message");
+      }
+      if (toastErr) {
+        toast.error(toastErr);
+        params.delete("toast_error");
+      }
+      if (toastMsg || toastErr) {
+        const newSearch = params.toString();
+        const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : "") + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    }
+  }, [router.state.location]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {

@@ -106,20 +106,34 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
 
         for (const p of profiles ?? []) {
           const mine = plateByUser.get(p.id) ?? [];
-          // Only notify if they have absolutely 0 tasks on plate
-          if (mine.length > 0) continue;
+          const userTasks = (tasks ?? []).filter((t) => t.assigned_to === p.id);
+          const hasStartedTask = userTasks.some(
+            (t) => t.status === "In Progress" || t.status === "In Review" || t.status === "Completed",
+          );
 
-          // If the user already has an active, unread 0-tasks reminder, do not send another one
+          const hasNoTasks = mine.length === 0;
+          const hasNotStarted = !hasStartedTask;
+
+          // Only notify if they have 0 tasks OR haven't started any task today
+          if (!hasNoTasks && !hasNotStarted) continue;
+
+          // If the user already has an active, unread reminder, skip
           if (activeReminderUserIds.has(p.id)) continue;
 
           if (!optedOut.has(p.id)) {
-            // Deduplication key changes every X minutes based on interval to prevent sending multiple per slot
             const dedupeKey = `NO_TASKS_REMINDER_${today}_${h}_${slot}_${p.id}`;
+            const title = hasNoTasks
+              ? "Reminder: 0 tasks on plate"
+              : "Reminder: Start your first task";
+            const body = hasNoTasks
+              ? "You still have no tasks on your plate today. Click here to add a task."
+              : "You have tasks on your plate today but haven't started any yet. Click here to start working on a task.";
+
             const { error } = await supabaseAdmin.from("notifications").insert({
               user_id: p.id,
-              type: "sod_digest", // Re-use type so click handler automatically handles it
-              title: "Reminder: 0 tasks on plate",
-              body: "You still have no tasks on your plate today. Click here to add a task.",
+              type: "sod_digest",
+              title,
+              body,
               dedupe_key: dedupeKey,
             });
 
@@ -132,8 +146,12 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
                 await supabaseAdmin.from("notifications").insert({
                   user_id: p.manager_id,
                   type: "sod_digest",
-                  title: `Team Alert: 0 tasks on ${p.display_name}'s plate`,
-                  body: `${p.display_name} has no tasks on their plate today. Click here to assign tasks.`,
+                  title: hasNoTasks
+                    ? `Team Alert: 0 tasks on ${p.display_name}'s plate`
+                    : `Team Alert: ${p.display_name} hasn't started any task today`,
+                  body: hasNoTasks
+                    ? `${p.display_name} has no tasks on their plate today.`
+                    : `${p.display_name} has tasks assigned but hasn't started any yet.`,
                   dedupe_key: managerDedupeKey,
                 });
               }

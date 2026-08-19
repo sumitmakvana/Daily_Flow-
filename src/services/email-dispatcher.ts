@@ -116,14 +116,26 @@ async function sendViaMicrosoftGraph(
   }
 }
 
+const globalEmailDedupeCache = new Map<string, number>();
+
 export async function sendEodEmail(
   options: SendEmailOptions,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { to, subject, html } = options;
+  const { to, subject } = options;
 
   if (!to || to.length === 0) {
     return { success: false, error: "No recipient emails specified" };
   }
+
+  // Global Deduplication Guard: Suppress duplicate emails with identical recipients & subject within 30 seconds
+  const dedupeKey = `${to.slice().sort().join(",")}_${subject}`;
+  const now = Date.now();
+  const lastSentTime = globalEmailDedupeCache.get(dedupeKey);
+  if (lastSentTime && now - lastSentTime < 30000) {
+    console.log(`[EmailDispatcher] Suppressing duplicate email send within 30s: ${dedupeKey}`);
+    return { success: true, messageId: `suppressed-duplicate-${Date.now()}` };
+  }
+  globalEmailDedupeCache.set(dedupeKey, now);
 
   // 1. Try Microsoft Graph API if configured (Azure AD / Office 365 OAuth2 Client Credentials)
   const msTenantId = process.env.MS_TENANT_ID;

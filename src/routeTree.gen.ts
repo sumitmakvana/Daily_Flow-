@@ -42,6 +42,7 @@ import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedSettingsOperationsRouteImport } from './routes/_authenticated/settings.operations'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings.notifications'
+import { Route as AuthenticatedSettingsEmailOperationsRouteImport } from './routes/_authenticated/settings.email-operations'
 import { Route as AuthenticatedConfigureNewRouteImport } from './routes/_authenticated/configure.new'
 import { Route as AuthenticatedConfigureAutomationsRouteImport } from './routes/_authenticated/configure.automations'
 import { Route as ApiPublicHooksWorkloadSnapshotRouteImport } from './routes/api/public/hooks/workload-snapshot'
@@ -55,6 +56,9 @@ import { Route as ApiPublicHooksCarryForwardRouteImport } from './routes/api/pub
 import { Route as ApiPublicHooksAutomationTickRouteImport } from './routes/api/public/hooks/automation-tick'
 import { Route as ApiPublicHooksAutomationDueEnqueueRouteImport } from './routes/api/public/hooks/automation-due-enqueue'
 import { Route as ApiPublicHooksAdoptionRollupRouteImport } from './routes/api/public/hooks/adoption-rollup'
+import { Route as ApiPublicActionsStartTaskRouteImport } from './routes/api/public/actions/start-task'
+import { Route as ApiPublicActionsCompleteTaskRouteImport } from './routes/api/public/actions/complete-task'
+import { Route as ApiPublicActionsCarryForwardTaskRouteImport } from './routes/api/public/actions/carry-forward-task'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -226,6 +230,12 @@ const AuthenticatedSettingsNotificationsRoute =
     path: '/settings/notifications',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedSettingsEmailOperationsRoute =
+  AuthenticatedSettingsEmailOperationsRouteImport.update({
+    id: '/settings/email-operations',
+    path: '/settings/email-operations',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedConfigureNewRoute =
   AuthenticatedConfigureNewRouteImport.update({
     id: '/new',
@@ -304,6 +314,24 @@ const ApiPublicHooksAdoptionRollupRoute =
     path: '/api/public/hooks/adoption-rollup',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicActionsStartTaskRoute =
+  ApiPublicActionsStartTaskRouteImport.update({
+    id: '/api/public/actions/start-task',
+    path: '/api/public/actions/start-task',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicActionsCompleteTaskRoute =
+  ApiPublicActionsCompleteTaskRouteImport.update({
+    id: '/api/public/actions/complete-task',
+    path: '/api/public/actions/complete-task',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicActionsCarryForwardTaskRoute =
+  ApiPublicActionsCarryForwardTaskRouteImport.update({
+    id: '/api/public/actions/carry-forward-task',
+    path: '/api/public/actions/carry-forward-task',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -338,8 +366,12 @@ export interface FileRoutesByFullPath {
   '/app-storage/upload': typeof AppStorageUploadRoute
   '/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/configure/new': typeof AuthenticatedConfigureNewRoute
+  '/settings/email-operations': typeof AuthenticatedSettingsEmailOperationsRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
+  '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
+  '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
   '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
@@ -385,8 +417,12 @@ export interface FileRoutesByTo {
   '/app-storage/upload': typeof AppStorageUploadRoute
   '/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/configure/new': typeof AuthenticatedConfigureNewRoute
+  '/settings/email-operations': typeof AuthenticatedSettingsEmailOperationsRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
+  '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
+  '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
   '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
@@ -434,8 +470,12 @@ export interface FileRoutesById {
   '/app-storage/upload': typeof AppStorageUploadRoute
   '/_authenticated/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/_authenticated/configure/new': typeof AuthenticatedConfigureNewRoute
+  '/_authenticated/settings/email-operations': typeof AuthenticatedSettingsEmailOperationsRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/settings/operations': typeof AuthenticatedSettingsOperationsRoute
+  '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
+  '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
   '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
@@ -483,8 +523,12 @@ export interface FileRouteTypes {
     | '/app-storage/upload'
     | '/configure/automations'
     | '/configure/new'
+    | '/settings/email-operations'
     | '/settings/notifications'
     | '/settings/operations'
+    | '/api/public/actions/carry-forward-task'
+    | '/api/public/actions/complete-task'
+    | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
     | '/api/public/hooks/automation-tick'
@@ -530,8 +574,12 @@ export interface FileRouteTypes {
     | '/app-storage/upload'
     | '/configure/automations'
     | '/configure/new'
+    | '/settings/email-operations'
     | '/settings/notifications'
     | '/settings/operations'
+    | '/api/public/actions/carry-forward-task'
+    | '/api/public/actions/complete-task'
+    | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
     | '/api/public/hooks/automation-tick'
@@ -578,8 +626,12 @@ export interface FileRouteTypes {
     | '/app-storage/upload'
     | '/_authenticated/configure/automations'
     | '/_authenticated/configure/new'
+    | '/_authenticated/settings/email-operations'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/settings/operations'
+    | '/api/public/actions/carry-forward-task'
+    | '/api/public/actions/complete-task'
+    | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
     | '/api/public/hooks/automation-tick'
@@ -599,6 +651,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   AppStorageFileRoute: typeof AppStorageFileRoute
   AppStorageUploadRoute: typeof AppStorageUploadRoute
+  ApiPublicActionsCarryForwardTaskRoute: typeof ApiPublicActionsCarryForwardTaskRoute
+  ApiPublicActionsCompleteTaskRoute: typeof ApiPublicActionsCompleteTaskRoute
+  ApiPublicActionsStartTaskRoute: typeof ApiPublicActionsStartTaskRoute
   ApiPublicHooksAdoptionRollupRoute: typeof ApiPublicHooksAdoptionRollupRoute
   ApiPublicHooksAutomationDueEnqueueRoute: typeof ApiPublicHooksAutomationDueEnqueueRoute
   ApiPublicHooksAutomationTickRoute: typeof ApiPublicHooksAutomationTickRoute
@@ -845,6 +900,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/settings/email-operations': {
+      id: '/_authenticated/settings/email-operations'
+      path: '/settings/email-operations'
+      fullPath: '/settings/email-operations'
+      preLoaderRoute: typeof AuthenticatedSettingsEmailOperationsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/configure/new': {
       id: '/_authenticated/configure/new'
       path: '/new'
@@ -936,6 +998,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksAdoptionRollupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/actions/start-task': {
+      id: '/api/public/actions/start-task'
+      path: '/api/public/actions/start-task'
+      fullPath: '/api/public/actions/start-task'
+      preLoaderRoute: typeof ApiPublicActionsStartTaskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/actions/complete-task': {
+      id: '/api/public/actions/complete-task'
+      path: '/api/public/actions/complete-task'
+      fullPath: '/api/public/actions/complete-task'
+      preLoaderRoute: typeof ApiPublicActionsCompleteTaskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/actions/carry-forward-task': {
+      id: '/api/public/actions/carry-forward-task'
+      path: '/api/public/actions/carry-forward-task'
+      fullPath: '/api/public/actions/carry-forward-task'
+      preLoaderRoute: typeof ApiPublicActionsCarryForwardTaskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -983,6 +1066,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTeamCapacityRoute: typeof AuthenticatedTeamCapacityRoute
   AuthenticatedTodayRoute: typeof AuthenticatedTodayRoute
   AuthenticatedWorkloadRoute: typeof AuthenticatedWorkloadRoute
+  AuthenticatedSettingsEmailOperationsRoute: typeof AuthenticatedSettingsEmailOperationsRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsOperationsRoute: typeof AuthenticatedSettingsOperationsRoute
 }
@@ -1014,6 +1098,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedTeamCapacityRoute: AuthenticatedTeamCapacityRoute,
   AuthenticatedTodayRoute: AuthenticatedTodayRoute,
   AuthenticatedWorkloadRoute: AuthenticatedWorkloadRoute,
+  AuthenticatedSettingsEmailOperationsRoute:
+    AuthenticatedSettingsEmailOperationsRoute,
   AuthenticatedSettingsNotificationsRoute:
     AuthenticatedSettingsNotificationsRoute,
   AuthenticatedSettingsOperationsRoute: AuthenticatedSettingsOperationsRoute,
@@ -1029,6 +1115,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   AppStorageFileRoute: AppStorageFileRoute,
   AppStorageUploadRoute: AppStorageUploadRoute,
+  ApiPublicActionsCarryForwardTaskRoute: ApiPublicActionsCarryForwardTaskRoute,
+  ApiPublicActionsCompleteTaskRoute: ApiPublicActionsCompleteTaskRoute,
+  ApiPublicActionsStartTaskRoute: ApiPublicActionsStartTaskRoute,
   ApiPublicHooksAdoptionRollupRoute: ApiPublicHooksAdoptionRollupRoute,
   ApiPublicHooksAutomationDueEnqueueRoute:
     ApiPublicHooksAutomationDueEnqueueRoute,

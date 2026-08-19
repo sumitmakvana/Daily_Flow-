@@ -8,7 +8,18 @@ import {
 } from "@/lib/task-date-utils";
 
 let isTickerRunning = false;
-let lastFiredKey = "";
+let lastMemberFiredKey = "";
+let lastManagerFiredKey = "";
+
+function addMinutesToTime(timeStr: string, minsToAdd: number): string {
+  const [hStr, mStr] = timeStr.split(":");
+  const hours = parseInt(hStr || "18", 10);
+  const minutes = parseInt(mStr || "00", 10);
+  const totalMins = (hours * 60 + minutes + minsToAdd) % 1440;
+  const finalH = Math.floor(totalMins / 60).toString().padStart(2, "0");
+  const finalM = (totalMins % 60).toString().padStart(2, "0");
+  return `${finalH}:${finalM}`;
+}
 
 export function startBackgroundCronTicker() {
   if (isTickerRunning) return;
@@ -32,14 +43,54 @@ export function startBackgroundCronTicker() {
         .eq("id", 1)
         .maybeSingle();
 
-      const eveningTime = settings?.evening_digest_time ?? "18:00";
-      const fireKey = `${todayStr}_${currentLocalTime}`;
+      const memberEodTime = settings?.evening_digest_time ?? "18:00"; // Default: 18:00 (6:00 PM)
+      const managerReportTime = addMinutesToTime(memberEodTime, 15); // Default: 18:15 (6:15 PM)
 
-      // 2. Check if current IST time matches configured evening digest time
-      if (currentLocalTime === eveningTime && lastFiredKey !== fireKey) {
-        lastFiredKey = fireKey;
+      const memberFireKey = `${todayStr}_member_${currentLocalTime}`;
+      const managerFireKey = `${todayStr}_manager_${currentLocalTime}`;
+
+      // -------------------------------------------------------------
+      // STEP A: At 6:00 PM (18:00 IST) -> Dispatch Member EOD Check-in Emails
+      // -------------------------------------------------------------
+      if (currentLocalTime === memberEodTime && lastMemberFiredKey !== memberFireKey) {
+        lastMemberFiredKey = memberFireKey;
         console.log(
-          `[CronTicker] Time matched (${currentLocalTime} === ${eveningTime})! Triggering automated EOD Email dispatch...`,
+          `[CronTicker] Time matched 6:00 PM (${currentLocalTime} === ${memberEodTime})! Triggering Member EOD Check-in notifications...`,
+        );
+
+        const { data: profiles } = await supabaseAdmin
+          .from("profiles")
+          .select("id, display_name, email, is_active")
+          .eq("is_active", true);
+
+        for (const p of profiles ?? []) {
+          const dedupeKey = `EOD_${todayStr}_${p.id}`;
+          // Check idempotency marker before inserting notification
+          const { data: existingNotif } = await supabaseAdmin
+            .from("notifications")
+            .select("id")
+            .eq("dedupe_key", dedupeKey)
+            .maybeSingle();
+
+          if (!existingNotif) {
+            await supabaseAdmin.from("notifications").insert({
+              user_id: p.id,
+              type: "eod_digest",
+              title: `End of Day Check-in`,
+              body: `Please review and update your uncompleted tasks for today.`,
+              dedupe_key: dedupeKey,
+            });
+          }
+        }
+      }
+
+      // -------------------------------------------------------------
+      // STEP B: At 6:15 PM (18:15 IST) -> Dispatch Manager EOD Team Summary Report
+      // -------------------------------------------------------------
+      if (currentLocalTime === managerReportTime && lastManagerFiredKey !== managerFireKey) {
+        lastManagerFiredKey = managerFireKey;
+        console.log(
+          `[CronTicker] Time matched 6:15 PM (${currentLocalTime} === ${managerReportTime})! Triggering Manager EOD Team Summary Report...`,
         );
 
         const [{ data: profiles }, { data: tasks }, { data: prefs }] = await Promise.all([
@@ -83,10 +134,21 @@ export function startBackgroundCronTicker() {
           const inReview = mine.filter((t) => t.status === "In Review");
           const todo = mine.filter((t) => t.status === "To Do");
           const blocked = mine.filter((t) => t.status === "Blocked" || t.status === "On Hold");
-          const pending = mine.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold");
+          const pending = mine.filter(
+            (t) =>
+              t.status !== "Completed" &&
+              t.status !== "In Progress" &&
+              t.status !== "In Review" &&
+              t.status !== "Blocked" &&
+              t.status !== "On Hold",
+          );
 
-          const overdueTasks = mine.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < todayStr);
-          const overdueDates = Array.from(new Set(overdueTasks.map((t) => t.due_date?.slice(5, 10)).filter(Boolean))).join(", ");
+          const overdueTasks = mine.filter(
+            (t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < todayStr,
+          );
+          const overdueDates = Array.from(
+            new Set(overdueTasks.map((t) => t.due_date?.slice(5, 10)).filter(Boolean)),
+          ).join(", ");
 
           completedCount += completed.length;
           inProgressCount += inProgress.length;
@@ -110,8 +172,15 @@ export function startBackgroundCronTicker() {
           };
         });
 
-        const totalCount = completedCount + inProgressCount + inReviewCount + todoCount + blockedCount + pendingCount;
-        const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+        const totalCount =
+          completedCount +
+          inProgressCount +
+          inReviewCount +
+          todoCount +
+          blockedCount +
+          pendingCount;
+        const completionRate =
+          totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
         const blockedAlerts: Array<{
           code: string;
@@ -151,8 +220,7 @@ export function startBackgroundCronTicker() {
           blockedAlerts,
         });
 
-        // Check if EOD email dispatch has already been executed today to prevent duplicate runs
-        const dispatchDedupeKey = `EOD_EMAIL_DISPATCH_${todayStr}`;
+        const dispatchDedupeKey = `EOD_MANAGER_REPORT_${todayStr}`;
         const { data: existingDispatch } = await supabaseAdmin
           .from("notifications")
           .select("id")
@@ -161,12 +229,11 @@ export function startBackgroundCronTicker() {
 
         if (existingDispatch) {
           console.log(
-            `[CronTicker] EOD email dispatch for ${todayStr} already completed today. Skipping duplicate dispatch.`,
+            `[CronTicker] Manager EOD report dispatch for ${todayStr} already completed today. Skipping duplicate.`,
           );
           return;
         }
 
-        // Collect recipient emails from notification_prefs (deduplicated & normalized to lowercase)
         const recipientEmails = new Set<string>();
 
         for (const pref of (prefs as any[]) ?? []) {
@@ -181,14 +248,13 @@ export function startBackgroundCronTicker() {
               .forEach((e: string) => recipientEmails.add(e));
           }
 
-          // 2. Direct Managers (get manager email for users managed)
+          // 2. Direct Managers
           if (pref.eod_send_to_managers) {
             const userProfile = profileById.get(pref.user_id);
             if (userProfile?.manager_id) {
               const mgr = profileById.get(userProfile.manager_id);
               if (mgr && mgr.email) recipientEmails.add(mgr.email.trim().toLowerCase());
             } else if (userProfile?.email) {
-              // If the profile itself is a manager, add manager's own email
               const isAManager = (profiles ?? []).some((p) => p.manager_id === pref.user_id);
               if (isAManager) recipientEmails.add(userProfile.email.trim().toLowerCase());
             }
@@ -206,47 +272,23 @@ export function startBackgroundCronTicker() {
         if (toList.length > 0) {
           const res = await sendEodEmail({
             to: toList,
-            subject: `📊 [EOD Team Digest] Today's Team Status Report - ${todayStr} | Daily Flow`,
+            subject: `📊 [EOD Team Digest] Today's Team Status Report - ${todayStr} | Operon`,
             html: reportHtml,
           });
           console.log(
-            `[CronTicker] Automated EOD Email dispatched to recipients: ${toList.join(", ")}`,
+            `[CronTicker] Automated Manager EOD Report dispatched to: ${toList.join(", ")}`,
             res,
           );
 
-          // Save dispatch idempotency marker & notification records to public.notifications
           if (profiles && profiles.length > 0) {
             await supabaseAdmin.from("notifications").insert({
               user_id: profiles[0].id,
               type: "eod_team_digest",
-              title: `EOD Email Dispatched - ${todayStr}`,
-              body: `Automated EOD team performance digest sent to ${toList.join(", ")}.`,
+              title: `Manager EOD Report Dispatched - ${todayStr}`,
+              body: `Automated EOD team performance report sent to ${toList.join(", ")}.`,
               dedupe_key: dispatchDedupeKey,
             });
           }
-
-          for (const p of profiles ?? []) {
-            const mine = plateByUser.get(p.id) ?? [];
-            const completed = mine.filter((t) => t.status === "Completed").length;
-            const inProgress = mine.filter(
-              (t) => t.status === "In Progress" || t.status === "In Review",
-            ).length;
-            const blocked = mine.filter(
-              (t) => t.status === "Blocked" || t.status === "On Hold",
-            ).length;
-            const pending = mine.filter((t) => t.status === "To Do").length;
-
-            const dedupeKey = `EOD_${todayStr}_${p.id}`;
-            await supabaseAdmin.from("notifications").insert({
-              user_id: p.id,
-              type: "eod_digest",
-              title: `EOD: ${completed} done · ${inProgress} in progress · ${blocked} blocked · ${pending} pending`,
-              body: `Automated EOD team performance digest sent to ${toList.join(", ")}.`,
-              dedupe_key: dedupeKey,
-            });
-          }
-        } else {
-          console.log(`[CronTicker] No active recipient emails configured for EOD dispatch.`);
         }
       }
     } catch (err) {
