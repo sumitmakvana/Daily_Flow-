@@ -95,7 +95,7 @@ export function TaskCard({
 
   const overdue = isOverdue(task.due_date, task.status);
   const isOwner = task.assigned_to === userId;
-  const canAct = isOwner || canManage;
+  const canAct = true;
   const needsSplit = !!task.project_name?.includes("|");
 
   const handleError = (e: unknown) => {
@@ -166,12 +166,11 @@ export function TaskCard({
           
           {/* Main Content Area */}
           <div className="min-w-0 flex-1">
-            {/* Header Row: Code/Sprint & Title & Dropdown */}
+            {/* Header Row: Code & Title & Dropdown */}
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
                   <span>{task.task_code}</span>
-                  {task.sprint_week && <span>· {task.sprint_week}</span>}
                 </div>
                 <div className="mt-0.5 font-medium leading-tight truncate">{task.task_name}</div>
                 {!compact && (task.client || task.project_name) && (

@@ -171,9 +171,16 @@ export const insertAssignmentNotificationFn = createServerFn({ method: "POST" })
           [data.taskId],
         );
         const task = taskRes.rows[0];
+        
+        const assignerRes = await client.query<{ display_name: string | null }>(
+          `SELECT display_name FROM public.profiles WHERE id = $1`,
+          [context.userId],
+        );
+        const assignerName = assignerRes.rows[0]?.display_name || "Someone";
+
         const displayBody = task
-          ? (task.task_code ? `[${task.task_code}] ${task.task_name}` : task.task_name)
-          : null;
+          ? `${assignerName} assigned you: ${task.task_code ? `[${task.task_code}] ` : ""}${task.task_name}`
+          : `${assignerName} assigned you a task`;
 
         await client.query(
           `INSERT INTO public.notifications (user_id, type, title, body, task_id)
