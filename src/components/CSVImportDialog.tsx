@@ -35,7 +35,6 @@ const DB_FIELDS = [
   { key: "priority", label: "Priority", required: false, keywords: ["priority", "level"] },
   { key: "reviewer", label: "Reviewer", required: false, keywords: ["reviewer"] },
   { key: "planned_hours", label: "Planned Hours", required: false, keywords: ["hours", "planned", "time", "est"] },
-  { key: "sprint_week", label: "Sprint Week", required: false, keywords: ["sprint", "week"] },
 ];
 
 type Step = "upload" | "mapping" | "users" | "preview";
@@ -596,7 +595,6 @@ export function CSVImportDialog({
           reviewer,
           due_date: parseCSVDate(getValue("due_date")),
           planned_hours: getValue("planned_hours") ? Number(getValue("planned_hours")) : 0,
-          sprint_week: getValue("sprint_week") || null,
           remarks: getValue("remarks") || null,
           created_by: defaultCreatedBy || userId,
           updated_by: userId,

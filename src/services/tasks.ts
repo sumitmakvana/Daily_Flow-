@@ -68,6 +68,13 @@ export const tasksService = {
       data: { payload: cleanedPayload as Record<string, unknown> },
     })) as unknown as Task | null;
     if (!row) throw new Error("Task creation failed");
+
+    if (row.assigned_to && row.assigned_to !== _userId) {
+      insertAssignmentNotificationFn({
+        data: { userId: row.assigned_to, taskId: row.id },
+      }).catch((err) => console.warn("Failed to notify user on task creation:", err));
+    }
+
     return row;
   },
 
@@ -79,7 +86,6 @@ export const tasksService = {
     if (import.meta.env.MODE === "test") {
       (globalThis as any).__test_user_id = _userId;
     }
-    void _userId;
     const cleanedPatch = { ...patch };
     if ("project_id" in cleanedPatch) {
       cleanedPatch.project_id = cleanProjectId(cleanedPatch.project_id) as any;
@@ -92,6 +98,13 @@ export const tasksService = {
       },
     })) as unknown as Task | null;
     if (!row) throw new TaskConflictError();
+
+    if (cleanedPatch.assigned_to !== undefined && cleanedPatch.assigned_to !== task.assigned_to && cleanedPatch.assigned_to !== _userId && cleanedPatch.assigned_to !== null) {
+      insertAssignmentNotificationFn({
+        data: { userId: cleanedPatch.assigned_to, taskId: row.id },
+      }).catch((err) => console.warn("Failed to notify user on task update:", err));
+    }
+
     return row;
   },
 
@@ -135,10 +148,6 @@ export const tasksService = {
       (globalThis as any).__test_user_id = userId;
     }
     await this.update(task, { assigned_to: newAssignee } as Partial<Task>, userId);
-    // Best-effort notification — failures logged server-side, don't roll back.
-    await insertAssignmentNotificationFn({
-      data: { userId: newAssignee, taskId: task.id },
-    });
   },
 
   async setPriority(task: Task, priority: TaskPriority, userId: string) {

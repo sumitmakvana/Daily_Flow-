@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task, type TaskHistory, type WorkItemType, type HolidayCalendar } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { getLocalHoliday, fetchIndianHolidays, formatRelative, getDefaultStartDate, type Holiday } from "@/lib/format";
+import { getLocalHoliday, fetchIndianHolidays, formatRelative, getDefaultStartDate, todayISO, parseHoursOrMins, type Holiday } from "@/lib/format";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { workItemTypesService } from "@/services/work-item-types";
 import { holidaysService } from "@/services/operations";
@@ -77,7 +77,36 @@ interface GridRow {
   start_date: string | null;
   due_date: string | null;
   planned_hours: number;
+  isCustomHours?: boolean;
+  temp_hours_text?: string;
+  remarks?: string;
 }
+
+const PLANNED_HOURS_OPTIONS = [
+  { value: 0.25, label: "15m" },
+  { value: 0.5, label: "30m" },
+  { value: 0.75, label: "45m" },
+  { value: 1.0, label: "1h" },
+  { value: 1.25, label: "1h 15m" },
+  { value: 1.5, label: "1h 30m" },
+  { value: 1.75, label: "1h 45m" },
+  { value: 2.0, label: "2h" },
+  { value: 2.5, label: "2h 30m" },
+  { value: 3.0, label: "3h" },
+  { value: 3.5, label: "3h 30m" },
+  { value: 4.0, label: "4h (Default)" },
+  { value: 4.5, label: "4h 30m" },
+  { value: 5.0, label: "5h" },
+  { value: 5.5, label: "5h 30m" },
+  { value: 6.0, label: "6h" },
+  { value: 6.5, label: "6h 30m" },
+  { value: 7.0, label: "7h" },
+  { value: 7.5, label: "7h 30m" },
+  { value: 8.0, label: "8h" },
+  { value: 9.0, label: "9h" },
+  { value: 10.0, label: "10h" },
+  { value: 12.0, label: "12h" },
+];
 
 export function TaskFormDialog({
   open,
@@ -130,14 +159,18 @@ export function TaskFormDialog({
   const [saving, setSaving] = useState(false);
   const [isCustomProject, setIsCustomProject] = useState(false);
   const [isCustomClient, setIsCustomClient] = useState(false);
+  const [isCustomSingleHours, setIsCustomSingleHours] = useState(false);
+  const [singleHoursText, setSingleHoursText] = useState("");
 
   // Multi-Task Grid State
+  const [profileLastTasks, setProfileLastTasks] = useState<Record<string, { client: string; project_name: string }>>({});
   const [gridRows, setGridRows] = useState<GridRow[]>(() => {
     const defaultStart = getDefaultStartDate();
+    const todayStr = todayISO();
     return [
-      { id: "1", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: null, planned_hours: 4 },
-      { id: "2", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: null, planned_hours: 4 },
-      { id: "3", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: null, planned_hours: 4 },
+      { id: "1", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: todayStr, planned_hours: 4, remarks: "" },
+      { id: "2", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: todayStr, planned_hours: 4, remarks: "" },
+      { id: "3", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: todayStr, planned_hours: 4, remarks: "" },
     ];
   });
 
@@ -158,9 +191,11 @@ export function TaskFormDialog({
       const isNewOpen = !prevOpen;
       const isDifferentTask = initial?.id !== prevInitialId;
       if (isNewOpen || isDifferentTask) {
-        const defaultAssignee = initial ? initial.assigned_to : (userId ?? null);
-        const defaultStartDate = initial?.start_date ?? getDefaultStartDate(null, apiHolidays, holidayCalendar);
+        const defaultAssignee = (initial ? initial.assigned_to : (userId ?? null)) ?? null;
+        const defaultStartDate = (initial?.start_date ?? getDefaultStartDate(null, apiHolidays, holidayCalendar)) as string | null;
         const defaultPlannedHours = initial?.planned_hours !== undefined && initial?.planned_hours !== null ? initial.planned_hours : 4;
+        const hasPreset = PLANNED_HOURS_OPTIONS.some((opt) => opt.value === defaultPlannedHours);
+        setIsCustomSingleHours(!hasPreset);
         setForm(
           initial
             ? {
@@ -189,10 +224,11 @@ export function TaskFormDialog({
             ? [defaultAssignee]
             : []
         );
+        const todayStr = todayISO();
         setGridRows([
-          { id: "1", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate, due_date: null, planned_hours: 4 },
-          { id: "2", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate, due_date: null, planned_hours: 4 },
-          { id: "3", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate, due_date: null, planned_hours: 4 },
+          { id: "1", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: todayStr, planned_hours: 4, remarks: "" },
+          { id: "2", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: todayStr, planned_hours: 4, remarks: "" },
+          { id: "3", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: todayStr, planned_hours: 4, remarks: "" },
         ]);
       }
     }
@@ -205,8 +241,51 @@ export function TaskFormDialog({
     supabase
       .from("profiles")
       .select("id,display_name,avatar_url")
-      .then(({ data }) => {
-        setProfiles((data ?? []) as Profile[]);
+      .then(async ({ data: profileData }) => {
+        const loadedProfiles = (profileData ?? []) as Profile[];
+        setProfiles(loadedProfiles);
+
+        const { data: recentTasks } = await supabase
+          .from("tasks")
+          .select("assigned_to, client, project_name, created_at")
+          .not("assigned_to", "is", null)
+          .order("created_at", { ascending: false });
+
+        const lastTasks: Record<string, { client: string; project_name: string }> = {};
+        if (recentTasks) {
+          for (const t of recentTasks) {
+            if (t.assigned_to && !lastTasks[t.assigned_to]) {
+              lastTasks[t.assigned_to] = {
+                client: t.client || "",
+                project_name: t.project_name || "",
+              };
+            }
+          }
+        }
+        setProfileLastTasks(lastTasks);
+
+        const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
+        const todayStr = todayISO();
+        const initialRows: GridRow[] = loadedProfiles.map((p) => {
+          const lastInfo = lastTasks[p.id] || { client: "", project_name: "" };
+          return {
+            id: p.id,
+            task_name: "",
+            assigned_to: p.id,
+            type_id: null,
+            client: lastInfo.client,
+            project_name: lastInfo.project_name,
+            priority: "Medium",
+            start_date: defaultStart,
+            due_date: todayStr,
+            planned_hours: 4,
+            remarks: "",
+          };
+        });
+
+        if (initialRows.length > 0) {
+          setGridRows(initialRows);
+        }
       });
     workItemTypesService.list().then(setTypes).catch(() => setTypes([]));
     holidaysService.list().then(setHolidayCalendar).catch(() => {});
@@ -343,8 +422,9 @@ export function TaskFormDialog({
         project_name: form.project_name ?? "",
         priority: "Medium",
         start_date: defaultStart,
-        due_date: form.due_date ?? null,
+        due_date: form.due_date ?? todayISO(),
         planned_hours: 4,
+        remarks: "",
       },
     ]);
   };
@@ -358,10 +438,32 @@ export function TaskFormDialog({
   };
 
   const clearGridRows = () => {
-    const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
-    setGridRows([
-      { id: String(Date.now()), task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: null, planned_hours: 4 },
-    ]);
+    if (profiles.length > 0) {
+      const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
+      const todayStr = todayISO();
+      const rows = profiles.map((p) => {
+        const lastInfo = profileLastTasks[p.id] || { client: "", project_name: "" };
+        return {
+          id: p.id,
+          task_name: "",
+          assigned_to: p.id,
+          type_id: null,
+          client: lastInfo.client,
+          project_name: lastInfo.project_name,
+          priority: "Medium" as const,
+          start_date: defaultStart,
+          due_date: todayStr,
+          planned_hours: 4,
+          remarks: "",
+        };
+      });
+      setGridRows(rows);
+    } else {
+      const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
+      setGridRows([
+        { id: String(Date.now()), task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: todayISO(), planned_hours: 4, remarks: "" },
+      ]);
+    }
   };
 
   // Duplicate current task in-dialog
@@ -496,7 +598,7 @@ export function TaskFormDialog({
                 due_date: row.due_date,
                 planned_hours: Number(row.planned_hours) || 4,
                 status: "To Do",
-                remarks: form.remarks || null,
+                remarks: row.remarks || form.remarks || null,
                 custom_fields: form.custom_fields || {},
               },
               userId
@@ -600,7 +702,7 @@ export function TaskFormDialog({
           isExpanded
             ? "w-[98vw] h-[95vh] max-h-[95vh] sm:max-w-[98vw] rounded-xl"
             : creationMode === "grid" && !form.id
-            ? "w-[96vw] max-h-[90vh] sm:max-w-6xl rounded-xl"
+            ? "w-[96vw] max-h-[90vh] sm:max-w-7xl rounded-xl"
             : "w-[90vw] max-h-[85vh] sm:max-w-4xl lg:max-w-5xl rounded-xl"
         )}
         onPointerDownOutside={(e) => e.preventDefault()}
@@ -727,26 +829,27 @@ export function TaskFormDialog({
                 <table className="w-full text-[11px] text-left border-collapse">
                   <thead className="sticky top-0 bg-secondary z-10 text-muted-foreground uppercase text-[10px] tracking-wider font-semibold border-b border-border">
                     <tr>
-                      <th className="py-2 px-1.5 text-center w-7 border-r border-border/40">#</th>
-                      <th className="py-2 px-2 min-w-[160px] border-r border-border/40">Task Name *</th>
-                      <th className="py-2 px-1.5 min-w-[125px] border-r border-border/40">Assigned To</th>
-                      <th className="py-2 px-1.5 min-w-[115px] border-r border-border/40">Work Type</th>
-                      <th className="py-2 px-1.5 min-w-[115px] border-r border-border/40">Client</th>
-                      <th className="py-2 px-1.5 min-w-[125px] border-r border-border/40">Project</th>
-                      <th className="py-2 px-1.5 w-[90px] border-r border-border/40">Priority</th>
-                      <th className="py-2 px-1.5 w-[115px] border-r border-border/40">Start Date</th>
-                      <th className="py-2 px-1.5 w-[115px] border-r border-border/40">Due Date</th>
-                      <th className="py-2 px-1.5 w-[55px] border-r border-border/40">Hrs</th>
-                      <th className="py-2 px-1 text-center w-8"></th>
+                      <th className="py-2.5 px-2 text-center w-7 border-r border-border/40">#</th>
+                      <th className="py-2.5 px-2 min-w-[180px] border-r border-border/40">Task Name *</th>
+                      <th className="py-2.5 px-2 min-w-[110px] border-r border-border/40">Assigned To</th>
+                      <th className="py-2.5 px-2 min-w-[100px] border-r border-border/40">Work Type</th>
+                      <th className="py-2.5 px-2 min-w-[115px] border-r border-border/40">Client</th>
+                      <th className="py-2.5 px-2 min-w-[130px] border-r border-border/40">Project</th>
+                      <th className="py-2.5 px-2 w-[85px] border-r border-border/40">Priority</th>
+                      <th className="py-2.5 px-2 w-[110px] border-r border-border/40">Start Date</th>
+                      <th className="py-2.5 px-2 w-[110px] border-r border-border/40">Due Date</th>
+                      <th className="py-2.5 px-2 w-[45px] border-r border-border/40 text-center">Notes</th>
+                      <th className="py-2.5 px-2 min-w-[85px] border-r border-border/40">Hrs</th>
+                      <th className="py-2.5 px-1 text-center w-8"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {gridRows.map((row, index) => (
                       <tr key={row.id} className="hover:bg-muted/40 transition-colors">
-                        <td className="py-1 px-1 text-center text-muted-foreground font-mono text-[10px] border-r border-border/40">
+                        <td className="py-1.5 px-1.5 text-center text-muted-foreground font-mono text-[10px] border-r border-border/40">
                           {index + 1}
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
                           <Input
                             className="h-7 text-[11px] px-2 bg-background border-border"
                             placeholder="Task title..."
@@ -754,7 +857,7 @@ export function TaskFormDialog({
                             onChange={(e) => updateGridRow(row.id, "task_name", e.target.value)}
                           />
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
                           <Select
                             value={row.assigned_to ?? NONE}
                             onValueChange={(v) =>
@@ -774,7 +877,7 @@ export function TaskFormDialog({
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
                           <Select
                             value={row.type_id ?? NONE}
                             onValueChange={(v) =>
@@ -794,11 +897,11 @@ export function TaskFormDialog({
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
                           {row.isCustomClient ? (
                             <div className="flex items-center gap-1">
                               <Input
-                                className="h-7 text-[11px] px-1.5 bg-background border-border"
+                                className="h-7 text-[11px] px-1.5 bg-background border-border flex-1"
                                 placeholder="Custom client..."
                                 value={row.client || ""}
                                 onChange={(e) => updateGridRow(row.id, "client", e.target.value)}
@@ -808,9 +911,9 @@ export function TaskFormDialog({
                                 type="button"
                                 title="Select from list"
                                 onClick={() => updateGridRow(row.id, "isCustomClient", false)}
-                                className="text-[10px] text-primary hover:underline shrink-0 p-0.5"
+                                className="h-7 w-7 flex items-center justify-center text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
                               >
-                                <List className="h-3 w-3" />
+                                <List className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           ) : (
@@ -825,7 +928,7 @@ export function TaskFormDialog({
                                   }
                                 }}
                               >
-                                <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
+                                <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border flex-1">
                                   <SelectValue placeholder="Client..." />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-60 overflow-y-auto">
@@ -846,18 +949,18 @@ export function TaskFormDialog({
                                 type="button"
                                 title="Type custom client"
                                 onClick={() => updateGridRow(row.id, "isCustomClient", true)}
-                                className="text-[10px] text-muted-foreground hover:text-primary shrink-0 p-0.5"
+                                className="h-7 w-7 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
                               >
-                                <Pencil className="h-3 w-3" />
+                                <Pencil className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           )}
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
                           {row.isCustomProj ? (
                             <div className="flex items-center gap-1">
                               <Input
-                                className="h-7 text-[11px] px-1.5 bg-background border-border"
+                                className="h-7 text-[11px] px-1.5 bg-background border-border flex-1"
                                 placeholder="Custom project..."
                                 value={row.project_name || ""}
                                 onChange={(e) => updateGridRow(row.id, "project_name", e.target.value)}
@@ -867,9 +970,9 @@ export function TaskFormDialog({
                                 type="button"
                                 title="Select from list"
                                 onClick={() => updateGridRow(row.id, "isCustomProj", false)}
-                                className="text-[10px] text-primary hover:underline shrink-0 p-0.5"
+                                className="h-7 w-7 flex items-center justify-center text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
                               >
-                                <List className="h-3 w-3" />
+                                <List className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           ) : (
@@ -889,7 +992,7 @@ export function TaskFormDialog({
                                   }
                                 }}
                               >
-                                <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
+                                <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border flex-1">
                                   <SelectValue placeholder="Project..." />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-60 overflow-y-auto">
@@ -910,14 +1013,14 @@ export function TaskFormDialog({
                                 type="button"
                                 title="Type custom project"
                                 onClick={() => updateGridRow(row.id, "isCustomProj", true)}
-                                className="text-[10px] text-muted-foreground hover:text-primary shrink-0 p-0.5"
+                                className="h-7 w-7 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
                               >
-                                <Pencil className="h-3 w-3" />
+                                <Pencil className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           )}
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
                           <Select
                             value={row.priority}
                             onValueChange={(v) =>
@@ -936,7 +1039,7 @@ export function TaskFormDialog({
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
                           <Input
                             type="date"
                             className="h-7 text-[11px] cursor-pointer px-1 bg-background border-border"
@@ -946,7 +1049,7 @@ export function TaskFormDialog({
                             }
                           />
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
                           <Input
                             type="date"
                             className="h-7 text-[11px] cursor-pointer px-1 bg-background border-border"
@@ -956,22 +1059,108 @@ export function TaskFormDialog({
                             }
                           />
                         </td>
-                        <td className="py-1 px-1 border-r border-border/40">
-                          <Input
-                            type="number"
-                            step="0.5"
-                            className="h-7 text-[11px] px-1 bg-background border-border"
-                            value={row.planned_hours || ""}
-                            onChange={(e) =>
-                              updateGridRow(
-                                row.id,
-                                "planned_hours",
-                                e.target.value ? Number(e.target.value) : 0
-                              )
-                            }
-                          />
+                        <td className="py-1.5 px-1.5 border-r border-border/40 text-center">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "h-7 w-7 rounded-md transition-colors",
+                                  row.remarks?.trim()
+                                    ? "text-primary bg-primary/10 hover:bg-primary/20"
+                                    : "text-muted-foreground hover:bg-muted"
+                                )}
+                                title={row.remarks?.trim() ? "Edit notes (has content)" : "Add notes / description"}
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-72 p-3 bg-card border-border shadow-xl rounded-xl z-50" align="end">
+                              <div className="space-y-2">
+                                <h4 className="text-xs font-semibold text-foreground">Task Notes & Description</h4>
+                                <Textarea
+                                  className="text-xs bg-background border-border min-h-[80px] text-foreground"
+                                  placeholder="Enter remarks/details for this task..."
+                                  value={row.remarks || ""}
+                                  onChange={(e) => updateGridRow(row.id, "remarks", e.target.value)}
+                                  autoFocus
+                                />
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </td>
-                        <td className="py-1 px-1 text-center">
+                        <td className="py-1.5 px-1.5 border-r border-border/40">
+                          {row.isCustomHours ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="text"
+                                className="h-7 text-[11px] px-1 bg-background border-border flex-1"
+                                placeholder="e.g. 45m, 1.5h"
+                                value={row.temp_hours_text !== undefined ? row.temp_hours_text : (row.planned_hours ? String(row.planned_hours) : "")}
+                                onChange={(e) => {
+                                  const text = e.target.value;
+                                  const parsed = Math.max(0, parseHoursOrMins(text));
+                                  updateGridRow(row.id, "temp_hours_text", text);
+                                  updateGridRow(row.id, "planned_hours", parsed);
+                                }}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                title="Select from list"
+                                onClick={() => updateGridRow(row.id, "isCustomHours", false)}
+                                className="h-7 w-7 flex items-center justify-center text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
+                              >
+                                <List className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Select
+                                value={String(row.planned_hours)}
+                                onValueChange={(v) => {
+                                  if (v === "__CUSTOM__") {
+                                    updateGridRow(row.id, "isCustomHours", true);
+                                    updateGridRow(row.id, "temp_hours_text", row.planned_hours ? String(row.planned_hours) : "");
+                                  } else {
+                                    updateGridRow(row.id, "planned_hours", Number(v));
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="h-7 text-[11px] px-1 bg-background border-border flex-1">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60 overflow-y-auto">
+                                  <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
+                                    <span className="flex items-center gap-1.5">
+                                      <Pencil className="h-3 w-3 text-primary" /> Custom...
+                                    </span>
+                                  </SelectItem>
+                                  {PLANNED_HOURS_OPTIONS.map((opt) => (
+                                    <SelectItem key={`gph-${row.id}-${opt.value}`} value={String(opt.value)}>
+                                      {opt.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <button
+                                type="button"
+                                title="Type custom hours"
+                                onClick={() => {
+                                  updateGridRow(row.id, "isCustomHours", true);
+                                  updateGridRow(row.id, "temp_hours_text", row.planned_hours ? String(row.planned_hours) : "");
+                                }}
+                                className="h-7 w-7 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-1.5 text-center">
                           <Button
                             type="button"
                             variant="ghost"
@@ -1357,27 +1546,80 @@ export function TaskFormDialog({
                     </div>
                   </div>
 
-                  {/* Planned Hours & Sprint */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Planned Hrs</Label>
-                      <Input
-                        type="number"
-                        step="0.5"
-                        className="h-9 text-xs bg-card border-border"
-                        value={form.planned_hours ?? ""}
-                        onChange={(e) => setForm({ ...form, planned_hours: e.target.value ? Number(e.target.value) : 0 })}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Sprint / Week</Label>
-                      <Input
-                        className="h-9 text-xs bg-card border-border"
-                        value={form.sprint_week ?? ""}
-                        onChange={(e) => setForm({ ...form, sprint_week: e.target.value })}
-                        placeholder="W21"
-                      />
-                    </div>
+                  {/* Planned Hours */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Planned Hrs</Label>
+                    {isCustomSingleHours ? (
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          type="text"
+                          className="h-9 text-xs bg-card border-border flex-1"
+                          placeholder="e.g. 45m, 1.5h"
+                          value={singleHoursText}
+                          onChange={(e) => {
+                            const text = e.target.value;
+                            const parsed = Math.max(0, parseHoursOrMins(text));
+                            setSingleHoursText(text);
+                            setForm({ ...form, planned_hours: parsed });
+                          }}
+                          onWheel={(e) => e.currentTarget.blur()}
+                          autoFocus
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          title="Select from list"
+                          onClick={() => setIsCustomSingleHours(false)}
+                          className="h-9 w-9 flex items-center justify-center text-primary hover:bg-muted border border-border rounded-xl shrink-0 transition-colors"
+                        >
+                          <List className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <Select
+                          value={form.planned_hours !== undefined && form.planned_hours !== null ? String(form.planned_hours) : "4"}
+                          onValueChange={(v) => {
+                            if (v === "__CUSTOM__") {
+                              setIsCustomSingleHours(true);
+                              setSingleHoursText(form.planned_hours ? String(form.planned_hours) : "");
+                            } else {
+                              setForm({ ...form, planned_hours: Number(v) });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-9 text-xs bg-card border-border flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60 overflow-y-auto">
+                            <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
+                              <span className="flex items-center gap-1.5">
+                                <Pencil className="h-3.5 w-3.5 text-primary" /> Custom...
+                              </span>
+                            </SelectItem>
+                            {PLANNED_HOURS_OPTIONS.map((opt) => (
+                              <SelectItem key={`sph-${opt.value}`} value={String(opt.value)}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          title="Type custom hours"
+                          onClick={() => {
+                            setIsCustomSingleHours(true);
+                            setSingleHoursText(form.planned_hours ? String(form.planned_hours) : "");
+                          }}
+                          className="h-9 w-9 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted border border-border rounded-xl shrink-0 transition-colors"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -135,10 +135,9 @@ function TasksPage() {
       due_date: t.due_date ?? "",
       planned_hours: t.planned_hours ?? "",
       actual_hours: t.actual_hours ?? "",
-      sprint_week: t.sprint_week ?? "",
       remarks: t.remarks ?? "",
     }));
-    const cols = ["task_code","task_name","client","project_name","priority","status","assigned_to","reviewer","due_date","planned_hours","actual_hours","sprint_week","remarks"];
+    const cols = ["task_code","task_name","client","project_name","priority","status","assigned_to","reviewer","due_date","planned_hours","actual_hours","remarks"];
     downloadCSV(`tasks-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows, cols));
   };
 
@@ -258,7 +257,6 @@ function TasksPage() {
               due_date: t.due_date,
               planned_hours: t.planned_hours !== undefined && t.planned_hours !== null ? t.planned_hours : 4,
               remarks: t.remarks,
-              sprint_week: t.sprint_week,
               custom_fields: t.custom_fields || {},
             },
             user?.id || ""
