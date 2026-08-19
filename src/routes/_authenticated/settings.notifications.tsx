@@ -121,6 +121,16 @@ function NotifPrefsPage() {
           >
             Operations
           </Link>
+          <Link
+            to="/settings/email-operations"
+            className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+            activeProps={{ className: "bg-primary text-primary-foreground font-semibold" }}
+            inactiveProps={{
+              className: "text-muted-foreground hover:text-foreground hover:bg-accent/40",
+            }}
+          >
+            Email Operations
+          </Link>
         </div>
       )}
 

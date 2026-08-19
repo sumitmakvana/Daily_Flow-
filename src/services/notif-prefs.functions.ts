@@ -5,13 +5,18 @@ import { withUser } from "@/integrations/postgres/query.server";
 import { getPool } from "@/integrations/postgres/client.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
+import {
+  getUncompletedEodTasksHtml,
+  getUnstartedTasksNudgeHtml,
+  getZeroTasksNudgeHtml,
+} from "@/services/email-templates";
 import { sendEodEmail } from "@/services/email-dispatcher";
 import {
   getTodayDateStr,
   isTaskCompletedToday,
   isTaskDueOrActiveToday,
 } from "@/lib/task-date-utils";
-import type { NotificationPrefs } from "@/lib/types";
+import type { NotificationPrefs, Task } from "@/lib/types";
 
 const PrefsSchema = z.object({
   user_id: z.string().uuid(),
@@ -315,6 +320,137 @@ export const dispatchEodTestEmailFn = createServerFn({ method: "POST" })
       to: targetEmailList,
       subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
       html: reportHtml,
+    });
+
+    return { ok: result.success, sentTo: targetEmailList, result };
+  });
+
+export const dispatchMemberEodTestEmailFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: { targetEmail?: string }) =>
+    z.object({ targetEmail: z.string().optional() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const today = getTodayDateStr("Asia/Kolkata");
+    const origin = process.env.APP_URL || "https://operon.noesisanalytics.co.in";
+
+    const rawEmails = data.targetEmail || "";
+    const targetEmailList = Array.from(
+      new Set(
+        rawEmails
+          .split(",")
+          .map((e) => e.trim())
+          .filter(Boolean),
+      ),
+    );
+    const firstEmail = targetEmailList[0]?.toLowerCase() || "";
+
+    // Find profile matching target test email or username
+    let targetUserId = context.userId;
+    if (firstEmail) {
+      const { data: targetProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("id, email, display_name")
+        .ilike("email", firstEmail)
+        .maybeSingle();
+
+      if (targetProfile?.id) {
+        targetUserId = targetProfile.id;
+      } else {
+        // Fallback: search profile by email prefix (e.g. sumit.makwana)
+        const prefix = firstEmail.split("@")[0].split(".")[0];
+        const { data: matchedProfiles } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .ilike("email", `%${prefix}%`)
+          .limit(1);
+
+        if (matchedProfiles && matchedProfiles.length > 0) {
+          targetUserId = matchedProfiles[0].id;
+        }
+      }
+    }
+
+    // Fetch uncompleted tasks for the target team member
+    const { data: myTasks } = await supabaseAdmin
+      .from("tasks")
+      .select("id, task_code, task_name, status, priority, due_date, assigned_to")
+      .eq("assigned_to", targetUserId)
+      .not("status", "eq", "Completed")
+      .limit(10);
+
+    const userTasks = (myTasks ?? []) as Task[];
+
+    const html = getUncompletedEodTasksHtml(targetUserId, userTasks, origin);
+    const subject =
+      userTasks.length > 0
+        ? `📊 [EOD Check-in] Uncompleted Tasks Update - Operon`
+        : `📊 [EOD Check-in] All Tasks Completed! - Operon`;
+
+    const result = await sendEodEmail({
+      to: targetEmailList,
+      subject,
+      html,
+    });
+
+    return { ok: result.success, sentTo: targetEmailList, result };
+  });
+
+export const dispatchMorningNudgeTestEmailFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: { targetEmail?: string }) =>
+    z.object({ targetEmail: z.string().optional() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const origin = process.env.APP_URL || "https://operon.noesisanalytics.co.in";
+
+    const rawEmails = data.targetEmail || "";
+    const targetEmailList = Array.from(
+      new Set(
+        rawEmails
+          .split(",")
+          .map((e) => e.trim())
+          .filter(Boolean),
+      ),
+    );
+    const firstEmail = targetEmailList[0]?.toLowerCase() || "";
+
+    let targetUserId = context.userId;
+    if (firstEmail) {
+      const { data: targetProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .ilike("email", firstEmail)
+        .maybeSingle();
+
+      if (targetProfile?.id) {
+        targetUserId = targetProfile.id;
+      }
+    }
+
+    const { data: unstartedTasks } = await supabaseAdmin
+      .from("tasks")
+      .select("id, task_code, task_name, status, priority, due_date, assigned_to")
+      .eq("assigned_to", targetUserId)
+      .eq("status", "To Do")
+      .limit(5);
+
+    const tasks = (unstartedTasks ?? []) as Task[];
+
+    const html =
+      tasks.length > 0
+        ? getUnstartedTasksNudgeHtml(targetUserId, tasks, origin)
+        : getZeroTasksNudgeHtml(targetUserId, origin);
+
+    const subject =
+      tasks.length > 0
+        ? `⏰ Action Required: Start your first task today! - Operon`
+        : `⏰ Start Your Day on Operon`;
+
+    const result = await sendEodEmail({
+      to: targetEmailList,
+      subject,
+      html,
     });
 
     return { ok: result.success, sentTo: targetEmailList, result };

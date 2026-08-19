@@ -1,8 +1,10 @@
 import "./lib/error-capture";
 import { startBackgroundCronTicker } from "./lib/cron-ticker.server";
+import { startNotificationListener } from "./lib/notification-listener.server";
 
-// Start internal 60-second EOD cron loop automatically in Node server process
+// Start internal 60-second EOD cron loop and notification listener automatically in Node server process
 startBackgroundCronTicker();
+startNotificationListener();
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";

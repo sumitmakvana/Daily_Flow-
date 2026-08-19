@@ -69,12 +69,6 @@ export const tasksService = {
     })) as unknown as Task | null;
     if (!row) throw new Error("Task creation failed");
 
-    if (row.assigned_to && row.assigned_to !== _userId) {
-      insertAssignmentNotificationFn({
-        data: { userId: row.assigned_to, taskId: row.id },
-      }).catch((err) => console.warn("Failed to notify user on task creation:", err));
-    }
-
     return row;
   },
 
@@ -98,12 +92,6 @@ export const tasksService = {
       },
     })) as unknown as Task | null;
     if (!row) throw new TaskConflictError();
-
-    if (cleanedPatch.assigned_to !== undefined && cleanedPatch.assigned_to !== task.assigned_to && cleanedPatch.assigned_to !== _userId && cleanedPatch.assigned_to !== null) {
-      insertAssignmentNotificationFn({
-        data: { userId: cleanedPatch.assigned_to, taskId: row.id },
-      }).catch((err) => console.warn("Failed to notify user on task update:", err));
-    }
 
     return row;
   },
