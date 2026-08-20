@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Paperclip, Upload, Trash2, Download, FileText, Image as ImageIcon, FileSpreadsheet, Music } from "lucide-react";
 import { attachmentsService, isAllowedMime } from "@/services/attachments";
+import { ImagePreviewModal } from "./ImagePreviewModal";
 import type { Attachment } from "@/lib/types";
 import { formatRelative } from "@/lib/format";
 import { toast } from "sonner";
@@ -31,6 +32,9 @@ export function AttachmentsPanel({
 }) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewFileName, setPreviewFileName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -66,7 +70,13 @@ export function AttachmentsPanel({
   const download = async (a: Attachment) => {
     try {
       const url = await attachmentsService.download(a);
-      window.open(url, "_blank", "noopener");
+      if (a.file_type.startsWith("image/")) {
+        setPreviewUrl(url);
+        setPreviewFileName(a.file_name);
+        setPreviewModalOpen(true);
+      } else {
+        window.open(url, "_blank", "noopener");
+      }
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -112,7 +122,7 @@ export function AttachmentsPanel({
                 <div
                   className="min-w-0 flex-1 cursor-pointer group"
                   onClick={() => download(a)}
-                  title="View / Open in new tab"
+                  title="Click to preview image"
                 >
                   <div className="truncate font-medium group-hover:underline text-foreground">
                     {a.file_name}
@@ -121,7 +131,7 @@ export function AttachmentsPanel({
                     {humanSize(a.file_size)} · {formatRelative(a.uploaded_at)}
                   </div>
                 </div>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => download(a)} title="Download">
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => download(a)} title="Download / Preview">
                   <Download className="h-3.5 w-3.5" />
                 </Button>
                 {canDelete && (
@@ -140,6 +150,13 @@ export function AttachmentsPanel({
           })}
         </ul>
       )}
+
+      <ImagePreviewModal
+        open={previewModalOpen}
+        onOpenChange={setPreviewModalOpen}
+        url={previewUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 }

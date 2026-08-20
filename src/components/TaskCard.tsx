@@ -31,6 +31,8 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  Paperclip,
+  Image as ImageIcon,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
@@ -40,9 +42,11 @@ import { CarryForwardBadge } from "./CarryForwardBadge";
 import { TaskHistorySheet } from "./TaskHistorySheet";
 import { WorkItemTypeBadge } from "./WorkItemTypeBadge";
 import { TaskFormDialog } from "./TaskFormDialog";
+import { ImagePreviewModal } from "./ImagePreviewModal";
 import { inlineCompleteStore } from "@/services/inline-complete-store";
+import { attachmentsService } from "@/services/attachments";
 import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue, getDefaultStartDate } from "@/lib/format";
-import type { Profile, Task, TaskStatus, WorkItemType } from "@/lib/types";
+import type { Profile, Task, TaskStatus, WorkItemType, Attachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { taskEodService } from "@/services/task-eod";
@@ -92,6 +96,16 @@ export function TaskCard({
   const [inlineNote, setInlineNote] = useState<string>("");
   const [inlineBusy, setInlineBusy] = useState(false);
   const [expandedRemarks, setExpandedRemarks] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewFileName, setPreviewFileName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (task.id) {
+      attachmentsService.list(task.id).then(setAttachments).catch(() => {});
+    }
+  }, [task.id]);
 
   const overdue = isOverdue(task.due_date, task.status);
   const isOwner = task.assigned_to === userId;
@@ -345,6 +359,42 @@ export function TaskCard({
               </div>
             )}
 
+            {/* Professional Visual Attachments Badge & Quick View */}
+            {attachments.length > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 flex-wrap bg-slate-900/60 border border-slate-800 p-2 rounded-xl">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  <Paperclip className="h-3 w-3 text-slate-400" />
+                  <span>Attachments ({attachments.length}):</span>
+                </span>
+                {attachments.map((att) => (
+                  <button
+                    key={att.id}
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        const url = await attachmentsService.download(att);
+                        if (att.file_type?.startsWith("image/")) {
+                          setPreviewUrl(url);
+                          setPreviewFileName(att.file_name);
+                          setPreviewModalOpen(true);
+                        } else {
+                          window.open(url, "_blank", "noopener");
+                        }
+                      } catch (err) {
+                        toast.error((err as Error).message);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/60 bg-slate-800/70 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700 hover:text-slate-100 hover:border-slate-600 transition-all cursor-pointer shadow-xs"
+                    title={`Click to preview ${att.file_name}`}
+                  >
+                    <ImageIcon className="h-3 w-3 text-slate-400 shrink-0" />
+                    <span className="truncate max-w-[140px]">{att.file_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Action buttons row */}
             {canAct && (
               <div className="mt-3 flex flex-wrap gap-1.5">
@@ -526,6 +576,13 @@ export function TaskCard({
         }}
         userId={userId}
         onSaved={onChanged}
+      />
+
+      <ImagePreviewModal
+        open={previewModalOpen}
+        onOpenChange={setPreviewModalOpen}
+        url={previewUrl}
+        fileName={previewFileName}
       />
     </>
   );
