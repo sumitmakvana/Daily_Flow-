@@ -1,5 +1,5 @@
 import { getPool } from "@/integrations/postgres/client.server";
-import { sendEodEmail } from "@/services/email-dispatcher";
+import { sendEodEmail, claimAndSendEmail } from "@/services/email-dispatcher";
 import {
   getZeroTasksNudgeHtml,
   getUnstartedTasksNudgeHtml,
@@ -316,9 +316,21 @@ async function processSingleNotificationPayload(payload: NotificationPayload) {
     );
   }
 
-  await sendEodEmail({
-    to: [user.email.trim().toLowerCase()],
-    subject,
-    html,
-  });
+  if (payload.type === "sod_digest" || payload.type === "eod_digest") {
+    const dedupePrefix = payload.type === "eod_digest" ? `EMAIL_EOD_MEMBER_${todayStr}` : `EMAIL_SOD_MEMBER_${todayStr}`;
+    await claimAndSendEmail({
+      userId: payload.user_id,
+      to: [user.email.trim().toLowerCase()],
+      dedupeKeyPrefix: dedupePrefix,
+      subject,
+      html,
+    });
+  } else {
+    await sendEodEmail({
+      to: [user.email.trim().toLowerCase()],
+      subject,
+      html,
+    });
+  }
 }
+

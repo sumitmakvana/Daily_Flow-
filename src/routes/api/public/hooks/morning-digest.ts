@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireCronAuth } from "@/lib/cron-auth.server";
 import { recordFailure } from "@/lib/ops-failures.server";
-import { sendEodEmail } from "@/services/email-dispatcher";
+import { sendEodEmail, claimAndSendEmail } from "@/services/email-dispatcher";
 import { getUnstartedTasksNudgeHtml, getZeroTasksNudgeHtml } from "@/services/email-templates";
 import type { Task } from "@/lib/types";
 
@@ -111,8 +111,10 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
                 const subject = uncompletedTasks.length > 0
                   ? `⏰ Action Required: Start your first task today! - Operon`
                   : `⏰ Start Your Day on Operon`;
-                await sendEodEmail({
+                await claimAndSendEmail({
+                  userId: p.id,
                   to: [p.email.trim().toLowerCase()],
+                  dedupeKeyPrefix: `EMAIL_SOD_MEMBER_${today}`,
                   subject,
                   html,
                 });
@@ -130,6 +132,7 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
               });
             }
           }
+
 
           if (mine.length === 0 && p.manager_id && profileById.has(p.manager_id) && !optedOut.has(p.manager_id)) {
             const managerDedupeKey = `NO_TASK_${today}_${p.id}_${p.manager_id}`;

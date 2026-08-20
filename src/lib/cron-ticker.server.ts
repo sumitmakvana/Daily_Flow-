@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
-import { sendEodEmail } from "@/services/email-dispatcher";
+import { sendEodEmail, claimAndSendEmail } from "@/services/email-dispatcher";
 import {
   getTodayDateStr,
   isTaskCompletedToday,
@@ -108,15 +108,15 @@ export function startBackgroundCronTicker() {
       }
 
       // -------------------------------------------------------------
-      // STEP B: At 6:15 PM (18:15 IST) -> Dispatch Manager EOD Team Summary Report
+      // STEP C: At Configured Manager Time -> Dispatch Manager EOD Team Summary Report
       // -------------------------------------------------------------
       if (currentLocalTime === managerReportTime && lastManagerFiredKey !== managerFireKey) {
         lastManagerFiredKey = managerFireKey;
         console.log(
-          `[CronTicker] Time matched 6:15 PM (${currentLocalTime} === ${managerReportTime})! Triggering Manager EOD Team Summary Report...`,
+          `[CronTicker] Time matched Manager Digest (${currentLocalTime} === ${managerReportTime})! Triggering Manager EOD Team Summary Report...`,
         );
 
-        const [{ data: profiles }, { data: tasks }, { data: prefs }] = await Promise.all([
+        const [{ data: profiles }, { data: tasks }, { data: prefs }, { data: adminRoles }] = await Promise.all([
           supabaseAdmin
             .from("profiles")
             .select("id, display_name, email, manager_id, is_active")
@@ -127,8 +127,10 @@ export function startBackgroundCronTicker() {
               "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, updated_at, blocker_reason, remarks",
             ),
           supabaseAdmin.from("notification_prefs").select("*"),
+          supabaseAdmin.from("user_roles").select("user_id").eq("role", "admin"),
         ]);
 
+        const adminUserIds = new Set((adminRoles ?? []).map((r) => r.user_id));
         const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
         const plateByUser = new Map<string, typeof tasks>();
 
@@ -243,20 +245,6 @@ export function startBackgroundCronTicker() {
           blockedAlerts,
         });
 
-        const dispatchDedupeKey = `EOD_MANAGER_REPORT_${todayStr}`;
-        const { data: existingDispatch } = await supabaseAdmin
-          .from("notifications")
-          .select("id")
-          .eq("dedupe_key", dispatchDedupeKey)
-          .maybeSingle();
-
-        if (existingDispatch) {
-          console.log(
-            `[CronTicker] Manager EOD report dispatch for ${todayStr} already completed today. Skipping duplicate.`,
-          );
-          return;
-        }
-
         const recipientEmails = new Set<string>();
 
         for (const pref of (prefs as any[]) ?? []) {
@@ -283,35 +271,30 @@ export function startBackgroundCronTicker() {
             }
           }
 
-          // 3. Admins
+          // 3. Admins only (filtered by user_roles)
           if (pref.eod_send_to_admins) {
             for (const p of profiles ?? []) {
-              if (p.email) recipientEmails.add(p.email.trim().toLowerCase());
+              if (p.email && adminUserIds.has(p.id)) {
+                recipientEmails.add(p.email.trim().toLowerCase());
+              }
             }
           }
         }
 
         const toList = Array.from(recipientEmails);
         if (toList.length > 0) {
-          const res = await sendEodEmail({
+          const dedupeKeyPrefix = `EMAIL_EOD_MANAGER_REPORT_${todayStr}`;
+          const res = await claimAndSendEmail({
             to: toList,
+            dedupeKeyPrefix,
             subject: `📊 [EOD Team Digest] Today's Team Status Report - ${todayStr} | Operon`,
             html: reportHtml,
           });
+
           console.log(
-            `[CronTicker] Automated Manager EOD Report dispatched to: ${toList.join(", ")}`,
+            `[CronTicker] Automated Manager EOD Report dispatch result for ${todayStr}:`,
             res,
           );
-
-          if (profiles && profiles.length > 0) {
-            await supabaseAdmin.from("notifications").insert({
-              user_id: profiles[0].id,
-              type: "eod_team_digest",
-              title: `Manager EOD Report Dispatched - ${todayStr}`,
-              body: `Automated EOD team performance report sent to ${toList.join(", ")}.`,
-              dedupe_key: dispatchDedupeKey,
-            });
-          }
         }
       }
     } catch (err) {
@@ -319,3 +302,4 @@ export function startBackgroundCronTicker() {
     }
   }, 60000); // Check every 60 seconds
 }
+

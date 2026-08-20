@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireCronAuth } from "@/lib/cron-auth.server";
 import { recordFailure } from "@/lib/ops-failures.server";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
-import { sendEodEmail } from "@/services/email-dispatcher";
+import { sendEodEmail, claimAndSendEmail } from "@/services/email-dispatcher";
 import { getUncompletedEodTasksHtml } from "@/services/email-templates";
 import type { Task } from "@/lib/types";
 import {
@@ -217,6 +217,8 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             totalCount,
             completedCount,
             inProgressCount,
+            inReviewCount,
+            todoCount,
             blockedCount,
             pendingCount,
             completionRate,
@@ -273,8 +275,10 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
                 const subject = uncompletedTasks.length > 0
                   ? `📊 End of Day Check-in: Update your uncompleted tasks - Operon`
                   : `📊 End of Day Check-in: All Tasks Completed! - Operon`;
-                await sendEodEmail({
+                await claimAndSendEmail({
+                  userId: p.id,
                   to: [p.email.trim().toLowerCase()],
+                  dedupeKeyPrefix: `EMAIL_EOD_MEMBER_${today}`,
                   subject,
                   html,
                 });
@@ -304,15 +308,6 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
 
         let sentManagers = 0;
 
-        // Idempotency check: Skip email sending if already dispatched today (unless force=true)
-        const dispatchDedupeKey = `EOD_EMAIL_DISPATCH_${today}`;
-        const { data: existingDispatch } = await supabaseAdmin
-          .from("notifications")
-          .select("id")
-          .eq("dedupe_key", dispatchDedupeKey)
-          .maybeSingle();
-
-        const shouldSendEmail = force || !existingDispatch;
         const recipientEmails = new Set<string>();
 
         for (const [managerId, lines] of managerRollup.entries()) {
@@ -354,7 +349,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
             .forEach((e) => recipientEmails.add(e));
         }
 
-        if (shouldSendEmail && recipientEmails.size > 0) {
+        if (recipientEmails.size > 0) {
           const digestData = computeTodayDigestData();
 
           const reportHtml = generateEodHtmlReport({
@@ -376,22 +371,12 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
 
           const targetEmails = Array.from(recipientEmails);
 
-          await sendEodEmail({
+          await claimAndSendEmail({
             to: targetEmails,
-            subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Daily Flow`,
+            dedupeKeyPrefix: `EMAIL_EOD_MANAGER_REPORT_${today}`,
+            subject: `📊 [EOD Team Digest] Today's Team Status Report - ${today} | Operon`,
             html: reportHtml,
           });
-
-          // Insert dispatch marker to prevent duplicate email dispatches
-          if (profiles && profiles.length > 0) {
-            await supabaseAdmin.from("notifications").insert({
-              user_id: profiles[0].id,
-              type: "eod_team_digest",
-              title: `EOD Email Dispatched - ${today}`,
-              body: `Automated EOD team performance digest sent to ${targetEmails.join(", ")}.`,
-              dedupe_key: dispatchDedupeKey,
-            });
-          }
         }
 
         return Response.json({ ok: true, sentUsers, sentManagers, failed });
@@ -399,3 +384,4 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
     },
   },
 });
+

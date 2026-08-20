@@ -121,7 +121,7 @@ const globalEmailDedupeCache = new Map<string, number>();
 export async function sendEodEmail(
   options: SendEmailOptions,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { to, subject } = options;
+  const { to, subject, html } = options;
 
   if (!to || to.length === 0) {
     return { success: false, error: "No recipient emails specified" };
@@ -235,3 +235,72 @@ export async function sendEodEmail(
     error: "No email provider (Microsoft Graph API, SMTP, or RESEND_API_KEY) configured in .env file.",
   };
 }
+
+/**
+ * Atomically claims deduplication keys in PostgreSQL before sending emails.
+ * Prevents duplicate email sending across processes, workers, retries, or concurrent ticks.
+ */
+export async function claimAndSendEmail(params: {
+  userId?: string;
+  to: string[];
+  dedupeKeyPrefix: string;
+  subject: string;
+  html: string;
+  attachments?: Array<{ filename: string; content: string }>;
+}): Promise<{ success: boolean; messageId?: string; skipped?: boolean; reason?: string; error?: string }> {
+  const { to, dedupeKeyPrefix, subject, html, attachments, userId } = params;
+
+  if (!to || to.length === 0) {
+    return { success: false, error: "No recipient emails specified" };
+  }
+
+  // Import supabaseAdmin dynamically to avoid circular dependencies
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+  let fallbackUserId = userId;
+  if (!fallbackUserId) {
+    const { data: firstUser } = await supabaseAdmin.from("profiles").select("id").limit(1).maybeSingle();
+    fallbackUserId = firstUser?.id || "00000000-0000-0000-0000-000000000000";
+  }
+
+  const claimedRecipients: string[] = [];
+
+  for (const rawEmail of to) {
+    const email = rawEmail.trim().toLowerCase();
+    if (!email) continue;
+
+    const dedupeKey = `${dedupeKeyPrefix}_${email}`;
+
+    // Attempt atomic INSERT into public.notifications to claim lock
+    const { error } = await supabaseAdmin.from("notifications").insert({
+      user_id: fallbackUserId,
+      type: "system",
+      title: `Email Lock: ${dedupeKeyPrefix.slice(0, 30)}`,
+      body: `Idempotent email lock for ${email}`,
+      dedupe_key: dedupeKey,
+    });
+
+    if (error) {
+      if (error.code === "23505") {
+        console.log(`[EmailDispatcher] Atomic DB Lock suppressed duplicate email for key: ${dedupeKey}`);
+        continue;
+      }
+      console.warn(`[EmailDispatcher] Notice on lock insert for ${dedupeKey}: ${error.message}`);
+    }
+
+    claimedRecipients.push(email);
+  }
+
+  if (claimedRecipients.length === 0) {
+    console.log(`[EmailDispatcher] All recipients for prefix '${dedupeKeyPrefix}' already claimed today. Skipping send.`);
+    return { success: true, skipped: true, reason: `All recipients already claimed for ${dedupeKeyPrefix}` };
+  }
+
+  return await sendEodEmail({
+    to: claimedRecipients,
+    subject,
+    html,
+    attachments,
+  });
+}
+
