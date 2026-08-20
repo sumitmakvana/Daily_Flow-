@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,8 @@ import { dynamicFieldsService, type WorkItemFieldDef } from "@/services/dynamic-
 import { DynamicFieldsForm } from "@/components/DynamicFieldsForm";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
+import { attachmentsService } from "@/services/attachments";
+import type { Attachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   User,
@@ -58,6 +60,9 @@ import {
   Pencil,
   List,
   Copy,
+  Image as ImageIcon,
+  FileText,
+  Upload,
 } from "lucide-react";
 
 const NONE = "__none";
@@ -173,6 +178,67 @@ export function TaskFormDialog({
       { id: "3", task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: todayStr, planned_hours: 4, remarks: "" },
     ];
   });
+
+  // Remarks & Image Attachments State
+  const [pendingFiles, setPendingFiles] = useState<Array<{ id: string; file: File; previewUrl: string }>>([]);
+  const [existingAttachments, setExistingAttachments] = useState<Attachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (open && form.id) {
+      attachmentsService.list(form.id).then(setExistingAttachments).catch(() => {});
+    } else if (!open) {
+      pendingFiles.forEach((x) => URL.revokeObjectURL(x.previewUrl));
+      setPendingFiles([]);
+      setExistingAttachments([]);
+    }
+  }, [open, form.id]);
+
+  const addPendingFiles = (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    const newItems: Array<{ id: string; file: File; previewUrl: string }> = [];
+    Array.from(files).forEach((f) => {
+      if (f.size > 20 * 1024 * 1024) {
+        toast.error(`Skipped ${f.name}: Exceeds 20MB limit`);
+        return;
+      }
+      newItems.push({
+        id: crypto.randomUUID(),
+        file: f,
+        previewUrl: URL.createObjectURL(f),
+      });
+    });
+    if (newItems.length > 0) {
+      setPendingFiles((prev) => [...prev, ...newItems]);
+      toast.success(`Attached ${newItems.length} file(s)/screenshot(s)`);
+    }
+  };
+
+  const removePendingFile = (id: string) => {
+    setPendingFiles((prev) => {
+      const target = prev.find((x) => x.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((x) => x.id !== id);
+    });
+  };
+
+  const handleRemarksPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          const namedFile = new File([file], `screenshot_${Date.now()}.png`, { type: file.type });
+          imageFiles.push(namedFile);
+        }
+      }
+    }
+    if (imageFiles.length > 0) {
+      addPendingFiles(imageFiles);
+    }
+  };
 
   const [prevOpen, setPrevOpen] = useState(false);
   const [prevInitialId, setPrevInitialId] = useState<string | undefined>(undefined);
@@ -525,6 +591,19 @@ export function TaskFormDialog({
     }
   };
 
+  const uploadPendingFilesToTask = async (taskId: string) => {
+    if (!taskId || pendingFiles.length === 0) return;
+    for (const item of pendingFiles) {
+      try {
+        await attachmentsService.upload(taskId, item.file, userId);
+      } catch (err) {
+        console.error("Failed to upload attachment:", err);
+      }
+    }
+    pendingFiles.forEach((x) => URL.revokeObjectURL(x.previewUrl));
+    setPendingFiles([]);
+  };
+
   // Main Save Handler
   const handleSave = async () => {
     if (form.project_name?.trim()) {
@@ -564,6 +643,7 @@ export function TaskFormDialog({
             throw e;
           }
         }
+        await uploadPendingFilesToTask(form.id);
         toast.success("Task updated");
         onOpenChange(false);
         onSaved();
@@ -584,7 +664,7 @@ export function TaskFormDialog({
       }
       setSaving(true);
       try {
-        await Promise.all(
+        const createdGridTasks = await Promise.all(
           validRows.map((row) =>
             tasksService.create(
               {
@@ -605,6 +685,9 @@ export function TaskFormDialog({
             )
           )
         );
+        for (const t of createdGridTasks) {
+          if (t?.id) await uploadPendingFilesToTask(t.id);
+        }
         toast.success(`Successfully created ${validRows.length} tasks!`);
         onOpenChange(false);
         onSaved();
@@ -634,7 +717,7 @@ export function TaskFormDialog({
       setSaving(true);
       try {
         if (selectedAssignees.length > 0) {
-          await Promise.all(
+          const createdTasks = await Promise.all(
             selectedAssignees.map((assigneeId) =>
               tasksService.create(
                 {
@@ -645,9 +728,13 @@ export function TaskFormDialog({
               )
             )
           );
+          for (const t of createdTasks) {
+            if (t?.id) await uploadPendingFilesToTask(t.id);
+          }
           toast.success(`Created ${selectedAssignees.length} tasks for team members!`);
         } else {
-          await tasksService.create({ ...form, assigned_to: null }, userId);
+          const createdTask = await tasksService.create({ ...form, assigned_to: null }, userId);
+          if (createdTask?.id) await uploadPendingFilesToTask(createdTask.id);
           toast.success("Task created (Unassigned)");
         }
         onOpenChange(false);
@@ -676,8 +763,11 @@ export function TaskFormDialog({
 
     setSaving(true);
     try {
-      await tasksService.create(form, userId);
-      toast.success("Task created");
+      const createdTask = await tasksService.create(form, userId);
+      if (createdTask?.id) {
+        await uploadPendingFilesToTask(createdTask.id);
+      }
+      toast.success("Task created successfully!");
       onOpenChange(false);
       onSaved();
     } catch (e) {
@@ -703,7 +793,9 @@ export function TaskFormDialog({
             ? "w-[98vw] h-[95vh] max-h-[95vh] sm:max-w-[98vw] rounded-xl"
             : creationMode === "grid" && !form.id
             ? "w-[96vw] max-h-[90vh] sm:max-w-7xl rounded-xl"
-            : "w-[90vw] max-h-[85vh] sm:max-w-4xl lg:max-w-5xl rounded-xl"
+            : form.id
+            ? "w-[90vw] max-h-[85vh] sm:max-w-4xl lg:max-w-5xl rounded-xl"
+            : "w-[90vw] max-h-[85vh] sm:max-w-2xl rounded-xl"
         )}
         onPointerDownOutside={(e) => e.preventDefault()}
       >
@@ -1200,10 +1292,10 @@ export function TaskFormDialog({
               </div>
             </div>
           ) : (
-            /* SPLIT 2-COLUMN MODAL LAYOUT */
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* LEFT COLUMN: TASK DETAILS & ATTRIBUTES (7 COLUMNS) */}
-              <div className="lg:col-span-7 space-y-4">
+            /* MODAL LAYOUT: 1-COLUMN FOR NEW TASK, 2-COLUMN FOR EDIT EXISTING TASK */
+            <div className={cn("grid grid-cols-1 gap-6", form.id ? "lg:grid-cols-12" : "")}>
+              {/* LEFT COLUMN: TASK DETAILS & ATTRIBUTES */}
+              <div className={cn(form.id ? "lg:col-span-7" : "col-span-12", "space-y-4")}>
                 {/* Task Title Input Section */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
@@ -1645,16 +1737,112 @@ export function TaskFormDialog({
                   </div>
                 ) : null}
 
-                {/* Remarks / Notes */}
-                <div>
-                  <Label className="text-xs text-muted-foreground">Remarks / Description</Label>
+                {/* Remarks / Description with Image Attachments & Screenshot Paste Support */}
+                <div className="space-y-2 bg-card border border-border p-3.5 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <span>Remarks / Description</span>
+                    </Label>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-7 text-[11px] gap-1 px-2.5 bg-background border-border text-primary hover:bg-primary/10 hover:text-primary transition-colors font-medium rounded-lg"
+                    >
+                      <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                      <span>Attach Image / Screenshot</span>
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,text/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        addPendingFiles(e.target.files);
+                        if (e.target) e.target.value = "";
+                      }}
+                    />
+                  </div>
+
                   <Textarea
-                    className="bg-card border-border text-xs text-foreground rounded-xl"
+                    className="bg-background border-border text-xs text-foreground rounded-xl placeholder:text-muted-foreground/50 focus:border-primary"
                     value={form.remarks ?? ""}
                     onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+                    onPaste={handleRemarksPaste}
                     rows={3}
-                    placeholder="Task details, instructions, or notes..."
+                    placeholder="Task details, instructions, or notes... (Tip: Press Ctrl+V to paste screenshots directly!)"
                   />
+
+                  {/* Pending Attachment Previews */}
+                  {pendingFiles.length > 0 && (
+                    <div className="pt-1.5 space-y-1.5 border-t border-border/60">
+                      <div className="text-[11px] font-semibold text-foreground flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Paperclip className="h-3 w-3 text-primary" /> Attached Media ({pendingFiles.length})
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">Will be saved with task</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {pendingFiles.map((item) => {
+                          const isImage = item.file.type.startsWith("image/");
+                          return (
+                            <div
+                              key={item.id}
+                              className="relative group bg-secondary/60 border border-border rounded-lg p-1.5 flex items-center gap-2 overflow-hidden shadow-xs"
+                            >
+                              {isImage ? (
+                                <img
+                                  src={item.previewUrl}
+                                  alt={item.file.name}
+                                  className="h-10 w-10 object-cover rounded-md border border-border shrink-0 bg-background"
+                                />
+                              ) : (
+                                <div className="h-10 w-10 rounded-md bg-secondary flex items-center justify-center shrink-0 border border-border">
+                                  <FileText className="h-5 w-5 text-primary" />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1 space-y-0.5">
+                                <p className="text-[11px] font-medium text-foreground truncate" title={item.file.name}>
+                                  {item.file.name}
+                                </p>
+                                <p className="text-[9px] text-muted-foreground font-mono">
+                                  {(item.file.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removePendingFile(item.id)}
+                                className="p-1 rounded-full bg-destructive/90 text-white hover:bg-destructive transition-colors shrink-0 shadow-sm"
+                                title="Remove attachment"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Existing Attachments Previews */}
+                  {form.id && existingAttachments.length > 0 && (
+                    <div className="pt-1.5 space-y-1.5 border-t border-border/60">
+                      <div className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                        <Paperclip className="h-3 w-3 text-primary" /> Saved Attachments ({existingAttachments.length})
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {existingAttachments.map((att) => (
+                          <Badge key={att.id} variant="outline" className="text-[10px] gap-1 py-0.5 bg-background border-border text-foreground font-medium">
+                            <ImageIcon className="h-3 w-3 text-primary" />
+                            <span className="truncate max-w-[120px]">{att.file_name}</span>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Custom Dynamic Fields */}
@@ -1666,75 +1854,61 @@ export function TaskFormDialog({
                 />
               </div>
 
-              {/* RIGHT COLUMN: INTERACTIVE TABS PANEL (5 COLUMNS WITH LEFT BORDER) */}
-              <div className="lg:col-span-5 border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-5 space-y-3 flex flex-col min-h-[380px]">
-                <Tabs defaultValue="comments" className="flex-1 flex flex-col">
-                  <TabsList className="grid grid-cols-3 bg-card border border-border p-1 h-auto rounded-xl">
-                    <TabsTrigger value="comments" className="text-xs gap-1 py-1.5 text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                      <MessageSquare className="w-3.5 h-3.5" /> Comments
-                    </TabsTrigger>
-                    <TabsTrigger value="files" className="text-xs gap-1 py-1.5 text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                      <Paperclip className="w-3.5 h-3.5" /> Files
-                    </TabsTrigger>
-                    <TabsTrigger value="history" className="text-xs gap-1 py-1.5 text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                      <Activity className="w-3.5 h-3.5" /> History
-                    </TabsTrigger>
-                  </TabsList>
+              {/* RIGHT COLUMN: INTERACTIVE TABS PANEL (ONLY SHOWN WHEN EDITING AN EXISTING TASK) */}
+              {form.id && (
+                <div className="lg:col-span-5 border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-5 space-y-3 flex flex-col min-h-[380px]">
+                  <Tabs defaultValue="comments" className="flex-1 flex flex-col">
+                    <TabsList className="grid grid-cols-3 bg-card border border-border p-1 h-auto rounded-xl">
+                      <TabsTrigger value="comments" className="text-xs gap-1 py-1.5 text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                        <MessageSquare className="w-3.5 h-3.5" /> Comments
+                      </TabsTrigger>
+                      <TabsTrigger value="files" className="text-xs gap-1 py-1.5 text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                        <Paperclip className="w-3.5 h-3.5" /> Files
+                      </TabsTrigger>
+                      <TabsTrigger value="history" className="text-xs gap-1 py-1.5 text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                        <Activity className="w-3.5 h-3.5" /> History
+                      </TabsTrigger>
+                    </TabsList>
 
-                  {/* TAB 1: COMMENTS PANEL */}
-                  <TabsContent value="comments" className="flex-1 mt-3 space-y-3">
-                    {form.id ? (
+                    {/* TAB 1: COMMENTS PANEL */}
+                    <TabsContent value="comments" className="flex-1 mt-3 space-y-3">
                       <CommentsPanel workItemId={form.id} userId={userId} profiles={profiles} canModerate={true} />
-                    ) : (
-                      <div className="bg-card border border-border rounded-xl p-4 text-center space-y-2 text-muted-foreground my-auto">
-                        <MessageSquare className="w-8 h-8 text-primary mx-auto opacity-80" />
-                        <h4 className="text-xs font-semibold text-foreground">Task Chat & Comments</h4>
-                        <p className="text-[11px]">Save task first to start discussions and tag team members with @mentions.</p>
-                      </div>
-                    )}
-                  </TabsContent>
+                    </TabsContent>
 
-                  {/* TAB 2: ATTACHMENTS PANEL */}
-                  <TabsContent value="files" className="flex-1 mt-3 space-y-3">
-                    {form.id ? (
+                    {/* TAB 2: ATTACHMENTS PANEL */}
+                    <TabsContent value="files" className="flex-1 mt-3 space-y-3">
                       <AttachmentsPanel workItemId={form.id} userId={userId} canDeleteAny={true} />
-                    ) : (
-                      <div className="bg-card border border-border rounded-xl p-4 text-center space-y-2 text-muted-foreground my-auto">
-                        <Paperclip className="w-8 h-8 text-amber-400 mx-auto opacity-80" />
-                        <h4 className="text-xs font-semibold text-foreground">Task File Attachments</h4>
-                        <p className="text-[11px]">Save task first to upload design files, documents, and media.</p>
-                      </div>
-                    )}
-                  </TabsContent>
+                    </TabsContent>
 
-                  {/* TAB 3: ACTIVITY HISTORY */}
-                  <TabsContent value="history" className="flex-1 mt-3 space-y-2">
-                    <div className="bg-card border border-border rounded-xl p-3 max-h-72 overflow-y-auto space-y-2">
-                      {taskHistoryItems.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic text-center py-4">No recent status activity.</p>
-                      ) : (
-                        taskHistoryItems.map((h) => {
-                          const actor = profiles.find((p) => p.id === h.updated_by);
-                          return (
-                            <div key={h.id} className="text-xs p-2 rounded-lg bg-secondary border border-border space-y-1">
-                              <div className="flex items-center justify-between text-muted-foreground text-[10px]">
-                                <span className="font-semibold text-foreground">{actor?.display_name || "System"}</span>
-                                <span>{formatRelative(h.created_at)}</span>
+                    {/* TAB 3: ACTIVITY HISTORY */}
+                    <TabsContent value="history" className="flex-1 mt-3 space-y-2">
+                      <div className="bg-card border border-border rounded-xl p-3 max-h-72 overflow-y-auto space-y-2">
+                        {taskHistoryItems.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic text-center py-4">No recent status activity.</p>
+                        ) : (
+                          taskHistoryItems.map((h) => {
+                            const actor = profiles.find((p) => p.id === h.updated_by);
+                            return (
+                              <div key={h.id} className="text-xs p-2 rounded-lg bg-secondary border border-border space-y-1">
+                                <div className="flex items-center justify-between text-muted-foreground text-[10px]">
+                                  <span className="font-semibold text-foreground">{actor?.display_name || "System"}</span>
+                                  <span>{formatRelative(h.created_at)}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-foreground">
+                                  <Badge variant="outline" className="text-[10px]">{h.old_status || "Created"}</Badge>
+                                  <ArrowRightCircle className="w-3.5 h-3.5 text-primary shrink-0" />
+                                  <Badge variant="secondary" className="text-[10px] bg-primary/20 text-primary">{h.new_status}</Badge>
+                                </div>
+                                {h.comment && <p className="text-[11px] text-muted-foreground italic">"{h.comment}"</p>}
                               </div>
-                              <div className="flex items-center gap-1.5 text-foreground">
-                                <Badge variant="outline" className="text-[10px]">{h.old_status || "Created"}</Badge>
-                                <ArrowRightCircle className="w-3.5 h-3.5 text-primary shrink-0" />
-                                <Badge variant="secondary" className="text-[10px] bg-primary/20 text-primary">{h.new_status}</Badge>
-                              </div>
-                              {h.comment && <p className="text-[11px] text-muted-foreground italic">"{h.comment}"</p>}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              )}
             </div>
           )}
         </div>

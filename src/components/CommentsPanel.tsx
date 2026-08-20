@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, Reply, Pencil, Trash2, Check, X, AtSign } from "lucide-react";
+import { MessageSquare, Reply, Pencil, Trash2, Check, X, AtSign, Image as ImageIcon, Paperclip, FileText } from "lucide-react";
 import { commentsService, extractMentionTokens, type CommentWithMentions } from "@/services/comments";
+import { attachmentsService } from "@/services/attachments";
 import type { Profile } from "@/lib/types";
 import { formatRelative } from "@/lib/format";
 import { toast } from "sonner";
@@ -44,6 +45,8 @@ export function CommentsPanel({
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<Array<{ id: string; file: File; previewUrl: string }>>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -55,18 +58,77 @@ export function CommentsPanel({
 
   useEffect(() => { void load(); }, [load]);
 
+  const addPendingFiles = (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    const newItems: Array<{ id: string; file: File; previewUrl: string }> = [];
+    Array.from(files).forEach((f) => {
+      if (f.size > 20 * 1024 * 1024) {
+        toast.error(`Skipped ${f.name}: Exceeds 20MB limit`);
+        return;
+      }
+      newItems.push({
+        id: crypto.randomUUID(),
+        file: f,
+        previewUrl: URL.createObjectURL(f),
+      });
+    });
+    if (newItems.length > 0) {
+      setPendingFiles((prev) => [...prev, ...newItems]);
+      toast.success(`Attached ${newItems.length} file(s)`);
+    }
+  };
+
+  const removePendingFile = (id: string) => {
+    setPendingFiles((prev) => {
+      const target = prev.find((x) => x.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((x) => x.id !== id);
+    });
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          const namedFile = new File([file], `comment_screenshot_${Date.now()}.png`, { type: file.type });
+          imageFiles.push(namedFile);
+        }
+      }
+    }
+    if (imageFiles.length > 0) {
+      addPendingFiles(imageFiles);
+    }
+  };
+
   const submit = async () => {
-    if (!body.trim()) return;
+    if (!body.trim() && pendingFiles.length === 0) return;
     setBusy(true);
     try {
       const mentionUserIds = resolveMentions(body, profiles);
       const created = await commentsService.add({
         workItemId,
         userId,
-        body,
+        body: body.trim() || "(Attachment uploaded)",
         parentId: replyTo,
         mentionUserIds,
       });
+
+      if (pendingFiles.length > 0) {
+        for (const item of pendingFiles) {
+          try {
+            await attachmentsService.upload(workItemId, item.file, userId);
+          } catch (err) {
+            console.error("Failed uploading comment attachment:", err);
+          }
+        }
+        pendingFiles.forEach((x) => URL.revokeObjectURL(x.previewUrl));
+        setPendingFiles([]);
+      }
+
       setItems((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]));
       setBody("");
       setReplyTo(null);
@@ -216,16 +278,95 @@ export function CommentsPanel({
         ))}
       </div>
       {replyTo === null && (
-        <div className="pt-1 space-y-1">
+        <div className="pt-1 space-y-2 bg-card border border-border p-2.5 rounded-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-muted-foreground">Add Comment</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+              className="h-6 text-[10px] gap-1 px-2 border-border text-primary hover:bg-primary/10 transition-colors font-medium rounded-lg"
+            >
+              <ImageIcon className="h-3 w-3 text-primary" />
+              <span>Attach Image</span>
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,application/pdf,.doc,.docx"
+              className="hidden"
+              onChange={(e) => {
+                addPendingFiles(e.target.files);
+                if (e.target) e.target.value = "";
+              }}
+            />
+          </div>
+
           <Textarea
-            placeholder="Add a comment… use @name to mention"
+            placeholder="Add a comment… use @name to mention (Tip: Press Ctrl+V to paste screenshot!)"
             rows={2}
             value={body}
             onChange={(e) => setBody(e.target.value)}
+            onPaste={handlePaste}
+            className="text-xs bg-background border-border text-foreground"
           />
+
+          {/* Pending Attachment Previews */}
+          {pendingFiles.length > 0 && (
+            <div className="pt-1 space-y-1 border-t border-border/60">
+              <div className="text-[10px] font-semibold text-muted-foreground flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Paperclip className="h-3 w-3 text-primary" /> Attached Media ({pendingFiles.length})
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {pendingFiles.map((item) => {
+                  const isImage = item.file.type.startsWith("image/");
+                  return (
+                    <div
+                      key={item.id}
+                      className="relative group bg-secondary/50 border border-border rounded-md p-1 flex items-center gap-1.5 overflow-hidden"
+                    >
+                      {isImage ? (
+                        <img
+                          src={item.previewUrl}
+                          alt={item.file.name}
+                          className="h-8 w-8 object-cover rounded shrink-0 border border-border bg-background"
+                        />
+                      ) : (
+                        <div className="h-8 w-8 rounded bg-secondary flex items-center justify-center shrink-0 border border-border">
+                          <FileText className="h-4 w-4 text-primary" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-medium text-foreground truncate" title={item.file.name}>
+                          {item.file.name}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground font-mono">
+                          {(item.file.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removePendingFile(item.id)}
+                        className="p-0.5 rounded-full bg-destructive/90 text-white hover:bg-destructive transition-colors shrink-0"
+                        title="Remove attachment"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end">
-            <Button size="sm" disabled={busy || !body.trim()} onClick={submit}>
-              <MessageSquare className="h-3.5 w-3.5 mr-1" /> Comment
+            <Button size="sm" disabled={busy || (!body.trim() && pendingFiles.length === 0)} onClick={submit} className="h-7 text-xs gap-1">
+              <MessageSquare className="h-3.5 w-3.5" /> Post Comment
             </Button>
           </div>
         </div>
