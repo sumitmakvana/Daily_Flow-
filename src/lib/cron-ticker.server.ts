@@ -8,6 +8,7 @@ import {
 } from "@/lib/task-date-utils";
 
 let isTickerRunning = false;
+let lastMorningFiredKey = "";
 let lastMemberFiredKey = "";
 let lastManagerFiredKey = "";
 
@@ -36,26 +37,48 @@ export function startBackgroundCronTicker() {
         hour12: false,
       });
 
-      // 1. Fetch configured digest time from work_settings
+      // 1. Fetch configured digest times dynamically from work_settings (UI editable)
       const { data: settings } = await supabaseAdmin
         .from("work_settings")
-        .select("evening_digest_time")
+        .select("morning_digest_time, evening_digest_time")
         .eq("id", 1)
         .maybeSingle();
 
-      const memberEodTime = settings?.evening_digest_time ?? "18:00"; // Default: 18:00 (6:00 PM)
-      const managerReportTime = addMinutesToTime(memberEodTime, 15); // Default: 18:15 (6:15 PM)
+      const morningTime = settings?.morning_digest_time ?? "10:00"; // Dynamic from UI
+      const memberEodTime = settings?.evening_digest_time ?? "18:00"; // Dynamic from UI
+      const managerReportTime = addMinutesToTime(memberEodTime, 15); // Auto 15 mins after EOD
 
+      const morningFireKey = `${todayStr}_morning_${currentLocalTime}`;
       const memberFireKey = `${todayStr}_member_${currentLocalTime}`;
       const managerFireKey = `${todayStr}_manager_${currentLocalTime}`;
 
       // -------------------------------------------------------------
-      // STEP A: At 6:00 PM (18:00 IST) -> Dispatch Member EOD Check-in Emails
+      // STEP A: At Configured Morning Time (UI Setting) -> Trigger Morning Digest
+      // -------------------------------------------------------------
+      if (currentLocalTime === morningTime && lastMorningFiredKey !== morningFireKey) {
+        lastMorningFiredKey = morningFireKey;
+        console.log(
+          `[CronTicker] Time matched Morning Digest (${currentLocalTime} === ${morningTime})! Triggering Morning Digest...`,
+        );
+
+        try {
+          const origin = process.env.APP_URL || "http://localhost:7050";
+          await fetch(`${origin}/api/public/hooks/morning-digest?force=true`, {
+            method: "POST",
+            headers: { "x-cron-secret": process.env.CRON_SECRET || "" },
+          });
+        } catch (err) {
+          console.error("[CronTicker] Error auto-triggering morning-digest:", err);
+        }
+      }
+
+      // -------------------------------------------------------------
+      // STEP B: At Configured Evening Time (UI Setting) -> Trigger Member EOD
       // -------------------------------------------------------------
       if (currentLocalTime === memberEodTime && lastMemberFiredKey !== memberFireKey) {
         lastMemberFiredKey = memberFireKey;
         console.log(
-          `[CronTicker] Time matched 6:00 PM (${currentLocalTime} === ${memberEodTime})! Triggering Member EOD Check-in notifications...`,
+          `[CronTicker] Time matched Evening Digest (${currentLocalTime} === ${memberEodTime})! Triggering Member EOD...`,
         );
 
         const { data: profiles } = await supabaseAdmin

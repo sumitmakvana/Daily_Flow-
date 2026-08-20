@@ -276,7 +276,7 @@ async function processSingleNotificationPayload(payload: NotificationPayload) {
     html = getUncompletedEodTasksHtml(payload.user_id, uncompletedTasks, origin);
   } else {
     subject = `🔔 ${payload.title}${payload.body ? `: ${payload.body}` : ""}`;
-    let assignerName = "Dev";
+    let assignerName = "Operon";
     let assigneeName = user.display_name || "Team Member";
     let taskCode: string | undefined = undefined;
     let taskName: string | undefined = undefined;
