@@ -169,7 +169,7 @@ export async function sendEodEmail(
       });
 
       const info = await transporter.sendMail({
-        from: process.env.EMAIL_FROM || `Daily Flow Digest <${smtpUser}>`,
+        from: process.env.EMAIL_FROM || `Operon Notifications <${smtpUser}>`,
         to,
         subject,
         html,

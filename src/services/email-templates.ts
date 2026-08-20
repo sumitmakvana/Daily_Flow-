@@ -251,7 +251,7 @@ export function getGeneralNotificationHtml(
   body: string,
   taskId: string | null,
   origin: string,
-  assignerName: string = "Dev",
+  assignerName: string = "Operon",
   assigneeName: string = "Team Member",
   taskCode?: string,
   taskName?: string,
@@ -417,7 +417,7 @@ export function getMultiTaskAssignmentHtml(
   userId: string,
   tasks: Array<{ id: string; task_code: string | null; task_name: string; priority: string | null }>,
   origin: string,
-  assignerName: string = "Dev",
+  assignerName: string = "Operon",
   assigneeName: string = "Team Member",
 ): string {
   let listHtml = "";

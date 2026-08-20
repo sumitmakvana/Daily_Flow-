@@ -2,6 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireCronAuth } from "@/lib/cron-auth.server";
 import { recordFailure } from "@/lib/ops-failures.server";
+import { sendEodEmail } from "@/services/email-dispatcher";
+import { getUnstartedTasksNudgeHtml, getZeroTasksNudgeHtml } from "@/services/email-templates";
+import type { Task } from "@/lib/types";
 
 /**
  * Start-of-day digest cron (e.g., 08:30 local).
@@ -12,11 +15,17 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const denied = await requireCronAuth(request, "morning-digest");
-        if (denied) return denied;
+        const url = new URL(request.url);
+        const force = url.searchParams.get("force") === "true";
+
+        if (!force) {
+          const denied = await requireCronAuth(request, "morning-digest");
+          if (denied) return denied;
+        }
 
         const today = new Date().toISOString().slice(0, 10);
         const todayMs = new Date(today).getTime();
+        const origin = process.env.APP_URL || "https://operon.noesisanalytics.co.in";
 
         // Get current time in Indian Standard Time (IST) formatted as HH:MM
         const currentLocalTime = new Date().toLocaleTimeString("en-US", {
@@ -29,7 +38,7 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
         const [{ data: profiles }, { data: tasks }, { data: prefs }, { data: settings }] = await Promise.all([
           supabaseAdmin
             .from("profiles")
-            .select("id, display_name, manager_id, is_active")
+            .select("id, display_name, email, manager_id, is_active")
             .eq("is_active", true),
           supabaseAdmin
             .from("tasks")
@@ -38,8 +47,6 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
           supabaseAdmin.from("work_settings").select("morning_digest_time").eq("id", 1).maybeSingle(),
         ]);
 
-        const url = new URL(request.url);
-        const force = url.searchParams.get("force") === "true";
         const morningTime = settings?.morning_digest_time ?? "10:00";
         if (currentLocalTime !== morningTime && !force) {
           return Response.json({
@@ -94,8 +101,23 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
               body,
               dedupe_key: dedupeKey,
             });
-            if (!error) sentUsers += 1;
-            else if (error.code === "23505") {
+            if (!error) {
+              sentUsers += 1;
+              if (p.email && p.email.trim()) {
+                const uncompletedTasks = mine as Task[];
+                const html = uncompletedTasks.length > 0
+                  ? getUnstartedTasksNudgeHtml(p.id, uncompletedTasks, origin)
+                  : getZeroTasksNudgeHtml(p.id, origin);
+                const subject = uncompletedTasks.length > 0
+                  ? `⏰ Action Required: Start your first task today! - Operon`
+                  : `⏰ Start Your Day on Operon`;
+                await sendEodEmail({
+                  to: [p.email.trim().toLowerCase()],
+                  subject,
+                  html,
+                });
+              }
+            } else if (error.code === "23505") {
               // already sent today; idempotent skip
             } else {
               failed += 1;

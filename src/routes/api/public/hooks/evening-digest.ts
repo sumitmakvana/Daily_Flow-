@@ -4,6 +4,8 @@ import { requireCronAuth } from "@/lib/cron-auth.server";
 import { recordFailure } from "@/lib/ops-failures.server";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { sendEodEmail } from "@/services/email-dispatcher";
+import { getUncompletedEodTasksHtml } from "@/services/email-templates";
+import type { Task } from "@/lib/types";
 import {
   getTodayDateStr,
   isTaskCompletedToday,
@@ -27,6 +29,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         }
 
         const today = getTodayDateStr("Asia/Kolkata");
+        const origin = process.env.APP_URL || "https://operon.noesisanalytics.co.in";
 
         // Get current time in Indian Standard Time (IST) formatted as HH:MM
         const currentLocalTime = new Date().toLocaleTimeString("en-US", {
@@ -102,6 +105,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           let inReviewCount = 0;
           let todoCount = 0;
           let blockedCount = 0;
+          let pendingCount = 0;
           let overdueTotal = 0;
 
           const memberSummaries = (profiles ?? []).map((p) => {
@@ -261,8 +265,21 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
               body,
               dedupe_key: dedupeKey,
             });
-            if (!error) sentUsers += 1;
-            else if (error.code === "23505") {
+            if (!error) {
+              sentUsers += 1;
+              if (p.email && p.email.trim()) {
+                const uncompletedTasks = (mine as Task[]).filter((t) => t.status !== "Completed");
+                const html = getUncompletedEodTasksHtml(p.id, uncompletedTasks, origin);
+                const subject = uncompletedTasks.length > 0
+                  ? `📊 End of Day Check-in: Update your uncompleted tasks - Operon`
+                  : `📊 End of Day Check-in: All Tasks Completed! - Operon`;
+                await sendEodEmail({
+                  to: [p.email.trim().toLowerCase()],
+                  subject,
+                  html,
+                });
+              }
+            } else if (error.code === "23505") {
               // already sent
             } else {
               failed += 1;
