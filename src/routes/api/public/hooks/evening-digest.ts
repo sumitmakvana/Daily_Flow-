@@ -305,7 +305,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         let sentManagers = 0;
 
         // Idempotency check: Skip email sending if already dispatched today (unless force=true)
-        const dispatchDedupeKey = `EOD_EMAIL_DISPATCH_${today}`;
+        const dispatchDedupeKey = `EOD_TEAM_REPORT_${today}`;
         const { data: existingDispatch } = await supabaseAdmin
           .from("notifications")
           .select("id")
