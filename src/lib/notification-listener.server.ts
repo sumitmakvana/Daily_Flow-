@@ -223,8 +223,16 @@ async function processSingleNotificationPayload(payload: NotificationPayload) {
     notify_blocker_resolved: true,
   };
 
-  // Ignore eod_team_digest and system log records (handled directly by cron-ticker)
-  if (payload.type === "eod_team_digest" || payload.type === "system") return;
+  // Ignore digest notifications and system log records (handled directly by cron-ticker with strict locks)
+  if (
+    payload.type === "eod_team_digest" ||
+    payload.type === "sod_team_digest" ||
+    payload.type === "eod_digest" ||
+    payload.type === "sod_digest" ||
+    payload.type === "system"
+  ) {
+    return;
+  }
 
   if (payload.type === "task_assigned" && prefs.notify_assignment === false) return;
   if (payload.type === "task_blocked" && prefs.notify_blocker_resolved === false) return;

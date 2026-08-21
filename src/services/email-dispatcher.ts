@@ -100,6 +100,7 @@ async function sendViaMicrosoftGraph(
         message,
         saveToSentItems: "true",
       }),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (res.status === 202 || res.status === 200) {
@@ -117,25 +118,84 @@ async function sendViaMicrosoftGraph(
 }
 
 const globalEmailDedupeCache = new Map<string, number>();
+const globalSentTimestamps: number[] = [];
+const recipientLastSentMap = new Map<string, number>();
+const dailyDigestLockMap = new Map<string, boolean>();
 
 export async function sendEodEmail(
   options: SendEmailOptions,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { to, subject } = options;
+  const { to, subject, html } = options;
 
   if (!to || to.length === 0) {
     return { success: false, error: "No recipient emails specified" };
   }
 
-  // Global Deduplication Guard: Suppress duplicate emails with identical recipients & subject within 30 seconds
-  const dedupeKey = `${to.slice().sort().join(",")}_${subject}`;
   const now = Date.now();
-  const lastSentTime = globalEmailDedupeCache.get(dedupeKey);
-  if (lastSentTime && now - lastSentTime < 30000) {
-    console.log(`[EmailDispatcher] Suppressing duplicate email send within 30s: ${dedupeKey}`);
-    return { success: true, messageId: `suppressed-duplicate-${Date.now()}` };
+  const normalizedRecipients = to.map((e) => e.trim().toLowerCase()).sort();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // 1. Daily Digest Lock: Ensure no user receives duplicate SOD/EOD digest email on the same day
+  const isDigestEmail =
+    subject.includes("End of Day Check-in") ||
+    subject.includes("EOD Check-in") ||
+    subject.includes("EOD Team Digest") ||
+    subject.includes("Action Required: Start your first task") ||
+    subject.includes("Start Your Day on Operon");
+
+  if (isDigestEmail) {
+    const digestType = subject.includes("Team") ? "team_digest" : "user_digest";
+    for (const email of normalizedRecipients) {
+      const lockKey = `${digestType}_${email}_${todayStr}`;
+      if (dailyDigestLockMap.get(lockKey)) {
+        console.warn(`[EmailDispatcher] Suppressing duplicate daily ${digestType} email to ${email} for ${todayStr}`);
+        return { success: true, messageId: `suppressed-daily-digest-duplicate-${now}` };
+      }
+    }
   }
-  globalEmailDedupeCache.set(dedupeKey, now);
+
+  // 2. Global Burst Protection Circuit Breaker: Max 25 emails per 60 seconds across the entire app
+  while (globalSentTimestamps.length > 0 && now - globalSentTimestamps[0] > 60000) {
+    globalSentTimestamps.shift();
+  }
+  if (globalSentTimestamps.length >= 25) {
+    console.error(
+      `[EmailDispatcher] CRITICAL SAFETY TRIGGERED: Global email burst rate limit (25 emails/min) exceeded! Suppressing email to prevent mass spam storm.`,
+    );
+    return {
+      success: false,
+      error: "Global email rate limit (25/min) reached. Email suppressed for safety.",
+    };
+  }
+
+  // 3. Per-Recipient Short-Term Rate Limiter: Minimum 10 seconds between emails to the same recipient
+  for (const email of normalizedRecipients) {
+    const lastSent = recipientLastSentMap.get(email);
+    if (lastSent && now - lastSent < 10000) {
+      console.warn(`[EmailDispatcher] Per-recipient rate limit active for ${email} (<10s). Suppressing duplicate email.`);
+      return { success: true, messageId: `suppressed-recipient-ratelimit-${now}` };
+    }
+  }
+
+  // 4. Global Exact Subject & Recipient Deduplication Guard (60-second window)
+  const dedupeKey = `${normalizedRecipients.join(",")}_${subject}`;
+  const lastSentTime = globalEmailDedupeCache.get(dedupeKey);
+  if (lastSentTime && now - lastSentTime < 60000) {
+    console.log(`[EmailDispatcher] Suppressing duplicate email send within 60s: ${dedupeKey}`);
+    return { success: true, messageId: `suppressed-duplicate-${now}` };
+  }
+
+  const recordSuccessMarkers = () => {
+    globalEmailDedupeCache.set(dedupeKey, now);
+    globalSentTimestamps.push(now);
+    for (const email of normalizedRecipients) {
+      recipientLastSentMap.set(email, now);
+      if (isDigestEmail) {
+        const digestType = subject.includes("Team") ? "team_digest" : "user_digest";
+        dailyDigestLockMap.set(`${digestType}_${email}_${todayStr}`, true);
+      }
+    }
+  };
 
   // 1. Try Microsoft Graph API if configured (Azure AD / Office 365 OAuth2 Client Credentials)
   const msTenantId = process.env.MS_TENANT_ID;
@@ -143,14 +203,18 @@ export async function sendEodEmail(
   const msClientSecret = process.env.MS_CLIENT_SECRET;
   const msSenderEmail = process.env.MS_SENDER_EMAIL || process.env.EMAIL_FROM?.match(/<([^>]+)>/)?.[1];
 
+  let result: { success: boolean; messageId?: string; error?: string };
+
   if (msTenantId && msClientId && msClientSecret && msSenderEmail) {
-    return await sendViaMicrosoftGraph(
+    result = await sendViaMicrosoftGraph(
       options,
       msTenantId,
       msClientId,
       msClientSecret,
       msSenderEmail,
     );
+    if (result.success) recordSuccessMarkers();
+    return result;
   }
 
   // 2. Try SMTP if configured (Gmail / Google Workspace / Custom SMTP) — allows sending to ANY recipient email!
@@ -182,6 +246,7 @@ export async function sendEodEmail(
       console.log(
         `[EmailDispatcher] Sent via SMTP to ${to.join(", ")}. MessageId: ${info.messageId}`,
       );
+      recordSuccessMarkers();
       return { success: true, messageId: info.messageId };
     } catch (err) {
       console.error("SMTP Delivery Error:", err);
@@ -211,6 +276,7 @@ export async function sendEodEmail(
             content: a.content,
           })),
         }),
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!response.ok) {
@@ -223,6 +289,7 @@ export async function sendEodEmail(
       console.log(
         `[EmailDispatcher] Sent via Resend to ${to.join(", ")}. MessageId: ${resData.id}`,
       );
+      recordSuccessMarkers();
       return { success: true, messageId: resData.id };
     } catch (err) {
       console.error("Failed to send email via Resend:", err);

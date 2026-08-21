@@ -243,7 +243,7 @@ export function startBackgroundCronTicker() {
           blockedAlerts,
         });
 
-        const dispatchDedupeKey = `EOD_MANAGER_REPORT_${todayStr}`;
+        const dispatchDedupeKey = `EOD_TEAM_REPORT_${todayStr}`;
         const { data: existingDispatch } = await supabaseAdmin
           .from("notifications")
           .select("id")
