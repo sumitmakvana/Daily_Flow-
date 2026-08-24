@@ -80,7 +80,6 @@ const managerNav = [
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/planning", icon: CalendarRange, label: "Planning" },
   { to: "/eod", icon: Sun, label: "EOD" },
-  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
   { to: "/heatmap", icon: Grid3x3, label: "Heatmap" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
@@ -95,7 +94,6 @@ const primaryManagerNav = [
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/team-capacity", icon: Users, label: "Team Capacity" },
-  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/executive", icon: Gauge, label: "Exec" },
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
 ];
@@ -343,11 +341,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               alt="Operon Logo"
               className="h-8 w-8 rounded-lg shadow-xs shrink-0 transition-transform group-hover:scale-105 object-contain"
             />
-            <div className="flex items-center gap-1 select-none">
-              <span className="font-black text-xl tracking-tight bg-gradient-to-r from-white via-slate-100 to-[#7CA3FD] bg-clip-text text-transparent drop-shadow-2xs font-sans">
+            <div className="flex items-center gap-1.5 select-none">
+              <span className="font-bold text-lg sm:text-xl tracking-tight bg-gradient-to-b from-white via-slate-100 to-slate-300 bg-clip-text text-transparent drop-shadow-xs font-sans transition-opacity group-hover:opacity-90">
                 Operon
               </span>
-              <span className="h-1.5 w-1.5 rounded-full bg-[#5C8EFA] inline-block shadow-xs"></span>
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.7)] inline-block"></span>
             </div>
           </Link>
 
@@ -792,11 +790,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 alt="Operon Logo"
                 className="h-7 w-7 rounded-md object-contain"
               />
-              <div className="flex items-center gap-1 select-none">
-                <span className="font-black text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-[#7CA3FD] bg-clip-text text-transparent font-sans">
+              <div className="flex items-center gap-1.5 select-none">
+                <span className="font-bold text-lg tracking-tight bg-gradient-to-b from-white via-slate-100 to-slate-300 bg-clip-text text-transparent font-sans">
                   Operon
                 </span>
-                <span className="h-1.5 w-1.5 rounded-full bg-[#5C8EFA] inline-block"></span>
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.7)] inline-block"></span>
               </div>
             </div>
             {profile && (
