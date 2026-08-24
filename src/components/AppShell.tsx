@@ -138,6 +138,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     avatar_url: string | null;
   } | null>(null);
 
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (!q) return;
+    setSearchFocused(false);
+    navigate({
+      to: "/tasks",
+      search: { search: q, tab: "all_tasks" } as any,
+    });
+  };
+
   // Global Ctrl+K Shortcut Handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -306,14 +317,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      setSearchFocused(false);
-      navigate({ to: "/tasks", search: { search: searchQuery.trim() } as any });
-    }
-  };
-
   const displayName = profile?.display_name || user?.user_metadata?.display_name || user?.user_metadata?.full_name || profile?.email?.split("@")[0] || "User";
   const userAvatarInitial = displayName.charAt(0).toUpperCase();
 
@@ -398,7 +401,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             type="button"
                             onClick={() => {
                               setSearchFocused(false);
-                              navigate({ to: "/tasks", search: { highlightId: t.id } as any });
+                              navigate({ to: "/tasks", search: { highlightId: t.id, tab: "all_tasks" } as any });
                             }}
                             className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs hover:bg-[#141F36] transition-colors text-left group"
                           >
@@ -433,7 +436,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             type="button"
                             onClick={() => {
                               setSearchFocused(false);
-                              navigate({ to: isManager ? "/team-capacity" : "/tasks" });
+                              navigate({
+                                to: "/tasks",
+                                search: { assignee: m.id, tab: "all_tasks" } as any,
+                              });
                             }}
                             className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs hover:bg-[#141F36] transition-colors text-left group"
                           >
@@ -445,11 +451,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                   {(m.display_name || m.email || "U").charAt(0).toUpperCase()}
                                 </div>
                               )}
-                              <span className="truncate text-slate-200 group-hover:text-white font-medium">
-                                {m.display_name || m.email}
-                              </span>
+                              <div className="min-w-0">
+                                <div className="truncate text-slate-200 group-hover:text-white font-medium">
+                                  {m.display_name || m.email}
+                                </div>
+                              </div>
                             </div>
-                            <ChevronRight className="h-3 w-3 text-slate-500 group-hover:text-white shrink-0" />
+                            <span className="text-[10px] text-[#5C8EFA] opacity-0 group-hover:opacity-100 transition-opacity font-medium">
+                              View Tasks ↗
+                            </span>
                           </button>
                         ))
                       )}
@@ -460,7 +470,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       type="button"
                       onClick={() => {
                         setSearchFocused(false);
-                        navigate({ to: "/tasks", search: { search: searchQuery.trim() } as any });
+                        navigate({ to: "/tasks", search: { search: searchQuery.trim(), tab: "all_tasks" } as any });
                       }}
                       className="w-full px-3 py-2 text-center text-xs font-semibold text-[#5C8EFA] bg-[#070B14] hover:bg-[#141F36] transition-colors flex items-center justify-center gap-1"
                     >
