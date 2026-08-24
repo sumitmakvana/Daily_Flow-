@@ -337,5 +337,101 @@ export function getLocalHoliday(
   return staticFallback[md] || null;
 }
 
+export interface ActiveHolidayMatch {
+  date: string; // The festival date YYYY-MM-DD
+  holiday: Holiday;
+  status: "advance" | "today" | "post";
+}
+
+/**
+ * Returns all active holidays for a given target date (todayStr).
+ * A holiday is active if:
+ * 1. todayStr is 1 working day before the holiday date (skipping Saturday/Sunday)
+ * 2. todayStr is the holiday date itself
+ * 3. todayStr is 1 day after the holiday date (or next working day if following weekend)
+ */
+export function getActiveHolidaysForDate(
+  todayStr: string,
+  apiHolidays: Record<string, Holiday> = {}
+): ActiveHolidayMatch[] {
+  if (!todayStr || todayStr.length !== 10) return [];
+
+  const [y, m, d] = todayStr.split("-").map(Number);
+  const baseDate = new Date(y, m - 1, d);
+  const activeHolidays: ActiveHolidayMatch[] = [];
+  const seen = new Set<string>();
+
+  // Check a window of days around today (-5 to +5 days) to find all holidays whose active window covers today
+  for (let offset = -5; offset <= 5; offset++) {
+    const candidate = new Date(baseDate);
+    candidate.setDate(candidate.getDate() + offset);
+
+    const cy = candidate.getFullYear();
+    const cmStr = String(candidate.getMonth() + 1).padStart(2, "0");
+    const cdStr = String(candidate.getDate()).padStart(2, "0");
+    const candidateISO = `${cy}-${cmStr}-${cdStr}`;
+
+    const holiday = getLocalHoliday(candidateISO, apiHolidays);
+    if (!holiday || !holiday.isHoliday) continue;
+
+    // Calculate the active start date (1 working day before candidateISO, skipping weekends)
+    const prevDay = new Date(candidate);
+    prevDay.setDate(prevDay.getDate() - 1);
+    while (prevDay.getDay() === 0 || prevDay.getDay() === 6) {
+      prevDay.setDate(prevDay.getDate() - 1);
+    }
+    const py = prevDay.getFullYear();
+    const pmStr = String(prevDay.getMonth() + 1).padStart(2, "0");
+    const pdStr = String(prevDay.getDate()).padStart(2, "0");
+    const startDateISO = `${py}-${pmStr}-${pdStr}`;
+
+    // Calculate the active end date (1 day after candidateISO, extending over weekend to Monday if needed)
+    const postDay = new Date(candidate);
+    postDay.setDate(postDay.getDate() + 1);
+    if (postDay.getDay() === 6) {
+      postDay.setDate(postDay.getDate() + 2); // Saturday -> Monday
+    } else if (postDay.getDay() === 0) {
+      postDay.setDate(postDay.getDate() + 1); // Sunday -> Monday
+    }
+    const ey = postDay.getFullYear();
+    const emStr = String(postDay.getMonth() + 1).padStart(2, "0");
+    const edStr = String(postDay.getDate()).padStart(2, "0");
+    const endDateISO = `${ey}-${emStr}-${edStr}`;
+
+    // Check if todayStr falls in [startDateISO, endDateISO]
+    if (todayStr >= startDateISO && todayStr <= endDateISO) {
+      const uniqueKey = `${holiday.name.toLowerCase().trim()}_${candidateISO}`;
+      if (!seen.has(uniqueKey)) {
+        seen.add(uniqueKey);
+
+        let status: "advance" | "today" | "post" = "today";
+        if (todayStr < candidateISO) {
+          status = "advance";
+        } else if (todayStr > candidateISO) {
+          status = "post";
+        }
+
+        activeHolidays.push({
+          date: candidateISO,
+          holiday,
+          status,
+        });
+      }
+    }
+  }
+
+  // Sort: today's festivals first, then advance, then post
+  const orderWeight = { today: 0, advance: 1, post: 2 };
+  activeHolidays.sort((a, b) => {
+    if (orderWeight[a.status] !== orderWeight[b.status]) {
+      return orderWeight[a.status] - orderWeight[b.status];
+    }
+    return a.date.localeCompare(b.date);
+  });
+
+  return activeHolidays;
+}
+
+
 
 

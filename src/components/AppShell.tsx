@@ -57,7 +57,6 @@ import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
 
 const memberNav = [
   { to: "/my-day", icon: Sunrise, label: "My Day" },
-  { to: "/today", icon: Sun, label: "Today" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod-tasks", icon: Sun, label: "EOD" },
@@ -71,7 +70,6 @@ const managerNav = [
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
   { to: "/command", icon: Activity, label: "Command" },
   { to: "/executive", icon: Gauge, label: "Exec" },
-  { to: "/today", icon: Sun, label: "Today" },
   { to: "/forecast", icon: TrendingUp, label: "Forecast" },
   { to: "/intelligence", icon: Brain, label: "Intelligence" },
   { to: "/planning-suggestions", icon: Sparkles, label: "Suggestions" },
@@ -80,7 +78,6 @@ const managerNav = [
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/planning", icon: CalendarRange, label: "Planning" },
   { to: "/eod", icon: Sun, label: "EOD" },
-  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
   { to: "/heatmap", icon: Grid3x3, label: "Heatmap" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
@@ -90,12 +87,10 @@ const managerNav = [
 
 const primaryManagerNav = [
   { to: "/my-day", icon: Sunrise, label: "My Day" },
-  { to: "/today", icon: Sun, label: "Today" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/team-capacity", icon: Users, label: "Team Capacity" },
-  { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/executive", icon: Gauge, label: "Exec" },
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
 ];
@@ -142,6 +137,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     email: string | null;
     avatar_url: string | null;
   } | null>(null);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (!q) return;
+    setSearchFocused(false);
+    navigate({
+      to: "/tasks",
+      search: { search: q, tab: "all_tasks" } as any,
+    });
+  };
 
   // Global Ctrl+K Shortcut Handler
   useEffect(() => {
@@ -242,13 +248,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ? [
         { to: "/executive", icon: Gauge, label: "Exec" },
         { to: "/my-day", icon: Sunrise, label: "My Day" },
-        { to: "/today", icon: Sun, label: "Today" },
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
         { to: "/eod", icon: Sun, label: "EOD" },
       ]
     : [
         { to: "/my-day", icon: Sunrise, label: "My Day" },
-        { to: "/today", icon: Sun, label: "Today" },
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
         { to: "/eod-tasks", icon: Sun, label: "EOD" },
       ];
@@ -313,14 +317,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      setSearchFocused(false);
-      navigate({ to: "/tasks", search: { search: searchQuery.trim() } as any });
-    }
-  };
-
   const displayName = profile?.display_name || user?.user_metadata?.display_name || user?.user_metadata?.full_name || profile?.email?.split("@")[0] || "User";
   const userAvatarInitial = displayName.charAt(0).toUpperCase();
 
@@ -343,11 +339,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               alt="Operon Logo"
               className="h-8 w-8 rounded-lg shadow-xs shrink-0 transition-transform group-hover:scale-105 object-contain"
             />
-            <div className="flex items-center gap-1 select-none">
-              <span className="font-black text-xl tracking-tight bg-gradient-to-r from-white via-slate-100 to-[#7CA3FD] bg-clip-text text-transparent drop-shadow-2xs font-sans">
+            <div className="flex items-center gap-1.5 select-none">
+              <span className="font-bold text-lg sm:text-xl tracking-tight bg-gradient-to-b from-white via-slate-100 to-slate-300 bg-clip-text text-transparent drop-shadow-xs font-sans transition-opacity group-hover:opacity-90">
                 Operon
               </span>
-              <span className="h-1.5 w-1.5 rounded-full bg-[#5C8EFA] inline-block shadow-xs"></span>
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.7)] inline-block"></span>
             </div>
           </Link>
 
@@ -405,7 +401,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             type="button"
                             onClick={() => {
                               setSearchFocused(false);
-                              navigate({ to: "/tasks", search: { highlightId: t.id } as any });
+                              navigate({ to: "/tasks", search: { highlightId: t.id, tab: "all_tasks" } as any });
                             }}
                             className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs hover:bg-[#141F36] transition-colors text-left group"
                           >
@@ -440,7 +436,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             type="button"
                             onClick={() => {
                               setSearchFocused(false);
-                              navigate({ to: isManager ? "/team-capacity" : "/tasks" });
+                              navigate({
+                                to: "/tasks",
+                                search: { assignee: m.id, tab: "all_tasks" } as any,
+                              });
                             }}
                             className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs hover:bg-[#141F36] transition-colors text-left group"
                           >
@@ -452,11 +451,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                   {(m.display_name || m.email || "U").charAt(0).toUpperCase()}
                                 </div>
                               )}
-                              <span className="truncate text-slate-200 group-hover:text-white font-medium">
-                                {m.display_name || m.email}
-                              </span>
+                              <div className="min-w-0">
+                                <div className="truncate text-slate-200 group-hover:text-white font-medium">
+                                  {m.display_name || m.email}
+                                </div>
+                              </div>
                             </div>
-                            <ChevronRight className="h-3 w-3 text-slate-500 group-hover:text-white shrink-0" />
+                            <span className="text-[10px] text-[#5C8EFA] opacity-0 group-hover:opacity-100 transition-opacity font-medium">
+                              View Tasks ↗
+                            </span>
                           </button>
                         ))
                       )}
@@ -467,7 +470,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       type="button"
                       onClick={() => {
                         setSearchFocused(false);
-                        navigate({ to: "/tasks", search: { search: searchQuery.trim() } as any });
+                        navigate({ to: "/tasks", search: { search: searchQuery.trim(), tab: "all_tasks" } as any });
                       }}
                       className="w-full px-3 py-2 text-center text-xs font-semibold text-[#5C8EFA] bg-[#070B14] hover:bg-[#141F36] transition-colors flex items-center justify-center gap-1"
                     >
@@ -738,7 +741,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* MAIN CONTENT AREA */}
       <main id="main-content" tabIndex={-1} className="flex-1 pb-16 md:pb-0 focus:outline-none">
         <HolidayBanner />
-        <AnnouncementNoticeBanner />
+        {/* <AnnouncementNoticeBanner /> */}
         {children}
       </main>
 
@@ -792,11 +795,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 alt="Operon Logo"
                 className="h-7 w-7 rounded-md object-contain"
               />
-              <div className="flex items-center gap-1 select-none">
-                <span className="font-black text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-[#7CA3FD] bg-clip-text text-transparent font-sans">
+              <div className="flex items-center gap-1.5 select-none">
+                <span className="font-bold text-lg tracking-tight bg-gradient-to-b from-white via-slate-100 to-slate-300 bg-clip-text text-transparent font-sans">
                   Operon
                 </span>
-                <span className="h-1.5 w-1.5 rounded-full bg-[#5C8EFA] inline-block"></span>
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.7)] inline-block"></span>
               </div>
             </div>
             {profile && (

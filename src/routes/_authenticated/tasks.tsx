@@ -28,10 +28,20 @@ import { tasksService } from "@/services/tasks";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
-  validateSearch: (search: Record<string, unknown>): { highlightId?: string; create?: boolean; search?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): {
+    highlightId?: string;
+    create?: boolean;
+    search?: string;
+    assignee?: string;
+    tab?: string;
+  } => ({
     highlightId: typeof search.highlightId === "string" ? search.highlightId : undefined,
     create: search.create === true || search.create === "true" || undefined,
     search: typeof search.search === "string" ? search.search : undefined,
+    assignee: typeof search.assignee === "string" ? search.assignee : undefined,
+    tab: typeof search.tab === "string" ? search.tab : undefined,
   }),
   component: TasksPage,
 });
@@ -97,7 +107,7 @@ function groupTasksByWhatsAppDay(taskList: Task[], sortBy: string = "newest") {
 
 function TasksPage() {
   const { user, isManager } = useAuth();
-  const { highlightId, create, search: searchParam } = Route.useSearch();
+  const { highlightId, create, search: searchParam, assignee: assigneeParam, tab: tabParam } = Route.useSearch();
   const navigate = useNavigate({ from: "/tasks" });
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -105,20 +115,48 @@ function TasksPage() {
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [q, setQ] = useState(searchParam || "");
 
-  useEffect(() => {
-    if (searchParam !== undefined) {
-      setQ(searchParam);
-    }
-  }, [searchParam]);
-
   const [status, setStatus] = useState<string>(ALL);
   const [priority, setPriority] = useState<string>(ALL);
-  const [assignee, setAssignee] = useState<string>(ALL);
+  const [assignee, setAssignee] = useState<string>(assigneeParam || ALL);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
   // New UI feature states
-  const [activeTab, setActiveTab] = useState<string>("my_tasks");
+  const [activeTab, setActiveTab] = useState<string>(
+    tabParam === "all" || tabParam === "all_tasks" || assigneeParam || searchParam
+      ? "all_tasks"
+      : tabParam === "team" || tabParam === "team_tasks"
+        ? "team_tasks"
+        : "my_tasks",
+  );
+
+  useEffect(() => {
+    if (searchParam !== undefined) {
+      setQ(searchParam);
+      if (searchParam.trim()) {
+        setActiveTab("all_tasks");
+      }
+    }
+  }, [searchParam]);
+
+  useEffect(() => {
+    if (assigneeParam !== undefined) {
+      setAssignee(assigneeParam || ALL);
+      if (assigneeParam && assigneeParam !== ALL) {
+        setActiveTab("all_tasks");
+      }
+    }
+  }, [assigneeParam]);
+
+  useEffect(() => {
+    if (tabParam === "all" || tabParam === "all_tasks") {
+      setActiveTab("all_tasks");
+    } else if (tabParam === "team" || tabParam === "team_tasks") {
+      setActiveTab("team_tasks");
+    } else if (tabParam === "my" || tabParam === "my_tasks") {
+      setActiveTab("my_tasks");
+    }
+  }, [tabParam]);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [dateFilter, setDateFilter] = useState<string>(ALL);
   const [sortBy, setSortBy] = useState<string>("newest");
@@ -330,7 +368,13 @@ function TasksPage() {
       if (status !== ALL && t.status !== status) return false;
       if (priority !== ALL && t.priority !== priority) return false;
       if (assignee !== ALL && t.assigned_to !== assignee) return false;
-      if (q && !`${t.task_code} ${t.task_name} ${t.client ?? ""} ${t.project_name ?? ""}`.toLowerCase().includes(q.toLowerCase())) return false;
+      if (q) {
+        const assigneeName = nameOf(t.assigned_to);
+        const assigneeEmail = t.assigned_to ? emails[t.assigned_to] ?? "" : "";
+        const reviewerName = nameOf(t.reviewer);
+        const combinedText = `${t.task_code || ""} ${t.task_name || ""} ${t.client || ""} ${t.project_name || ""} ${assigneeName} ${assigneeEmail} ${reviewerName}`.toLowerCase();
+        if (!combinedText.includes(q.toLowerCase())) return false;
+      }
       
       // Date filters
       if (dateFilter === "today" && t.due_date !== todayStr) return false;
