@@ -738,7 +738,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* MAIN CONTENT AREA */}
       <main id="main-content" tabIndex={-1} className="flex-1 pb-16 md:pb-0 focus:outline-none">
         <HolidayBanner />
-        <AnnouncementNoticeBanner />
+        {/* <AnnouncementNoticeBanner /> */}
         {children}
       </main>
 
