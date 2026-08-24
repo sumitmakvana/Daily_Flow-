@@ -150,10 +150,10 @@ export function MyTodayWorkSummaryCard({ tasks = [], userName }: MyTodayWorkSumm
           <Sun className="w-4 h-4 text-amber-500" />
           <span>Today's Work Overview</span>
         </h2>
-        <Link to="/today">
+        <Link to="/my-day" search={{ tab: "tasks" }}>
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 hover:bg-accent border-border">
             <Sun className="w-3.5 h-3.5 text-primary" />
-            <span>Open Today Page</span>
+            <span>View All Tasks</span>
             <ArrowUpRight className="w-3 h-3 text-muted-foreground" />
           </Button>
         </Link>

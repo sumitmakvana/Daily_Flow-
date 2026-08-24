@@ -57,7 +57,6 @@ import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
 
 const memberNav = [
   { to: "/my-day", icon: Sunrise, label: "My Day" },
-  { to: "/today", icon: Sun, label: "Today" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod-tasks", icon: Sun, label: "EOD" },
@@ -71,7 +70,6 @@ const managerNav = [
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
   { to: "/command", icon: Activity, label: "Command" },
   { to: "/executive", icon: Gauge, label: "Exec" },
-  { to: "/today", icon: Sun, label: "Today" },
   { to: "/forecast", icon: TrendingUp, label: "Forecast" },
   { to: "/intelligence", icon: Brain, label: "Intelligence" },
   { to: "/planning-suggestions", icon: Sparkles, label: "Suggestions" },
@@ -89,7 +87,6 @@ const managerNav = [
 
 const primaryManagerNav = [
   { to: "/my-day", icon: Sunrise, label: "My Day" },
-  { to: "/today", icon: Sun, label: "Today" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod", icon: Sun, label: "EOD" },
@@ -240,13 +237,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ? [
         { to: "/executive", icon: Gauge, label: "Exec" },
         { to: "/my-day", icon: Sunrise, label: "My Day" },
-        { to: "/today", icon: Sun, label: "Today" },
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
         { to: "/eod", icon: Sun, label: "EOD" },
       ]
     : [
         { to: "/my-day", icon: Sunrise, label: "My Day" },
-        { to: "/today", icon: Sun, label: "Today" },
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
         { to: "/eod-tasks", icon: Sun, label: "EOD" },
       ];
