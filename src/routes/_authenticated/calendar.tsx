@@ -4,17 +4,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
+import { LeaveDialog } from "@/components/LeaveDialog";
+import { leavesService } from "@/services/leaves";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TaskCard } from "@/components/TaskCard";
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter } from "lucide-react";
-import type { Profile, Task } from "@/lib/types";
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter, Palmtree, Home, Check, X, Trash2 } from "lucide-react";
+import type { Profile, Task, Leave } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { getLocalHoliday, fetchIndianHolidays, toLocalISO, type Holiday } from "@/lib/format";
+import { statusColor, leaveColor, leaveDot } from "@/lib/colors";
+
 
 export const Route = createFileRoute("/_authenticated/calendar")({
+
   component: CalendarPage,
 });
 
@@ -30,6 +36,7 @@ function CalendarPage() {
   const { user, isManager } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [leaves, setLeaves] = useState<Leave[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [apiHolidays, setApiHolidays] = useState<Record<string, Holiday>>({});
 
@@ -40,6 +47,7 @@ function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   
   // Custom Month/Year Picker States
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -62,13 +70,16 @@ function CalendarPage() {
   const [myTasksOnly, setMyTasksOnly] = useState(false);
 
   const load = useCallback(async () => {
-    const [{ data: t }, { data: p }] = await Promise.all([
+    const [{ data: t }, { data: p }, l] = await Promise.all([
       supabase.from("tasks").select("*"),
       supabase.from("profiles").select("id,display_name,avatar_url"),
+      leavesService.getLeaves().catch(() => [] as Leave[]),
     ]);
     setTasks((t ?? []) as Task[]);
     setProfiles((p ?? []) as Profile[]);
+    setLeaves(l || []);
   }, []);
+
 
   useEffect(() => {
     load();
@@ -93,7 +104,38 @@ function CalendarPage() {
     setCurrentDate(new Date());
   };
 
+  const handleApproveLeave = async (id: string) => {
+    try {
+      await leavesService.updateStatus(id, "approved");
+      toast.success("Leave request approved!");
+      load();
+    } catch (err) {
+      toast.error("Failed to approve: " + (err as Error).message);
+    }
+  };
+
+  const handleRejectLeave = async (id: string) => {
+    try {
+      await leavesService.updateStatus(id, "rejected");
+      toast.success("Leave request rejected.");
+      load();
+    } catch (err) {
+      toast.error("Failed to reject: " + (err as Error).message);
+    }
+  };
+
+  const handleCancelLeave = async (id: string) => {
+    try {
+      await leavesService.deleteLeave(id);
+      toast.success("Leave cancelled.");
+      load();
+    } catch (err) {
+      toast.error("Failed to cancel: " + (err as Error).message);
+    }
+  };
+
   // Filter tasks based on settings
+
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       if (status !== ALL && t.status !== status) return false;
@@ -145,11 +187,33 @@ function CalendarPage() {
     return map;
   }, [filteredTasks]);
 
-  // Get tasks for selected date
+  // Group leaves by date string (YYYY-MM-DD)
+  const leavesByDate = useMemo(() => {
+    const map: Record<string, Leave[]> = {};
+    leaves.forEach((l) => {
+      if (l.status === "rejected" || l.status === "cancelled") return;
+      const start = new Date(l.start_date);
+      const end = new Date(l.end_date);
+      const cur = new Date(start);
+      while (cur <= end) {
+        const dStr = toLocalISO(cur);
+        if (!map[dStr]) map[dStr] = [];
+        map[dStr].push(l);
+        cur.setDate(cur.getDate() + 1);
+      }
+    });
+    return map;
+  }, [leaves]);
+
+  // Get tasks and leaves for selected date
   const selectedDateStr = selectedDate ? toLocalISO(selectedDate) : "";
   const selectedDateTasks = useMemo(() => {
     return tasksByDate[selectedDateStr] || [];
   }, [selectedDateStr, tasksByDate]);
+
+  const selectedDateLeaves = useMemo(() => {
+    return leavesByDate[selectedDateStr] || [];
+  }, [selectedDateStr, leavesByDate]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -160,7 +224,7 @@ function CalendarPage() {
             <CalendarIcon className="h-6 w-6 text-primary" />
             Calendar
           </h1>
-          <p className="text-sm text-muted-foreground">Manage and track your schedule and tasks dynamically.</p>
+          <p className="text-sm text-muted-foreground">Manage schedule, tasks, leaves, and team availability.</p>
         </div>
         
         {/* Navigation Controls (Sticky on mobile below AppShell header) */}
@@ -382,6 +446,7 @@ function CalendarPage() {
           {calendarCells.map(({ date, isCurrentMonth }, idx) => {
             const dateStr = toLocalISO(date);
             const dayTasks = tasksByDate[dateStr] || [];
+            const dayLeaves = leavesByDate[dateStr] || [];
             const isToday = toLocalISO(new Date()) === dateStr;
             const holiday = getLocalHoliday(date, apiHolidays);
 
@@ -393,7 +458,7 @@ function CalendarPage() {
                   setSheetOpen(true);
                 }}
                 className={cn(
-                  "min-h-[64px] sm:min-h-[110px] p-1.5 sm:p-2 flex flex-col justify-between transition-colors hover:bg-accent/40 cursor-pointer select-none group relative",
+                  "min-h-[68px] sm:min-h-[115px] p-1.5 sm:p-2 flex flex-col justify-between transition-colors hover:bg-accent/40 cursor-pointer select-none group relative",
                   !isCurrentMonth && "bg-muted/10 text-muted-foreground/40",
                   isToday && "bg-primary/5 ring-1 ring-primary/30",
                   holiday && holiday.isHoliday && "bg-amber-500/5 hover:bg-amber-500/10"
@@ -404,62 +469,103 @@ function CalendarPage() {
                   <span
                     className={cn(
                       "text-[10px] sm:text-xs font-semibold h-5 w-5 sm:h-6 sm:w-6 rounded-full flex items-center justify-center transition-all",
-                      isToday && "bg-primary text-primary-foreground font-bold shadow-sm"
+                      isToday && "bg-primary text-primary-foreground font-bold shadow-xs"
                     )}
                   >
                     {date.getDate()}
                   </span>
                   
-                  {dayTasks.length > 0 && (
-                    <span className="text-[9px] sm:text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                      {dayTasks.length}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {dayLeaves.length > 0 && (
+                      <span className={cn(
+                        "text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.2 rounded-md border",
+                        leaveColor.casual
+                      )}>
+                        {dayLeaves.length} away
+                      </span>
+                    )}
+                    {dayTasks.length > 0 && (
+                      <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded-md border border-border/40 group-hover:border-border transition-colors">
+                        {dayTasks.length}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {holiday && (
-                  <div className="absolute bottom-1 right-1 sm:right-1.5 flex items-center gap-0.5 text-[8px] sm:text-[9px] font-bold text-amber-600 bg-amber-500/10 px-1 py-0.5 rounded shadow-sm max-w-[90%] truncate">
+                  <div className="absolute bottom-1 right-1 sm:right-1.5 flex items-center gap-0.5 text-[8px] sm:text-[9px] font-medium text-status-hold bg-status-hold/15 border border-status-hold/30 px-1 py-0.5 rounded shadow-xs max-w-[90%] truncate">
                     <span>{holiday.emoji}</span>
                     <span className="hidden sm:inline truncate">{holiday.name}</span>
                   </div>
                 )}
 
-                {/* Tasks Preview List */}
-                <div className="mt-1 flex-1 flex flex-col justify-end">
-                  {/* Desktop Preview: Text Labels */}
+                {/* Leaves & Tasks Preview List */}
+                <div className="mt-1 flex-1 flex flex-col justify-end space-y-1">
+                  {/* Desktop Preview: Badges */}
                   <div className="hidden sm:block space-y-1">
-                    {dayTasks.slice(0, 3).map((task) => (
+                    {/* Leaves & WFH pills */}
+                    {dayLeaves.slice(0, 2).map((l) => {
+                      const empName = l.user_name || profiles.find((p) => p.id === l.user_id)?.display_name || "Member";
+                      const colorClass = leaveColor[l.leave_type] || leaveColor.casual;
+                      const dotClass = leaveDot[l.leave_type] || leaveDot.casual;
+                      return (
+                        <div
+                          key={l.id}
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded font-medium truncate border shadow-xs flex items-center gap-1",
+                            colorClass
+                          )}
+                          title={`${empName}: ${l.leave_type} (${l.reason})`}
+                        >
+                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dotClass)} />
+                          <span className="truncate">{empName.split(" ")[0]}</span>
+                          <span className="opacity-70 text-[9px]">({l.leave_type === "wfh" ? "WFH" : "Leave"})</span>
+                        </div>
+                      );
+                    })}
+                    {dayLeaves.length > 2 && (
+                      <div className="text-[9px] font-medium text-status-review pl-1">
+                        +{dayLeaves.length - 2} more away
+                      </div>
+                    )}
+
+                    {/* Tasks items */}
+                    {dayTasks.slice(0, 2).map((task) => (
                       <div
                         key={task.id}
                         className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded font-medium truncate border shadow-sm",
-                          task.status === "Completed" ? "bg-green-500/5 text-green-600 border-green-500/20" :
-                          task.status === "Blocked" ? "bg-red-500/5 text-red-600 border-red-500/20" :
-                          task.status === "In Progress" ? "bg-blue-500/5 text-blue-600 border-blue-500/20" :
-                          "bg-muted/50 text-foreground/80 border-border"
+                          "text-[10px] px-1.5 py-0.5 rounded font-medium truncate border shadow-xs",
+                          statusColor[task.status] || "bg-muted/50 text-foreground/80 border-border"
                         )}
                       >
                         {task.task_name}
                       </div>
                     ))}
-                    {dayTasks.length > 3 && (
-                      <div className="text-[9px] font-semibold text-muted-foreground pl-1.5 pt-0.5">
-                        + {dayTasks.length - 3} more
+                    {dayTasks.length > 2 && (
+                      <div className="text-[9px] font-medium text-muted-foreground pl-1.5 pt-0.5">
+                        + {dayTasks.length - 2} more tasks
                       </div>
                     )}
                   </div>
 
                   {/* Mobile Preview: Clean Status Dot Indicators */}
                   <div className="flex sm:hidden flex-wrap gap-1 justify-center mt-1">
+                    {dayLeaves.map((l) => (
+                      <span
+                        key={l.id}
+                        className={cn("h-1.5 w-1.5 rounded-full shadow-xs", leaveDot[l.leave_type] || leaveDot.casual)}
+                        title={l.user_name || "Member"}
+                      />
+                    ))}
                     {dayTasks.slice(0, 3).map((task) => (
                       <span
                         key={task.id}
                         className={cn(
-                          "h-1.5 w-1.5 rounded-full shadow-sm",
-                          task.status === "Completed" ? "bg-green-500" :
-                          task.status === "Blocked" ? "bg-red-500" :
-                          task.status === "In Progress" ? "bg-blue-500" :
-                          "bg-muted-foreground/60"
+                          "h-1.5 w-1.5 rounded-full shadow-xs",
+                          task.status === "Completed" ? "bg-status-completed" :
+                          task.status === "Blocked" ? "bg-status-blocked" :
+                          task.status === "In Progress" ? "bg-status-progress" :
+                          "bg-status-todo"
                         )}
                       />
                     ))}
@@ -471,21 +577,123 @@ function CalendarPage() {
         </div>
       </div>
 
-      {/* Sheet showing tasks for a specific date */}
+      {/* Sheet showing tasks & leaves for a specific date */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="sm:max-w-md w-full overflow-y-auto">
+        <SheetContent className="sm:max-w-md w-full overflow-y-auto bg-card border-border">
           <SheetHeader className="border-b border-border pb-4">
-            <SheetTitle className="text-lg font-bold flex items-center gap-2">
+            <SheetTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
               <CalendarIcon className="h-5 w-5 text-primary" />
               {selectedDate && selectedDate.toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </SheetTitle>
             <SheetDescription className="text-xs text-muted-foreground">
-              {selectedDateTasks.length} tasks scheduled for this date.
+              {selectedDateTasks.length} tasks and {selectedDateLeaves.length} leave/WFH records for this date.
             </SheetDescription>
           </SheetHeader>
 
+          {/* Team Availability Section */}
+          <div className="py-3.5 border-b border-border space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Palmtree className="h-4 w-4 text-primary" />
+                Team Availability
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setLeaveDialogOpen(true)}
+                className="h-6 text-[11px] text-primary px-2 hover:bg-primary/10 cursor-pointer"
+              >
+                + Request Leave / WFH
+              </Button>
+            </div>
+
+            {selectedDateLeaves.length > 0 ? (
+              <div className="space-y-1.5">
+                {selectedDateLeaves.map((l) => {
+                  const empName = l.user_name || profiles.find((p) => p.id === l.user_id)?.display_name || "Member";
+                  const colorClass = leaveColor[l.leave_type] || leaveColor.casual;
+                  const dotClass = leaveDot[l.leave_type] || leaveDot.casual;
+                  return (
+                    <div
+                      key={l.id}
+                      className={cn(
+                        "p-2.5 rounded-lg border text-xs flex items-start justify-between gap-2",
+                        colorClass
+                      )}
+                    >
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn("w-2 h-2 rounded-full shrink-0", dotClass)} />
+                          <span className="font-semibold text-xs text-foreground truncate">{empName}</span>
+                          <span className="text-[9px] uppercase tracking-wider font-semibold opacity-80">
+                            {l.leave_type === "wfh" ? "WFH" : l.leave_type}
+                          </span>
+                        </div>
+                        <p className="text-[11px] opacity-90 truncate pl-3.5">{l.reason}</p>
+                        {l.handover_note && (
+                          <p className="text-[10px] opacity-75 italic pl-3.5">Handover: {l.handover_note}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] font-semibold opacity-80 whitespace-nowrap">
+                          {l.days_count}d
+                        </span>
+                        {l.status === "pending" && isManager && (
+                          <div className="flex items-center gap-1 ml-1">
+                            <button
+                              type="button"
+                              title="Approve leave"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleApproveLeave(l.id);
+                              }}
+                              className="h-5 px-1.5 rounded bg-status-completed/20 hover:bg-status-completed/30 text-status-completed text-[10px] font-semibold flex items-center gap-0.5 border border-status-completed/40 cursor-pointer transition-colors"
+                            >
+                              <Check className="h-3 w-3" /> Approve
+                            </button>
+                            <button
+                              type="button"
+                              title="Reject leave"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRejectLeave(l.id);
+                              }}
+                              className="h-5 px-1.5 rounded bg-status-blocked/20 hover:bg-status-blocked/30 text-status-blocked text-[10px] font-semibold flex items-center gap-0.5 border border-status-blocked/40 cursor-pointer transition-colors"
+                            >
+                              <X className="h-3 w-3" /> Reject
+                            </button>
+                          </div>
+                        )}
+                        {(isManager || l.user_id === user?.id) && l.status === "approved" && (
+                          <button
+                            type="button"
+                            title="Cancel leave"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelLeave(l.id);
+                            }}
+                            className="h-5 px-1.5 rounded bg-muted/80 hover:bg-destructive/20 hover:text-destructive text-muted-foreground text-[10px] flex items-center gap-0.5 border border-border cursor-pointer transition-colors ml-1"
+                          >
+                            <Trash2 className="h-3 w-3" /> Cancel
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+            ) : (
+              <div className="text-[11px] text-muted-foreground bg-muted/20 p-2.5 rounded-md border border-border flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-status-completed" />
+                All team members active on this day.
+              </div>
+            )}
+          </div>
+
+
           {/* Create Task Button */}
-          <div className="py-4 border-b border-border">
+          <div className="py-3 border-b border-border">
             <Button
               className="w-full text-xs gap-1.5 h-9"
               onClick={() => setCreateDialogOpen(true)}
@@ -496,6 +704,9 @@ function CalendarPage() {
 
           {/* List of Tasks */}
           <div className="py-4 space-y-3.5">
+            <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <span>Scheduled Tasks ({selectedDateTasks.length})</span>
+            </div>
             {selectedDateTasks.length > 0 ? (
               selectedDateTasks.map((t) => (
                 <div key={t.id} className="relative">
@@ -511,7 +722,7 @@ function CalendarPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground italic text-center py-8">
+              <p className="text-xs text-muted-foreground italic text-center py-6">
                 No tasks scheduled for this day.
               </p>
             )}
@@ -537,6 +748,15 @@ function CalendarPage() {
           }}
         />
       )}
+
+      {/* Leave & WFH Creation Dialog */}
+      <LeaveDialog
+        open={leaveDialogOpen}
+        onOpenChange={setLeaveDialogOpen}
+        initialDate={selectedDate}
+        onSuccess={load}
+      />
     </div>
   );
 }
+

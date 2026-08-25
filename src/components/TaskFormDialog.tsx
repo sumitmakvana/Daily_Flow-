@@ -25,14 +25,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task, type TaskHistory, type WorkItemType, type HolidayCalendar } from "@/lib/types";
+import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task, type TaskHistory, type WorkItemType, type HolidayCalendar, type Leave } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getLocalHoliday, fetchIndianHolidays, formatRelative, getDefaultStartDate, todayISO, parseHoursOrMins, type Holiday } from "@/lib/format";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { workItemTypesService } from "@/services/work-item-types";
 import { holidaysService } from "@/services/operations";
+import { leavesService } from "@/services/leaves";
 import { dynamicFieldsService, type WorkItemFieldDef } from "@/services/dynamic-fields";
+
 import { DynamicFieldsForm } from "@/components/DynamicFieldsForm";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
@@ -131,6 +133,8 @@ export function TaskFormDialog({
   const [projects, setProjects] = useState<Array<{ id: string; name: string; client: string | null }>>([]);
   const [holidayCalendar, setHolidayCalendar] = useState<HolidayCalendar[]>([]);
   const [apiHolidays, setApiHolidays] = useState<Record<string, Holiday>>({});
+  const [activeLeaves, setActiveLeaves] = useState<Leave[]>([]);
+
   const [form, setForm] = useState<Partial<Task>>(() =>
     initial
       ? {
@@ -396,7 +400,26 @@ export function TaskFormDialog({
 
       setProjects(Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)));
     });
+
+    leavesService.getLeaves().then(setActiveLeaves).catch(() => {});
   }, [open]);
+
+  // Check if current assignee is on leave/WFH on the chosen due_date
+  const assigneeLeaveWarning = useMemo(() => {
+    if (!form.assigned_to || !form.due_date || activeLeaves.length === 0) return null;
+    const targetDate = form.due_date;
+    const leave = activeLeaves.find((l) => {
+      if (l.user_id !== form.assigned_to) return false;
+      if (l.status === "rejected" || l.status === "cancelled") return false;
+      return targetDate >= l.start_date && targetDate <= l.end_date;
+    });
+    if (!leave) return null;
+    const assigneeProfile = profiles.find((p) => p.id === form.assigned_to);
+    return {
+      ...leave,
+      user_name: assigneeProfile?.display_name || leave.user_name || "Assignee",
+    };
+  }, [form.assigned_to, form.due_date, activeLeaves, profiles]);
 
   // Load task history timeline when task exists
   useEffect(() => {
@@ -415,6 +438,7 @@ export function TaskFormDialog({
   }, [open, form.id]);
 
   const uniqueClients = useMemo(() => {
+
     const set = new Set<string>();
     projects.forEach((p) => {
       if (p.client?.trim()) set.add(p.client.trim());
@@ -1635,8 +1659,25 @@ export function TaskFormDialog({
                         }
                         return null;
                       })()}
+                      {assigneeLeaveWarning && (
+                        <div
+                          className={cn(
+                            "mt-1.5 text-[10px] font-medium px-2 py-1 rounded flex items-center gap-1.5 border shadow-xs",
+                            assigneeLeaveWarning.leave_type === "wfh"
+                              ? "text-status-progress bg-status-progress/15 border-status-progress/30"
+                              : "text-status-hold bg-status-hold/15 border-status-hold/30"
+                          )}
+                        >
+                          <span>{assigneeLeaveWarning.leave_type === "wfh" ? "🏠" : "⚠️"}</span>
+                          <span>
+                            {assigneeLeaveWarning.user_name} is on {assigneeLeaveWarning.leave_type === "wfh" ? "WFH" : "Leave"} on this date ({assigneeLeaveWarning.reason}). Plan accordingly!
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
+
+
 
                   {/* Planned Hours */}
                   <div>

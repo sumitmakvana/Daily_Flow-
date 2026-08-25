@@ -20,3 +20,20 @@ export const priorityDot: Record<TaskPriority, string> = {
   Medium: "bg-priority-medium",
   Low: "bg-priority-low",
 };
+
+export const leaveColor: Record<string, string> = {
+  casual: "bg-status-review/15 text-status-review border-status-review/30",
+  sick: "bg-status-hold/15 text-status-hold border-status-hold/30",
+  wfh: "bg-status-progress/15 text-status-progress border-status-progress/30",
+  half_day: "bg-status-todo/15 text-status-todo border-status-todo/30",
+  paid: "bg-status-completed/15 text-status-completed border-status-completed/30",
+};
+
+export const leaveDot: Record<string, string> = {
+  casual: "bg-status-review",
+  sick: "bg-status-hold",
+  wfh: "bg-status-progress",
+  half_day: "bg-status-todo",
+  paid: "bg-status-completed",
+};
+

@@ -257,11 +257,16 @@ export function getGeneralNotificationHtml(
   taskName?: string,
   status: string = "To Do",
 ): string {
-  const ctaUrl = taskId ? `${origin}/tasks?taskId=${taskId}` : `${origin}/tasks`;
+  const isTask = Boolean(taskId || taskName);
+  const ctaUrl = taskId ? `${origin}/tasks?taskId=${taskId}` : `${origin}/dashboard`;
+  const ctaLabel = isTask ? "View Task" : "Open Operon";
 
   const displayTaskTitle = taskName
     ? `${taskCode ? `[${taskCode}] ` : ""}${taskName}`
     : body || title;
+
+  const heroTitle = isTask ? "New Task Assigned" : title;
+  const heroSubtitle = isTask ? "You have been assigned a new task" : "Notification from Operon";
 
   const cardHtml = `
     <!-- Assignee / Assigner Bar -->
@@ -272,7 +277,7 @@ export function getGeneralNotificationHtml(
             <tr>
               <td style="width: 36px; height: 36px; background: #f1f5f9; border-radius: 50%; text-align: center; line-height: 36px; font-size: 16px;">👤</td>
               <td style="padding-left: 8px;">
-                <div style="font-size: 11px; color: #64748b;">Assigned by</div>
+                <div style="font-size: 11px; color: #64748b;">From</div>
                 <div style="font-size: 13px; font-weight: 700; color: #0f172a;">${assignerName}</div>
               </td>
             </tr>
@@ -283,7 +288,7 @@ export function getGeneralNotificationHtml(
             <tr>
               <td style="width: 36px; height: 36px; background: #f1f5f9; border-radius: 50%; text-align: center; line-height: 36px; font-size: 16px;">👤</td>
               <td style="padding-left: 8px;">
-                <div style="font-size: 11px; color: #64748b;">Assigned to</div>
+                <div style="font-size: 11px; color: #64748b;">To</div>
                 <div style="font-size: 13px; font-weight: 700; color: #0f172a;">${assigneeName}</div>
               </td>
             </tr>
@@ -292,11 +297,12 @@ export function getGeneralNotificationHtml(
       </tr>
     </table>
 
-    <!-- Task Details Section -->
+    <!-- Details Section -->
     <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">
       ${displayTaskTitle}
     </div>
 
+    ${isTask ? `
     <div style="font-size: 13px; color: #64748b; margin-bottom: 14px;">
       Status: <span style="color: #2563eb; font-weight: 600;">${status}</span>
     </div>
@@ -304,23 +310,89 @@ export function getGeneralNotificationHtml(
     <div style="background: #f8fafc; border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #475569; line-height: 1.5; margin-bottom: 20px;">
       Please find the task details and start working on it at your earliest convenience.
     </div>
+    ` : `
+    <div style="background: #f8fafc; border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #475569; line-height: 1.5; margin-bottom: 20px;">
+      ${body || title}
+    </div>
+    `}
 
     <!-- CTA Button -->
     <div style="text-align: center; margin-bottom: 6px;">
-      <a href="${ctaUrl}" class="btn-blue" style="padding: 10px 28px; font-size: 14px;">View Task</a>
-      <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">Click the button above to view full task details</div>
+      <a href="${ctaUrl}" class="btn-blue" style="padding: 10px 28px; font-size: 14px; text-decoration: none; border-radius: 6px; display: inline-block;">${ctaLabel}</a>
     </div>
   `;
 
   return getEmailLayout({
     title: `🔔 Operon: ${title}`,
-    heroIcon: "🔔",
-    heroTitle: "New Task Assigned",
-    heroSubtitle: "You have been assigned a new task",
+    heroIcon: isTask ? "📋" : "🔔",
+    heroTitle,
+    heroSubtitle,
     cardContentHtml: cardHtml,
     origin,
   });
 }
+
+
+/**
+ * Generate dedicated HTML email for Leave / WFH applications, status updates, and cancellations
+ */
+export function getLeaveNotificationHtml(
+  title: string,
+  body: string,
+  type: string,
+  origin: string,
+): string {
+  let heroIcon = "🌴";
+  let heroTitle = "Leave Notice";
+  let heroSubtitle = "Team member availability update";
+  let ctaLabel = "View Calendar";
+  let ctaUrl = `${origin}/calendar`;
+
+  if (type === "leave_cancelled") {
+    heroIcon = "❌";
+    heroTitle = "Leave Request Cancelled";
+    heroSubtitle = "A scheduled leave has been cancelled";
+  } else if (type === "leave_status_updated") {
+    heroIcon = body.toLowerCase().includes("approved") ? "✅" : "ℹ️";
+    heroTitle = "Leave Status Updated";
+    heroSubtitle = "Your leave request status has been updated";
+  } else if (type === "leave_advance_alert") {
+    heroIcon = "📅";
+    heroTitle = "Tomorrow Leave Reminder";
+    heroSubtitle = "Advance team planning alert";
+  } else if (title.includes("WFH") || body.includes("WFH")) {
+    heroIcon = "🏠";
+    heroTitle = "Work From Home Notice";
+    heroSubtitle = "Remote work schedule update";
+  }
+
+  const cardHtml = `
+    <div style="background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; padding: 18px 20px; margin-bottom: 20px;">
+      <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">
+        ${title}
+      </div>
+      <div style="font-size: 13px; color: #475569; line-height: 1.6;">
+        ${body}
+      </div>
+    </div>
+
+    <!-- CTA Button -->
+    <div style="text-align: center; margin-bottom: 8px;">
+      <a href="${ctaUrl}" class="btn-blue" style="padding: 10px 28px; font-size: 14px; text-decoration: none; border-radius: 6px; display: inline-block;">${ctaLabel}</a>
+      <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">Open Operon to view team availability and manage schedules</div>
+    </div>
+  `;
+
+  return getEmailLayout({
+    title: `${heroIcon} ${title} - Operon`,
+    heroIcon,
+    heroTitle,
+    heroSubtitle,
+    cardContentHtml: cardHtml,
+    origin,
+  });
+}
+
 
 /**
  * Generate HTML for Uncompleted EOD Tasks (Left side layout in mockup).

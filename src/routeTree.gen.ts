@@ -26,6 +26,7 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedMyDayRouteImport } from './routes/_authenticated/my-day'
 import { Route as AuthenticatedManagerRouteImport } from './routes/_authenticated/manager'
+import { Route as AuthenticatedLeavesRouteImport } from './routes/_authenticated/leaves'
 import { Route as AuthenticatedIntelligenceRouteImport } from './routes/_authenticated/intelligence'
 import { Route as AuthenticatedHeatmapRouteImport } from './routes/_authenticated/heatmap'
 import { Route as AuthenticatedForecastRouteImport } from './routes/_authenticated/forecast'
@@ -145,6 +146,11 @@ const AuthenticatedMyDayRoute = AuthenticatedMyDayRouteImport.update({
 const AuthenticatedManagerRoute = AuthenticatedManagerRouteImport.update({
   id: '/manager',
   path: '/manager',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedLeavesRoute = AuthenticatedLeavesRouteImport.update({
+  id: '/leaves',
+  path: '/leaves',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedIntelligenceRoute =
@@ -350,6 +356,7 @@ export interface FileRoutesByFullPath {
   '/forecast': typeof AuthenticatedForecastRoute
   '/heatmap': typeof AuthenticatedHeatmapRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/leaves': typeof AuthenticatedLeavesRoute
   '/manager': typeof AuthenticatedManagerRoute
   '/my-day': typeof AuthenticatedMyDayRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -401,6 +408,7 @@ export interface FileRoutesByTo {
   '/forecast': typeof AuthenticatedForecastRoute
   '/heatmap': typeof AuthenticatedHeatmapRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/leaves': typeof AuthenticatedLeavesRoute
   '/manager': typeof AuthenticatedManagerRoute
   '/my-day': typeof AuthenticatedMyDayRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -454,6 +462,7 @@ export interface FileRoutesById {
   '/_authenticated/forecast': typeof AuthenticatedForecastRoute
   '/_authenticated/heatmap': typeof AuthenticatedHeatmapRoute
   '/_authenticated/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/_authenticated/leaves': typeof AuthenticatedLeavesRoute
   '/_authenticated/manager': typeof AuthenticatedManagerRoute
   '/_authenticated/my-day': typeof AuthenticatedMyDayRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
@@ -507,6 +516,7 @@ export interface FileRouteTypes {
     | '/forecast'
     | '/heatmap'
     | '/intelligence'
+    | '/leaves'
     | '/manager'
     | '/my-day'
     | '/notifications'
@@ -558,6 +568,7 @@ export interface FileRouteTypes {
     | '/forecast'
     | '/heatmap'
     | '/intelligence'
+    | '/leaves'
     | '/manager'
     | '/my-day'
     | '/notifications'
@@ -610,6 +621,7 @@ export interface FileRouteTypes {
     | '/_authenticated/forecast'
     | '/_authenticated/heatmap'
     | '/_authenticated/intelligence'
+    | '/_authenticated/leaves'
     | '/_authenticated/manager'
     | '/_authenticated/my-day'
     | '/_authenticated/notifications'
@@ -786,6 +798,13 @@ declare module '@tanstack/react-router' {
       path: '/manager'
       fullPath: '/manager'
       preLoaderRoute: typeof AuthenticatedManagerRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/leaves': {
+      id: '/_authenticated/leaves'
+      path: '/leaves'
+      fullPath: '/leaves'
+      preLoaderRoute: typeof AuthenticatedLeavesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/intelligence': {
@@ -1054,6 +1073,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedForecastRoute: typeof AuthenticatedForecastRoute
   AuthenticatedHeatmapRoute: typeof AuthenticatedHeatmapRoute
   AuthenticatedIntelligenceRoute: typeof AuthenticatedIntelligenceRoute
+  AuthenticatedLeavesRoute: typeof AuthenticatedLeavesRoute
   AuthenticatedManagerRoute: typeof AuthenticatedManagerRoute
   AuthenticatedMyDayRoute: typeof AuthenticatedMyDayRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
@@ -1086,6 +1106,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedForecastRoute: AuthenticatedForecastRoute,
   AuthenticatedHeatmapRoute: AuthenticatedHeatmapRoute,
   AuthenticatedIntelligenceRoute: AuthenticatedIntelligenceRoute,
+  AuthenticatedLeavesRoute: AuthenticatedLeavesRoute,
   AuthenticatedManagerRoute: AuthenticatedManagerRoute,
   AuthenticatedMyDayRoute: AuthenticatedMyDayRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
