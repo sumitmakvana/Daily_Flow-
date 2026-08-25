@@ -1,6 +1,8 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getPool } from "@/integrations/postgres/client.server";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { sendEodEmail } from "@/services/email-dispatcher";
+
 import {
   getTodayDateStr,
   isTaskCompletedToday,
@@ -63,12 +65,12 @@ export function startBackgroundCronTicker() {
       const managerFireKey = `${todayStr}_manager_${managerReportTime}`;
 
       // -------------------------------------------------------------
-      // STEP A: At Configured Morning Time (UI Setting) -> Trigger Morning Digest
+      // STEP A: At Configured Morning Time (UI Setting) -> Trigger Morning Digest & Leave Alerts
       // -------------------------------------------------------------
       if (currentLocalTime === morningTime && !globalCronState.__cronFiredKeys!.has(morningFireKey)) {
         globalCronState.__cronFiredKeys!.add(morningFireKey);
         console.log(
-          `[CronTicker] Time matched Morning Digest (${currentLocalTime} === ${morningTime})! Triggering Morning Digest...`,
+          `[CronTicker] Time matched Morning Digest (${currentLocalTime} === ${morningTime})! Triggering Morning Digest & Leave Alerts...`,
         );
 
         try {
@@ -80,15 +82,18 @@ export function startBackgroundCronTicker() {
         } catch (err) {
           console.error("[CronTicker] Error auto-triggering morning-digest:", err);
         }
+
+        // Dispatch advance alerts for leaves starting tomorrow morning
+        await dispatchAdvanceLeaveAlerts("morning", todayStr);
       }
 
       // -------------------------------------------------------------
-      // STEP B: At Configured Evening Time (UI Setting) -> Trigger Member EOD
+      // STEP B: At Configured Evening Time (UI Setting) -> Trigger Member EOD & Handover Alerts
       // -------------------------------------------------------------
       if (currentLocalTime === memberEodTime && !globalCronState.__cronFiredKeys!.has(memberFireKey)) {
         globalCronState.__cronFiredKeys!.add(memberFireKey);
         console.log(
-          `[CronTicker] Time matched Evening Digest (${currentLocalTime} === ${memberEodTime})! Triggering Member EOD...`,
+          `[CronTicker] Time matched Evening Digest (${currentLocalTime} === ${memberEodTime})! Triggering Member EOD & Leave Alerts...`,
         );
 
         const { data: profiles } = await supabaseAdmin
@@ -115,7 +120,11 @@ export function startBackgroundCronTicker() {
             });
           }
         }
+
+        // Dispatch advance handover alerts for leaves starting tomorrow evening
+        await dispatchAdvanceLeaveAlerts("evening", todayStr);
       }
+
 
       // -------------------------------------------------------------
       // STEP C: At Manager Report Time (15 mins after EOD) -> Dispatch Manager EOD Team Summary Report
@@ -351,3 +360,88 @@ export function startBackgroundCronTicker() {
     }
   }, 60000); // Check every 60 seconds
 }
+
+/**
+ * Scans active leaves starting tomorrow and dispatches advance notifications to managers
+ */
+async function dispatchAdvanceLeaveAlerts(timeSlot: "morning" | "evening", todayStr: string) {
+  try {
+    const pool = getPool();
+    const tomorrowRes = await pool.query<{ tomorrow: string }>(
+      `SELECT (CURRENT_DATE + INTERVAL '1 day')::date::text as tomorrow`
+    );
+    const tomorrowStr = tomorrowRes.rows[0]?.tomorrow;
+    if (!tomorrowStr) return;
+
+    // Query active/approved leaves spanning tomorrow
+    const leavesRes = await pool.query<{
+      id: string;
+      user_id: string;
+      leave_type: string;
+      start_date: string;
+      end_date: string;
+      reason: string;
+      user_name: string;
+      manager_id: string | null;
+    }>(
+      `SELECT 
+        l.id,
+        l.user_id,
+        l.leave_type,
+        l.start_date::text,
+        l.end_date::text,
+        l.reason,
+        p.display_name as user_name,
+        p.manager_id
+      FROM public.leaves l
+      JOIN public.profiles p ON p.id = l.user_id
+      WHERE l.status = 'approved'
+        AND $1::date BETWEEN l.start_date AND l.end_date`,
+      [tomorrowStr]
+    );
+
+    if (!leavesRes.rows || leavesRes.rows.length === 0) return;
+
+    // Find all managers / admins
+    const managersRes = await pool.query<{ user_id: string }>(
+      `SELECT DISTINCT user_id FROM public.user_roles WHERE role IN ('admin', 'manager')`
+    );
+    const allManagerIds = managersRes.rows.map((r) => r.user_id);
+
+    for (const leave of leavesRes.rows) {
+      const isWfh = leave.leave_type === "wfh";
+      const dedupeKey = `LEAVE_ADVANCE_${timeSlot.toUpperCase()}_${todayStr}_${leave.id}`;
+
+      const title = isWfh
+        ? `🏠 Tomorrow WFH Notice: ${leave.user_name}`
+        : `📅 Tomorrow Leave Alert: ${leave.user_name}`;
+
+      const body =
+        timeSlot === "morning"
+          ? `Reminder: ${leave.user_name} will be on ${isWfh ? "WFH" : "Leave"} tomorrow (${tomorrowStr}). Reason: "${leave.reason}". Please plan tasks accordingly and avoid assigning urgent work.`
+          : `Evening Handover Reminder: ${leave.user_name} is on ${isWfh ? "WFH" : "Leave"} tomorrow (${tomorrowStr}). Ensure all pending items are handed over today.`;
+
+      const targetManagers = new Set<string>(allManagerIds);
+      if (leave.manager_id) targetManagers.add(leave.manager_id);
+      targetManagers.delete(leave.user_id); // Don't notify the employee themselves
+
+      for (const mId of targetManagers) {
+        // Check idempotency
+        const existing = await pool.query(
+          `SELECT 1 FROM public.notifications WHERE title = $1 AND user_id = $2 AND created_at >= CURRENT_DATE`,
+          [title, mId]
+        );
+        if (existing.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO public.notifications (user_id, type, title, body)
+             VALUES ($1, $2, $3, $4)`,
+            [mId, "leave_advance_alert", title, body]
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[CronTicker] Advance leave alert dispatch warning:", (err as Error).message);
+  }
+}
+

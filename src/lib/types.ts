@@ -286,3 +286,27 @@ export interface NotificationPrefs {
   eod_recipient_policy?: string | null;
   custom_target_email?: string | null;
 }
+
+export type LeaveType = "casual" | "sick" | "wfh" | "half_day" | "paid" | "unpaid";
+export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface Leave {
+  id: string;
+  user_id: string;
+  leave_type: LeaveType | string;
+  start_date: string;
+  end_date: string;
+  days_count?: number;
+  reason?: string;
+  status: LeaveStatus | string;
+  handover_note?: string | null;
+  request_to?: string | null;
+  request_to_name?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
+  user_name?: string;
+  user_avatar?: string | null;
+  reviewer_name?: string | null;
+}
+

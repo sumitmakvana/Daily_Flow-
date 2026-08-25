@@ -5,8 +5,10 @@ import {
   getUnstartedTasksNudgeHtml,
   getUncompletedEodTasksHtml,
   getGeneralNotificationHtml,
+  getLeaveNotificationHtml,
   getMultiTaskAssignmentHtml,
 } from "@/services/email-templates";
+
 
 interface NotificationPayload {
   id: string;
@@ -17,8 +19,16 @@ interface NotificationPayload {
   task_id: string | null;
 }
 
-let isListening = false;
-const processedDedupeMap = new Map<string, number>();
+// Global singleton to prevent duplicate listeners during Vite HMR module re-evaluations
+const globalListenerState = globalThis as unknown as {
+  __notificationClient?: any;
+  __isNotificationListening?: boolean;
+  __processedDedupeMap?: Map<string, number>;
+};
+
+if (!globalListenerState.__processedDedupeMap) {
+  globalListenerState.__processedDedupeMap = new Map<string, number>();
+}
 
 // In-memory batch queue for grouping multi-task assignments to the same user
 const userTaskAssignmentBatches = new Map<
@@ -32,11 +42,12 @@ const userTaskAssignmentBatches = new Map<
 function isDuplicateEvent(userId: string, taskId: string | null, title: string): boolean {
   const key = `${userId}:${taskId || ""}:${title}`;
   const now = Date.now();
-  const lastProcessed = processedDedupeMap.get(key);
+  const map = globalListenerState.__processedDedupeMap!;
+  const lastProcessed = map.get(key);
 
-  if (processedDedupeMap.size > 200) {
-    for (const [k, time] of processedDedupeMap.entries()) {
-      if (now - time > 60000) processedDedupeMap.delete(k);
+  if (map.size > 200) {
+    for (const [k, time] of map.entries()) {
+      if (now - time > 60000) map.delete(k);
     }
   }
 
@@ -44,21 +55,31 @@ function isDuplicateEvent(userId: string, taskId: string | null, title: string):
     return true;
   }
 
-  processedDedupeMap.set(key, now);
+  map.set(key, now);
   return false;
 }
 
 export function startNotificationListener() {
-  if (isListening) return;
-  isListening = true;
+  if (globalListenerState.__isNotificationListening && globalListenerState.__notificationClient) {
+    return;
+  }
+  globalListenerState.__isNotificationListening = true;
   console.log("[NotificationListener] Initializing Postgres LISTEN listener for new_notification...");
 
   const pool = getPool();
-  let client: any = null;
 
   async function connectAndListen() {
     try {
-      client = await pool.connect();
+      if (globalListenerState.__notificationClient) {
+        try {
+          globalListenerState.__notificationClient.release(true);
+        } catch {}
+        globalListenerState.__notificationClient = null;
+      }
+
+      const client = await pool.connect();
+      globalListenerState.__notificationClient = client;
+
 
       await client.query(`
         CREATE OR REPLACE FUNCTION public.notify_notification_inserted()
@@ -104,16 +125,17 @@ export function startNotificationListener() {
   }
 
   function cleanupAndReconnect() {
-    if (client) {
+    if (globalListenerState.__notificationClient) {
       try {
-        client.release(true);
+        globalListenerState.__notificationClient.release(true);
       } catch (err) {
         // ignore
       }
-      client = null;
+      globalListenerState.__notificationClient = null;
     }
     setTimeout(connectAndListen, 5000);
   }
+
 
   connectAndListen();
 }
@@ -282,8 +304,13 @@ async function processSingleNotificationPayload(payload: NotificationPayload) {
       subject = "📊 End of Day Check-in: All Tasks Completed! - Operon";
     }
     html = getUncompletedEodTasksHtml(payload.user_id, uncompletedTasks, origin);
+  } else if (payload.type.startsWith("leave_") || payload.title.toLowerCase().includes("leave") || payload.title.toLowerCase().includes("wfh")) {
+    subject = `${payload.title}${payload.body ? `: ${payload.body}` : ""}`;
+    html = getLeaveNotificationHtml(payload.title, payload.body || "", payload.type, origin);
+    console.log(`[NotificationListener] 🌴 Dispatched LEAVE email to ${user.email} (Subject: ${subject})`);
   } else {
     subject = `🔔 ${payload.title}${payload.body ? `: ${payload.body}` : ""}`;
+
     let assignerName = "Operon";
     let assigneeName = user.display_name || "Team Member";
     let taskCode: string | undefined = undefined;
@@ -322,6 +349,7 @@ async function processSingleNotificationPayload(payload: NotificationPayload) {
       taskName,
       taskStatus,
     );
+    console.log(`[NotificationListener] 📋 Dispatched GENERAL/TASK email to ${user.email} (Subject: ${subject})`);
   }
 
   await sendEodEmail({
@@ -330,3 +358,4 @@ async function processSingleNotificationPayload(payload: NotificationPayload) {
     html,
   });
 }
+

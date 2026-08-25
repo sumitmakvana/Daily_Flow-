@@ -31,6 +31,7 @@ import {
   X,
   ChevronRight,
   User,
+  Palmtree,
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -66,6 +67,7 @@ const memberNav = [
 
 const managerNav = [
   { to: "/team-capacity", icon: Users, label: "Team Capacity" },
+  { to: "/leaves", icon: Palmtree, label: "Team Leaves" },
   { to: "/my-day", icon: Sunrise, label: "My Day" },
   { to: "/manager", icon: ShieldAlert, label: "Manager" },
   { to: "/command", icon: Activity, label: "Command" },
@@ -89,6 +91,7 @@ const primaryManagerNav = [
   { to: "/my-day", icon: Sunrise, label: "My Day" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
+  { to: "/leaves", icon: Palmtree, label: "Team Leaves" },
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/team-capacity", icon: Users, label: "Team Capacity" },
   { to: "/executive", icon: Gauge, label: "Exec" },
