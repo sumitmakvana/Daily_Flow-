@@ -25,7 +25,9 @@ import {
   XCircle,
   Clock3,
   Pencil,
+  Ban,
 } from "lucide-react";
+
 import type { Leave } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { leaveColor, leaveDot } from "@/lib/colors";
@@ -260,7 +262,9 @@ export function TeamMemberLeavesPage() {
                 { id: "pending", label: "Pending" },
                 { id: "approved", label: "Approved" },
                 { id: "rejected", label: "Rejected" },
+                { id: "cancelled", label: "Cancelled" },
               ].map((tab) => (
+
                 <button
                   key={tab.id}
                   type="button"
@@ -427,9 +431,13 @@ export function TeamMemberLeavesPage() {
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-status-completed/15 text-status-completed border border-status-completed/40 shadow-xs">
                             <CheckCircle2 className="h-3 w-3" /> Approved
                           </span>
-                        ) : (
+                        ) : l.status === "rejected" ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-status-blocked/15 text-status-blocked border border-status-blocked/40 shadow-xs">
                             <XCircle className="h-3 w-3" /> Rejected
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-muted text-muted-foreground border border-border/80 shadow-xs">
+                            <Ban className="h-3 w-3" /> Cancelled
                           </span>
                         )}
                       </td>
@@ -437,19 +445,21 @@ export function TeamMemberLeavesPage() {
                       {/* Actions Column */}
                       <td className="py-3.5 px-3 sm:px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
-                          {/* Edit Button */}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            title="Edit Leave / WFH Request"
-                            onClick={() => {
-                              setEditingLeave(l);
-                              setLeaveDialogOpen(true);
-                            }}
-                            className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 rounded-md cursor-pointer gap-1 transition-colors"
-                          >
-                            <Pencil className="h-3 w-3" /> Edit
-                          </Button>
+                          {/* Edit Button only for the creator */}
+                          {l.user_id === user?.id && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              title="Edit Leave / WFH Request"
+                              onClick={() => {
+                                setEditingLeave(l);
+                                setLeaveDialogOpen(true);
+                              }}
+                              className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 rounded-md cursor-pointer gap-1 transition-colors"
+                            >
+                              <Pencil className="h-3 w-3" /> Edit
+                            </Button>
+                          )}
 
                           {l.status === "pending" ? (
                             <>
@@ -482,29 +492,20 @@ export function TeamMemberLeavesPage() {
                               <Trash2 className="h-3 w-3" /> Cancel
                             </Button>
                           ) : (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleApprove(l.id)}
-                                disabled={actionLoadingId === l.id}
-                                className="h-7 px-2 text-[10px] text-muted-foreground hover:text-status-completed hover:bg-status-completed/10 border-border rounded-md cursor-pointer gap-1"
-                              >
-                                <Check className="h-3 w-3" /> Re-approve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleCancel(l.id)}
-                                disabled={actionLoadingId === l.id}
-                                className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive cursor-pointer"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </>
+                            /* Rejected or Cancelled */
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleApprove(l.id)}
+                              disabled={actionLoadingId === l.id}
+                              className="h-7 px-2 text-[10px] text-muted-foreground hover:text-status-completed hover:bg-status-completed/10 border-border rounded-md cursor-pointer gap-1"
+                            >
+                              <Check className="h-3 w-3" /> Re-approve
+                            </Button>
                           )}
                         </div>
                       </td>
+
                     </tr>
                   );
                 })

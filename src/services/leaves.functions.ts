@@ -297,14 +297,9 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
 
     const isOwner = existing.rows[0].user_id === context.userId;
     if (!isOwner) {
-      const roleRes = await pool.query(
-        `SELECT 1 FROM public.user_roles WHERE user_id = $1 AND role IN ('admin', 'manager')`,
-        [context.userId]
-      );
-      if (roleRes.rows.length === 0) {
-        throw new Error("Not authorized to edit this leave request");
-      }
+      throw new Error("Only the team member who created this leave request can edit it.");
     }
+
 
     const updates: string[] = [];
     const params: any[] = [data.id];
@@ -380,14 +375,15 @@ export const deleteLeaveFn = createServerFn({ method: "POST" })
     const leave = existing.rows[0];
 
     await pool.query(
-      `DELETE FROM public.leaves 
+      `UPDATE public.leaves
+       SET status = 'cancelled', updated_at = now()
        WHERE id = $1 AND (user_id = $2 OR EXISTS (
          SELECT 1 FROM public.user_roles WHERE user_id = $2 AND role IN ('admin', 'manager')
        ))`,
       [data.id, context.userId]
     );
 
-    // If a manager or admin cancelled/deleted someone else's leave, send notification to the employee
+    // If a manager or admin cancelled someone else's leave, send notification to the employee
     if (leave && leave.user_id !== context.userId) {
       try {
         const managerProfile = await pool.query<{ display_name: string }>(
@@ -414,4 +410,5 @@ export const deleteLeaveFn = createServerFn({ method: "POST" })
 
     return { success: true };
   });
+
 
