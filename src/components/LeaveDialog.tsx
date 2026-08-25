@@ -34,8 +34,9 @@ const LEAVE_TYPES = [
   { id: "sick", label: "Sick Leave", icon: Activity, badge: "SL" },
   { id: "wfh", label: "Work From Home (WFH)", icon: Home, badge: "WFH" },
   { id: "half_day", label: "Half Day", icon: Clock, badge: "0.5D" },
-  { id: "paid", label: "Paid Leave", icon: Calendar, badge: "PL" },
+  // { id: "paid", label: "Paid Leave", icon: Calendar, badge: "PL" },
 ];
+
 
 export function LeaveDialog({
   open,
