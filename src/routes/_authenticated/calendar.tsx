@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TaskCard } from "@/components/TaskCard";
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter, Palmtree, Home, Check, X, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter, Palmtree, Home, Check, X, Trash2, Pencil } from "lucide-react";
 import type { Profile, Task, Leave } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -48,6 +48,8 @@ function CalendarPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [editingLeave, setEditingLeave] = useState<Leave | null>(null);
+
   
   // Custom Month/Year Picker States
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -67,7 +69,12 @@ function CalendarPage() {
   const [status, setStatus] = useState<string>(ALL);
   const [priority, setPriority] = useState<string>(ALL);
   const [assignee, setAssignee] = useState<string>(ALL);
-  const [myTasksOnly, setMyTasksOnly] = useState(false);
+  const [myTasksOnly, setMyTasksOnly] = useState(!isManager);
+
+  // Sync default filter whenever auth role resolves
+  useEffect(() => {
+    setMyTasksOnly(!isManager);
+  }, [isManager]);
 
   const load = useCallback(async () => {
     const [{ data: t }, { data: p }, l] = await Promise.all([
@@ -79,6 +86,7 @@ function CalendarPage() {
     setProfiles((p ?? []) as Profile[]);
     setLeaves(l || []);
   }, []);
+
 
 
   useEffect(() => {
@@ -600,7 +608,10 @@ function CalendarPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setLeaveDialogOpen(true)}
+                onClick={() => {
+                  setEditingLeave(null);
+                  setLeaveDialogOpen(true);
+                }}
                 className="h-6 text-[11px] text-primary px-2 hover:bg-primary/10 cursor-pointer"
               >
                 + Request Leave / WFH
@@ -613,6 +624,8 @@ function CalendarPage() {
                   const empName = l.user_name || profiles.find((p) => p.id === l.user_id)?.display_name || "Member";
                   const colorClass = leaveColor[l.leave_type] || leaveColor.casual;
                   const dotClass = leaveDot[l.leave_type] || leaveDot.casual;
+                  const canEditOrCancel = isManager || l.user_id === user?.id;
+
                   return (
                     <div
                       key={l.id}
@@ -629,7 +642,7 @@ function CalendarPage() {
                             {l.leave_type === "wfh" ? "WFH" : l.leave_type}
                           </span>
                         </div>
-                        <p className="text-[11px] opacity-90 truncate pl-3.5">{l.reason}</p>
+                        <p className="text-[11px] opacity-90 truncate pl-3.5">{l.reason || "No reason specified"}</p>
                         {l.handover_note && (
                           <p className="text-[10px] opacity-75 italic pl-3.5">Handover: {l.handover_note}</p>
                         )}
@@ -638,8 +651,25 @@ function CalendarPage() {
                         <span className="text-[10px] font-semibold opacity-80 whitespace-nowrap">
                           {l.days_count}d
                         </span>
+
+                        {/* Edit Button for own leave or manager */}
+                        {canEditOrCancel && (
+                          <button
+                            type="button"
+                            title="Edit leave details"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingLeave(l);
+                              setLeaveDialogOpen(true);
+                            }}
+                            className="h-5 px-1.5 rounded bg-background/80 hover:bg-primary/20 hover:text-primary text-foreground text-[10px] flex items-center gap-0.5 border border-border cursor-pointer transition-colors"
+                          >
+                            <Pencil className="h-2.5 w-2.5" /> Edit
+                          </button>
+                        )}
+
                         {l.status === "pending" && isManager && (
-                          <div className="flex items-center gap-1 ml-1">
+                          <div className="flex items-center gap-1 ml-0.5">
                             <button
                               type="button"
                               title="Approve leave"
@@ -664,7 +694,8 @@ function CalendarPage() {
                             </button>
                           </div>
                         )}
-                        {(isManager || l.user_id === user?.id) && l.status === "approved" && (
+
+                        {canEditOrCancel && l.status === "approved" && (
                           <button
                             type="button"
                             title="Cancel leave"
@@ -672,7 +703,7 @@ function CalendarPage() {
                               e.stopPropagation();
                               handleCancelLeave(l.id);
                             }}
-                            className="h-5 px-1.5 rounded bg-muted/80 hover:bg-destructive/20 hover:text-destructive text-muted-foreground text-[10px] flex items-center gap-0.5 border border-border cursor-pointer transition-colors ml-1"
+                            className="h-5 px-1.5 rounded bg-muted/80 hover:bg-destructive/20 hover:text-destructive text-muted-foreground text-[10px] flex items-center gap-0.5 border border-border cursor-pointer transition-colors"
                           >
                             <Trash2 className="h-3 w-3" /> Cancel
                           </button>
@@ -682,7 +713,6 @@ function CalendarPage() {
                   );
                 })}
               </div>
-
             ) : (
               <div className="text-[11px] text-muted-foreground bg-muted/20 p-2.5 rounded-md border border-border flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-status-completed" />
@@ -752,11 +782,16 @@ function CalendarPage() {
       {/* Leave & WFH Creation Dialog */}
       <LeaveDialog
         open={leaveDialogOpen}
-        onOpenChange={setLeaveDialogOpen}
+        onOpenChange={(open) => {
+          setLeaveDialogOpen(open);
+          if (!open) setEditingLeave(null);
+        }}
         initialDate={selectedDate}
+        leaveToEdit={editingLeave}
         onSuccess={load}
       />
     </div>
   );
+
 }
 

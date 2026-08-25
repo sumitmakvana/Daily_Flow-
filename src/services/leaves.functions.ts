@@ -213,7 +213,6 @@ export const createLeaveFn = createServerFn({ method: "POST" })
   });
 
 export const updateLeaveStatusFn = createServerFn({ method: "POST" })
-
   .middleware([requireSupabaseAuth])
   .validator((d: {
     id: string;
@@ -258,6 +257,100 @@ export const updateLeaveStatusFn = createServerFn({ method: "POST" })
 
     return updated;
   });
+
+export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: {
+    id: string;
+    leaveType?: string;
+    startDate?: string;
+    endDate?: string;
+    daysCount?: number;
+    reason?: string;
+    requestTo?: string | null;
+    handoverNote?: string;
+  }) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        leaveType: z.string().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        daysCount: z.number().optional(),
+        reason: z.string().optional(),
+        requestTo: z.string().uuid().optional().nullable(),
+        handoverNote: z.string().optional(),
+      })
+      .parse(d)
+  )
+  .handler(async ({ data, context }) => {
+    await ensureLeavesTableAdmin();
+    const pool = getPool();
+
+    const existing = await pool.query<{ user_id: string }>(
+      `SELECT user_id FROM public.leaves WHERE id = $1`,
+      [data.id]
+    );
+    if (existing.rows.length === 0) {
+      throw new Error("Leave record not found");
+    }
+
+    const isOwner = existing.rows[0].user_id === context.userId;
+    if (!isOwner) {
+      const roleRes = await pool.query(
+        `SELECT 1 FROM public.user_roles WHERE user_id = $1 AND role IN ('admin', 'manager')`,
+        [context.userId]
+      );
+      if (roleRes.rows.length === 0) {
+        throw new Error("Not authorized to edit this leave request");
+      }
+    }
+
+    const updates: string[] = [];
+    const params: any[] = [data.id];
+
+    if (data.leaveType !== undefined) {
+      params.push(data.leaveType);
+      updates.push(`leave_type = $${params.length}`);
+    }
+    if (data.startDate !== undefined) {
+      params.push(data.startDate);
+      updates.push(`start_date = $${params.length}`);
+    }
+    if (data.endDate !== undefined) {
+      params.push(data.endDate);
+      updates.push(`end_date = $${params.length}`);
+    }
+    if (data.daysCount !== undefined) {
+      params.push(data.daysCount);
+      updates.push(`days_count = $${params.length}`);
+    }
+    if (data.reason !== undefined) {
+      params.push(data.reason);
+      updates.push(`reason = $${params.length}`);
+    }
+    if (data.requestTo !== undefined) {
+      params.push(data.requestTo);
+      updates.push(`request_to = $${params.length}`);
+    }
+    if (data.handoverNote !== undefined) {
+      params.push(data.handoverNote);
+      updates.push(`handover_note = $${params.length}`);
+    }
+
+    updates.push(`updated_at = now()`);
+
+    const query = `
+      UPDATE public.leaves
+      SET ${updates.join(", ")}
+      WHERE id = $1
+      RETURNING id, user_id, leave_type, start_date::text, end_date::text, days_count, reason, status, handover_note, request_to, created_at::text, updated_at::text
+    `;
+
+    const res = await pool.query<Leave>(query, params);
+    return res.rows[0];
+  });
+
 
 export const deleteLeaveFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

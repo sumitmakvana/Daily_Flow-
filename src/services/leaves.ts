@@ -2,6 +2,7 @@ import {
   fetchLeavesFn,
   createLeaveFn,
   updateLeaveStatusFn,
+  updateLeaveDetailsFn,
   deleteLeaveFn,
 } from "./leaves.functions";
 import type { Leave } from "@/lib/types";
@@ -25,6 +26,21 @@ export const leavesService = {
     return (await createLeaveFn({ data })) as Leave;
   },
 
+  async updateLeave(
+    id: string,
+    data: {
+      leaveType?: string;
+      startDate?: string;
+      endDate?: string;
+      daysCount?: number;
+      reason?: string;
+      requestTo?: string | null;
+      handoverNote?: string;
+    }
+  ): Promise<Leave> {
+    return (await updateLeaveDetailsFn({ data: { id, ...data } })) as Leave;
+  },
+
   async updateStatus(id: string, status: "approved" | "rejected" | "cancelled" | "pending"): Promise<Leave> {
     return (await updateLeaveStatusFn({ data: { id, status } })) as Leave;
   },
@@ -33,5 +49,6 @@ export const leavesService = {
     return await deleteLeaveFn({ data: { id, reason } });
   },
 };
+
 
 

@@ -18,13 +18,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { toLocalISO } from "@/lib/format";
 import { supabase } from "@/integrations/supabase/client";
 import { Calendar, Palmtree, Home, Activity, Clock, UserCheck } from "lucide-react";
-import type { Profile } from "@/lib/types";
+import type { Profile, Leave } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface LeaveDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialDate?: Date | null;
+  leaveToEdit?: Leave | null;
   onSuccess?: () => void;
 }
 
@@ -40,6 +41,7 @@ export function LeaveDialog({
   open,
   onOpenChange,
   initialDate,
+  leaveToEdit,
   onSuccess,
 }: LeaveDialogProps) {
   const { user } = useAuth();
@@ -54,13 +56,22 @@ export function LeaveDialog({
 
   useEffect(() => {
     if (open) {
-      const defaultDate = initialDate ? toLocalISO(initialDate) : toLocalISO(new Date());
-      setStartDate(defaultDate);
-      setEndDate(defaultDate);
-      setReason("");
-      setHandoverNote("");
-      setLeaveType("casual");
-      setRequestTo("default");
+      if (leaveToEdit) {
+        setStartDate(leaveToEdit.start_date);
+        setEndDate(leaveToEdit.end_date);
+        setReason(leaveToEdit.reason || "");
+        setHandoverNote(leaveToEdit.handover_note || "");
+        setLeaveType(leaveToEdit.leave_type || "casual");
+        setRequestTo(leaveToEdit.request_to || "default");
+      } else {
+        const defaultDate = initialDate ? toLocalISO(initialDate) : toLocalISO(new Date());
+        setStartDate(defaultDate);
+        setEndDate(defaultDate);
+        setReason("");
+        setHandoverNote("");
+        setLeaveType("casual");
+        setRequestTo("default");
+      }
 
       // Load active profiles for Request To dropdown
       supabase
@@ -72,7 +83,7 @@ export function LeaveDialog({
           if (data) setProfiles(data as Profile[]);
         });
     }
-  }, [open, initialDate]);
+  }, [open, initialDate, leaveToEdit]);
 
   // Calculate day count
   const calculateDays = () => {
@@ -101,23 +112,36 @@ export function LeaveDialog({
 
     setSubmitting(true);
     try {
-      await leavesService.applyLeave({
-        userId: user?.id,
-        leaveType,
-        startDate,
-        endDate,
-        daysCount,
-        reason: reason.trim() || undefined,
-        requestTo: requestTo === "default" ? null : requestTo,
-        handoverNote: handoverNote.trim() || undefined,
-        status: "approved",
-      });
+      if (leaveToEdit) {
+        await leavesService.updateLeave(leaveToEdit.id, {
+          leaveType,
+          startDate,
+          endDate,
+          daysCount,
+          reason: reason.trim() || undefined,
+          requestTo: requestTo === "default" ? null : requestTo,
+          handoverNote: handoverNote.trim() || undefined,
+        });
+        toast.success("Leave request updated successfully!");
+      } else {
+        await leavesService.applyLeave({
+          userId: user?.id,
+          leaveType,
+          startDate,
+          endDate,
+          daysCount,
+          reason: reason.trim() || undefined,
+          requestTo: requestTo === "default" ? null : requestTo,
+          handoverNote: handoverNote.trim() || undefined,
+          status: "approved",
+        });
 
-      toast.success(
-        leaveType === "wfh"
-          ? `WFH scheduled for ${startDate === endDate ? startDate : `${startDate} to ${endDate}`}`
-          : `Leave request submitted (${daysCount} ${daysCount === 1 ? "day" : "days"})`
-      );
+        toast.success(
+          leaveType === "wfh"
+            ? `WFH scheduled for ${startDate === endDate ? startDate : `${startDate} to ${endDate}`}`
+            : `Leave request submitted (${daysCount} ${daysCount === 1 ? "day" : "days"})`
+        );
+      }
 
       onOpenChange(false);
       onSuccess?.();
@@ -134,12 +158,13 @@ export function LeaveDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground text-base font-semibold">
             <Palmtree className="h-5 w-5 text-primary" />
-            Request Leave / WFH
+            {leaveToEdit ? "Edit Leave / WFH Request" : "Request Leave / WFH"}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Apply for leave or work from home. Select who receives the alert and notification.
+            {leaveToEdit ? "Update your dates, leave type, or notification recipient." : "Apply for leave or work from home. Select who receives the alert and notification."}
           </DialogDescription>
         </DialogHeader>
+
 
         <form onSubmit={handleSubmit} className="space-y-3.5 py-1.5">
           {/* Leave Type Selector */}

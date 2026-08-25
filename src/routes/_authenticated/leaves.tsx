@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock3,
+  Pencil,
 } from "lucide-react";
 import type { Leave } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ export function TeamMemberLeavesPage() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [editingLeave, setEditingLeave] = useState<Leave | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const loadLeaves = useCallback(async () => {
@@ -185,11 +187,15 @@ export function TeamMemberLeavesPage() {
           </Button>
           <Button
             size="sm"
-            onClick={() => setLeaveDialogOpen(true)}
-            className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+            onClick={() => {
+              setEditingLeave(null);
+              setLeaveDialogOpen(true);
+            }}
+            className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
           >
             <Plus className="h-4 w-4" /> Apply Leave / WFH
           </Button>
+
         </div>
       </div>
 
@@ -430,28 +436,42 @@ export function TeamMemberLeavesPage() {
 
                       {/* Actions Column */}
                       <td className="py-3.5 px-3 sm:px-4 text-center whitespace-nowrap">
-                        {l.status === "pending" ? (
-                          <div className="flex items-center justify-center gap-1.5">
-                            <Button
-                              size="sm"
-                              onClick={() => handleApprove(l.id)}
-                              disabled={actionLoadingId === l.id}
-                              className="h-7 px-2.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-md cursor-pointer shadow-xs gap-1"
-                            >
-                              <Check className="h-3.5 w-3.5" /> Approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleReject(l.id)}
-                              disabled={actionLoadingId === l.id}
-                              className="h-7 px-2.5 text-[11px] font-bold text-destructive border-destructive/40 hover:bg-destructive/15 rounded-md cursor-pointer shadow-xs gap-1"
-                            >
-                              <X className="h-3.5 w-3.5" /> Reject
-                            </Button>
-                          </div>
-                        ) : l.status === "approved" ? (
-                          <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-center gap-1">
+                          {/* Edit Button */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title="Edit Leave / WFH Request"
+                            onClick={() => {
+                              setEditingLeave(l);
+                              setLeaveDialogOpen(true);
+                            }}
+                            className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 rounded-md cursor-pointer gap-1 transition-colors"
+                          >
+                            <Pencil className="h-3 w-3" /> Edit
+                          </Button>
+
+                          {l.status === "pending" ? (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => handleApprove(l.id)}
+                                disabled={actionLoadingId === l.id}
+                                className="h-7 px-2.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-md cursor-pointer shadow-xs gap-1"
+                              >
+                                <Check className="h-3.5 w-3.5" /> Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleReject(l.id)}
+                                disabled={actionLoadingId === l.id}
+                                className="h-7 px-2.5 text-[11px] font-bold text-destructive border-destructive/40 hover:bg-destructive/15 rounded-md cursor-pointer shadow-xs gap-1"
+                              >
+                                <X className="h-3.5 w-3.5" /> Reject
+                              </Button>
+                            </>
+                          ) : l.status === "approved" ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -459,31 +479,31 @@ export function TeamMemberLeavesPage() {
                               disabled={actionLoadingId === l.id}
                               className="h-7 px-2.5 text-[11px] font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 border-border hover:border-destructive/30 rounded-md cursor-pointer transition-colors gap-1"
                             >
-                              <Trash2 className="h-3 w-3" /> Cancel Leave
+                              <Trash2 className="h-3 w-3" /> Cancel
                             </Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleApprove(l.id)}
-                              disabled={actionLoadingId === l.id}
-                              className="h-7 px-2 text-[10px] text-muted-foreground hover:text-status-completed hover:bg-status-completed/10 border-border rounded-md cursor-pointer gap-1"
-                            >
-                              <Check className="h-3 w-3" /> Re-approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleCancel(l.id)}
-                              disabled={actionLoadingId === l.id}
-                              className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive cursor-pointer"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
+                          ) : (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleApprove(l.id)}
+                                disabled={actionLoadingId === l.id}
+                                className="h-7 px-2 text-[10px] text-muted-foreground hover:text-status-completed hover:bg-status-completed/10 border-border rounded-md cursor-pointer gap-1"
+                              >
+                                <Check className="h-3 w-3" /> Re-approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleCancel(l.id)}
+                                disabled={actionLoadingId === l.id}
+                                className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive cursor-pointer"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -492,7 +512,6 @@ export function TeamMemberLeavesPage() {
             </tbody>
           </table>
         </div>
-
 
         {/* Pagination Footer */}
         <div className="p-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground bg-muted/10">
@@ -530,9 +549,14 @@ export function TeamMemberLeavesPage() {
       {/* Leave Application Modal */}
       <LeaveDialog
         open={leaveDialogOpen}
-        onOpenChange={setLeaveDialogOpen}
+        onOpenChange={(open) => {
+          setLeaveDialogOpen(open);
+          if (!open) setEditingLeave(null);
+        }}
+        leaveToEdit={editingLeave}
         onSuccess={loadLeaves}
       />
     </div>
   );
 }
+
