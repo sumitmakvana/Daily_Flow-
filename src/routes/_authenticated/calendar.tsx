@@ -14,9 +14,10 @@ import { TaskCard } from "@/components/TaskCard";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter, Palmtree, Home, Check, X, Trash2, Pencil } from "lucide-react";
 import type { Profile, Task, Leave } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import { getLocalHoliday, fetchIndianHolidays, toLocalISO, type Holiday } from "@/lib/format";
-import { statusColor, leaveColor, leaveDot } from "@/lib/colors";
+import { statusColor, leaveColor, leaveDot, priorityDot } from "@/lib/colors";
+
+
 
 
 export const Route = createFileRoute("/_authenticated/calendar")({
@@ -485,10 +486,8 @@ function CalendarPage() {
                   
                   <div className="flex items-center gap-1">
                     {dayLeaves.length > 0 && (
-                      <span className={cn(
-                        "text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.2 rounded-md border",
-                        leaveColor.casual
-                      )}>
+                      <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded-md border border-border/40 flex items-center gap-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-status-review/80 shrink-0" />
                         {dayLeaves.length} away
                       </span>
                     )}
@@ -501,7 +500,7 @@ function CalendarPage() {
                 </div>
 
                 {holiday && (
-                  <div className="absolute bottom-1 right-1 sm:right-1.5 flex items-center gap-0.5 text-[8px] sm:text-[9px] font-medium text-status-hold bg-status-hold/15 border border-status-hold/30 px-1 py-0.5 rounded shadow-xs max-w-[90%] truncate">
+                  <div className="absolute bottom-1 right-1 sm:right-1.5 flex items-center gap-0.5 text-[8px] sm:text-[9px] font-medium text-status-hold bg-status-hold/10 border border-status-hold/25 px-1 py-0.5 rounded shadow-xs max-w-[90%] truncate">
                     <span>{holiday.emoji}</span>
                     <span className="hidden sm:inline truncate">{holiday.name}</span>
                   </div>
@@ -514,28 +513,27 @@ function CalendarPage() {
                     {/* Leaves & WFH pills */}
                     {dayLeaves.slice(0, 2).map((l) => {
                       const empName = l.user_name || profiles.find((p) => p.id === l.user_id)?.display_name || "Member";
-                      const colorClass = leaveColor[l.leave_type] || leaveColor.casual;
                       const dotClass = leaveDot[l.leave_type] || leaveDot.casual;
                       return (
                         <div
                           key={l.id}
-                          className={cn(
-                            "text-[10px] px-1.5 py-0.5 rounded font-medium truncate border shadow-xs flex items-center gap-1",
-                            colorClass
-                          )}
+                          className="text-[10px] px-1.5 py-0.5 rounded-md font-medium truncate border border-border/80 bg-card hover:bg-muted/60 text-foreground flex items-center gap-1.5 shadow-xs transition-colors"
                           title={`${empName}: ${l.leave_type} (${l.reason})`}
                         >
                           <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dotClass)} />
-                          <span className="truncate">{empName.split(" ")[0]}</span>
-                          <span className="opacity-70 text-[9px]">({l.leave_type === "wfh" ? "WFH" : "Leave"})</span>
+                          <span className="truncate text-foreground font-normal">{empName.split(" ")[0]}</span>
+                          <span className="text-[9px] text-muted-foreground/80 ml-auto uppercase font-semibold">
+                            {l.leave_type === "wfh" ? "WFH" : "Leave"}
+                          </span>
                         </div>
                       );
                     })}
                     {dayLeaves.length > 2 && (
-                      <div className="text-[9px] font-medium text-status-review pl-1">
+                      <div className="text-[9px] font-medium text-muted-foreground pl-1">
                         +{dayLeaves.length - 2} more away
                       </div>
                     )}
+
 
                     {/* Tasks items */}
                     {dayTasks.slice(0, 2).map((task) => (
@@ -568,13 +566,8 @@ function CalendarPage() {
                     {dayTasks.slice(0, 3).map((task) => (
                       <span
                         key={task.id}
-                        className={cn(
-                          "h-1.5 w-1.5 rounded-full shadow-xs",
-                          task.status === "Completed" ? "bg-status-completed" :
-                          task.status === "Blocked" ? "bg-status-blocked" :
-                          task.status === "In Progress" ? "bg-status-progress" :
-                          "bg-status-todo"
-                        )}
+                        className={cn("h-1.5 w-1.5 rounded-full shadow-xs", priorityDot[task.priority] || "bg-muted-foreground")}
+                        title={task.task_name}
                       />
                     ))}
                   </div>
@@ -619,41 +612,41 @@ function CalendarPage() {
             </div>
 
             {selectedDateLeaves.length > 0 ? (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {selectedDateLeaves.map((l) => {
                   const empName = l.user_name || profiles.find((p) => p.id === l.user_id)?.display_name || "Member";
-                  const colorClass = leaveColor[l.leave_type] || leaveColor.casual;
                   const dotClass = leaveDot[l.leave_type] || leaveDot.casual;
                   const canEditOrCancel = isManager || l.user_id === user?.id;
 
                   return (
                     <div
                       key={l.id}
-                      className={cn(
-                        "p-2.5 rounded-lg border text-xs flex items-start justify-between gap-2",
-                        colorClass
-                      )}
+                      className="p-3 rounded-xl border border-border bg-card/90 hover:bg-muted/30 text-xs flex items-start justify-between gap-3 shadow-xs transition-colors"
                     >
-                      <div className="space-y-0.5 min-w-0">
-                        <div className="flex items-center gap-1.5">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2">
                           <span className={cn("w-2 h-2 rounded-full shrink-0", dotClass)} />
                           <span className="font-semibold text-xs text-foreground truncate">{empName}</span>
-                          <span className="text-[9px] uppercase tracking-wider font-semibold opacity-80">
-                            {l.leave_type === "wfh" ? "WFH" : l.leave_type}
+                          <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-muted text-muted-foreground border border-border/80 font-semibold uppercase tracking-wider">
+                            {l.leave_type === "wfh" ? "WFH" : l.leave_type.replace("_", " ")}
                           </span>
                         </div>
-                        <p className="text-[11px] opacity-90 truncate pl-3.5">{l.reason || "No reason specified"}</p>
+                        {l.reason ? (
+                          <p className="text-[11px] text-muted-foreground pl-4 leading-relaxed">{l.reason}</p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground/60 italic pl-4">No reason specified</p>
+                        )}
                         {l.handover_note && (
-                          <p className="text-[10px] opacity-75 italic pl-3.5">Handover: {l.handover_note}</p>
+                          <p className="text-[10px] text-muted-foreground/80 italic pl-4">Handover: {l.handover_note}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] font-semibold opacity-80 whitespace-nowrap">
+                        <span className="text-[10px] font-medium text-muted-foreground px-2 py-0.5 rounded-md bg-muted/60 border border-border">
                           {l.days_count}d
                         </span>
 
-                        {/* Edit Button for own leave or manager */}
-                        {canEditOrCancel && (
+                        {/* Edit Button strictly for the leave creator */}
+                        {l.user_id === user?.id && (
                           <button
                             type="button"
                             title="Edit leave details"
@@ -667,6 +660,7 @@ function CalendarPage() {
                             <Pencil className="h-2.5 w-2.5" /> Edit
                           </button>
                         )}
+
 
                         {l.status === "pending" && isManager && (
                           <div className="flex items-center gap-1 ml-0.5">
@@ -708,6 +702,21 @@ function CalendarPage() {
                             <Trash2 className="h-3 w-3" /> Cancel
                           </button>
                         )}
+
+                        {isManager && l.status === "rejected" && (
+                          <button
+                            type="button"
+                            title="Re-approve leave"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleApproveLeave(l.id);
+                            }}
+                            className="h-5 px-1.5 rounded bg-status-completed/20 hover:bg-status-completed/30 text-status-completed text-[10px] font-semibold flex items-center gap-0.5 border border-status-completed/40 cursor-pointer transition-colors"
+                          >
+                            <Check className="h-3 w-3" /> Re-approve
+                          </button>
+                        )}
+
                       </div>
                     </div>
                   );
