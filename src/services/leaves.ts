@@ -29,6 +29,7 @@ export const leavesService = {
   async updateLeave(
     id: string,
     data: {
+      userId?: string;
       leaveType?: string;
       startDate?: string;
       endDate?: string;
@@ -41,14 +42,16 @@ export const leavesService = {
     return (await updateLeaveDetailsFn({ data: { id, ...data } })) as Leave;
   },
 
+
   async updateStatus(id: string, status: "approved" | "rejected" | "cancelled" | "pending"): Promise<Leave> {
     return (await updateLeaveStatusFn({ data: { id, status } })) as Leave;
   },
 
-  async deleteLeave(id: string, reason?: string): Promise<{ success: boolean }> {
-    return await deleteLeaveFn({ data: { id, reason } });
+  async deleteLeave(id: string, reason?: string, permanent?: boolean): Promise<{ success: boolean }> {
+    return await deleteLeaveFn({ data: { id, reason, permanent } });
   },
 };
+
 
 
 

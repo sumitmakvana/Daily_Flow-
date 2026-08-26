@@ -37,8 +37,9 @@ export const Route = createFileRoute("/_authenticated/leaves")({
 });
 
 export function TeamMemberLeavesPage() {
-  const { user } = useAuth();
+  const { user, isManager } = useAuth();
   const [leaves, setLeaves] = useState<Leave[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("__all");
@@ -105,6 +106,21 @@ export function TeamMemberLeavesPage() {
       setActionLoadingId(null);
     }
   };
+
+  const handleDeletePermanently = async (id: string) => {
+    if (!confirm("Are you sure you want to permanently delete this leave row? This cannot be undone.")) return;
+    setActionLoadingId(id);
+    try {
+      await leavesService.deleteLeave(id, "Permanently deleted", true);
+      toast.success("Leave record permanently deleted.");
+      await loadLeaves();
+    } catch (err) {
+      toast.error("Failed to delete leave: " + (err as Error).message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
 
   // Format date helper (e.g. 31-Aug-24)
   const formatDate = (dateStr?: string) => {
@@ -314,9 +330,10 @@ export function TeamMemberLeavesPage() {
                 <th className="py-3 px-3 sm:px-4">Request To</th>
                 <th className="py-3 px-3 sm:px-4 min-w-[150px]">Reason for leave</th>
                 <th className="py-3 px-3 sm:px-4 text-center">Status</th>
-                <th className="py-3 px-3 sm:px-4 text-center min-w-[140px]">Actions</th>
+                <th className="py-3 px-3 sm:px-4 text-center min-w-[190px]">Actions</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
@@ -444,20 +461,20 @@ export function TeamMemberLeavesPage() {
 
                       {/* Actions Column */}
                       <td className="py-3.5 px-3 sm:px-4 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
-                          {/* Edit Button only for the creator */}
-                          {l.user_id === user?.id && (
+                        <div className="inline-flex items-center justify-center gap-1.5 flex-nowrap">
+                          {/* Edit Button for the creator or manager/admin */}
+                          {(l.user_id === user?.id || isManager) && (
                             <Button
                               size="sm"
-                              variant="ghost"
+                              variant="outline"
                               title="Edit Leave / WFH Request"
                               onClick={() => {
                                 setEditingLeave(l);
                                 setLeaveDialogOpen(true);
                               }}
-                              className="h-7 px-2 text-[11px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 rounded-md cursor-pointer gap-1 transition-colors"
+                              className="h-7 px-2 text-[11px] font-medium text-foreground bg-background hover:bg-muted/80 border-border rounded-md cursor-pointer gap-1 transition-colors shadow-xs"
                             >
-                              <Pencil className="h-3 w-3" /> Edit
+                              <Pencil className="h-3 w-3 text-muted-foreground" /> Edit
                             </Button>
                           )}
 
@@ -487,9 +504,9 @@ export function TeamMemberLeavesPage() {
                               variant="outline"
                               onClick={() => handleCancel(l.id)}
                               disabled={actionLoadingId === l.id}
-                              className="h-7 px-2.5 text-[11px] font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 border-border hover:border-destructive/30 rounded-md cursor-pointer transition-colors gap-1"
+                              className="h-7 px-2.5 text-[11px] font-medium text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10 border-border hover:border-amber-400/30 rounded-md cursor-pointer transition-colors shadow-xs"
                             >
-                              <Trash2 className="h-3 w-3" /> Cancel
+                              Cancel
                             </Button>
                           ) : (
                             /* Rejected or Cancelled */
@@ -498,13 +515,29 @@ export function TeamMemberLeavesPage() {
                               variant="outline"
                               onClick={() => handleApprove(l.id)}
                               disabled={actionLoadingId === l.id}
-                              className="h-7 px-2 text-[10px] text-muted-foreground hover:text-status-completed hover:bg-status-completed/10 border-border rounded-md cursor-pointer gap-1"
+                              className="h-7 px-2 text-[11px] font-medium text-emerald-400 hover:bg-emerald-400/10 border-emerald-400/30 rounded-md cursor-pointer gap-1 shadow-xs"
                             >
                               <Check className="h-3 w-3" /> Re-approve
                             </Button>
                           )}
+
+                          {/* Permanent Delete Row Button */}
+                          {(l.user_id === user?.id || isManager) && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              title="Permanently delete this leave record"
+                              onClick={() => handleDeletePermanently(l.id)}
+                              disabled={actionLoadingId === l.id}
+                              className="h-7 w-7 p-0 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/15 rounded-md cursor-pointer transition-colors shrink-0"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </td>
+
+
 
                     </tr>
                   );
