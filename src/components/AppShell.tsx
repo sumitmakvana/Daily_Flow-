@@ -44,6 +44,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { NotificationsModal } from "@/components/NotificationsModal";
+import { useBrowserNotifications } from "@/hooks/use-browser-notifications";
+import { DesktopNotificationPromptBanner } from "@/components/DesktopNotificationPromptBanner";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import {
@@ -260,56 +262,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         { to: "/eod-tasks", icon: Sun, label: "EOD" },
       ];
 
-  useEffect(() => {
-    if (!user) return;
-
-    const knownIds = new Set<string>();
-    let firstLoad = true;
-
-    const checkNotifications = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("notifications")
-          .select("id, title, body, read_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(50);
-
-        if (error || !data) return;
-
-        const unreadCount = data.filter((n) => !n.read_at).length;
-        setUnread(unreadCount);
-
-        data.forEach((n) => {
-          if (!knownIds.has(n.id)) {
-            knownIds.add(n.id);
-            if (!n.read_at && !firstLoad) {
-              toast(n.title, {
-                description: n.body ?? undefined,
-                action: {
-                  label: "View",
-                  onClick: () => {
-                    navigate({ to: "/notifications" });
-                  },
-                },
-              });
-            }
-          }
-        });
-
-        firstLoad = false;
-      } catch (err) {
-        console.warn("Error polling notifications:", err);
-      }
-    };
-
-    checkNotifications();
-    const interval = setInterval(checkNotifications, 5000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [user, navigate]);
+  // Global Operon Chrome/Browser Desktop Notifications & Realtime Sync
+  const { triggerDesktopNotification } = useBrowserNotifications(user?.id, {
+    onUnreadChange: setUnread,
+  });
 
   const handleLogout = async () => {
     await queryClient.cancelQueries();
@@ -501,6 +457,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             {/* Realtime Sync Status Badge */}
             <SyncStatusBadge />
+
+            {/* Notification Bell Button */}
+            <button
+              type="button"
+              onClick={() => setNotifModalOpen(true)}
+              className="relative flex items-center justify-center h-8 w-8 rounded text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
+              title="Notifications"
+            >
+              <Bell className="h-4 w-4" />
+              {unread > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-[#0B1120] animate-pulse">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+            </button>
 
             {/* Profile Dropdown */}
             {user ? (
@@ -743,6 +714,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* MAIN CONTENT AREA */}
       <main id="main-content" tabIndex={-1} className="flex-1 pb-16 md:pb-0 focus:outline-none">
+        <DesktopNotificationPromptBanner />
         <HolidayBanner />
         {/* <AnnouncementNoticeBanner /> */}
         {children}
