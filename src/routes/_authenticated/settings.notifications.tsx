@@ -9,7 +9,8 @@ import { notifPrefsService } from "@/services/notif-prefs";
 import { dispatchEodTestEmailFn } from "@/services/notif-prefs.functions";
 import type { NotificationPrefs } from "@/lib/types";
 import { toast } from "sonner";
-import { Save, Send, CheckCircle2, Users, Mail, ShieldAlert } from "lucide-react";
+import { Save, Send, CheckCircle2, Users, Mail, ShieldAlert, Bell, Volume2, VolumeX, Laptop, Sparkles, Check, AlertCircle } from "lucide-react";
+import { useBrowserNotifications } from "@/hooks/use-browser-notifications";
 
 export const Route = createFileRoute("/_authenticated/settings/notifications")({
   component: NotifPrefsPage,
@@ -19,6 +20,16 @@ function NotifPrefsPage() {
   const { user, isManager } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const {
+    permission,
+    isSupported,
+    soundEnabled,
+    desktopEnabled,
+    setSoundEnabled,
+    setDesktopEnabled,
+    requestPermission,
+  } = useBrowserNotifications(user?.id);
 
   useEffect(() => {
     if (!user) return;
@@ -133,6 +144,82 @@ function NotifPrefsPage() {
           </Link>
         </div>
       )}
+
+      {/* Chrome & Browser Desktop Notifications */}
+      <Card className="p-4 space-y-3.5 border-[#5C8EFA]/25 bg-gradient-to-br from-[#5C8EFA]/5 via-background to-background shadow-xs">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-[#5C8EFA]/15 text-[#5C8EFA] flex items-center justify-center border border-[#5C8EFA]/30">
+              <Laptop className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <span>Operon Desktop & Chrome Notifications</span>
+              </h2>
+              <p className="text-[11px] text-muted-foreground">
+                Get instant desktop popups and audio chimes when tasks are assigned, updated, or mentioned.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {permission === "granted" ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                <Check className="h-3 w-3" /> Active
+              </span>
+            ) : permission === "denied" ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                <AlertCircle className="h-3 w-3" /> Blocked in Browser
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1 border-[#5C8EFA]/50 text-[#5C8EFA] hover:bg-[#5C8EFA]/10 font-semibold"
+                onClick={async () => {
+                  const ok = await requestPermission();
+                  if (ok) {
+                    toast.success("Desktop notifications enabled for Operon!");
+                  } else {
+                    toast.info("Browser permission request dismissed or blocked.");
+                  }
+                }}
+              >
+                <Bell className="h-3 w-3" /> Enable Popups
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-border/40 space-y-2.5">
+          <Row
+            label="Desktop Notification Popups"
+            description="Show Chrome system banner when tasks or updates are received, even in background tabs."
+          >
+            <Switch
+              checked={desktopEnabled}
+              onCheckedChange={(checked) => {
+                setDesktopEnabled(checked);
+                if (checked && permission !== "granted") {
+                  requestPermission();
+                }
+              }}
+            />
+          </Row>
+
+          <Row
+            label="Audio Chime"
+            description="Play a subtle, pleasant sound chime on incoming updates."
+          >
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={soundEnabled}
+                onCheckedChange={(checked) => setSoundEnabled(checked)}
+              />
+            </div>
+          </Row>
+        </div>
+      </Card>
 
       <Card className="p-3 space-y-3">
         <Row
