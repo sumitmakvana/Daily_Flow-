@@ -81,6 +81,7 @@ import {
 } from "@/lib/executive.functions";
 import type { Task, Profile, Project, EodCheckin } from "@/lib/types";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDate, formatHoursMins } from "@/lib/format";
@@ -150,7 +151,7 @@ function scopeToFilters(s: Scope): { team: string | null; manager: string | null
 }
 
 function ExecutivePage() {
-  const [range, setRange] = useState<RangeKey>("7");
+  const [range, setRange] = useState<RangeKey>("1");
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
@@ -1508,23 +1509,23 @@ function MultiSelectFilterPopover({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 px-2.5 text-xs bg-[#121320] border-[#25273e] text-white hover:bg-[#1c1e33] justify-between gap-1.5 font-normal"
+          className="h-8 px-2.5 text-xs bg-card border-border text-foreground hover:bg-accent justify-between gap-1.5 font-normal"
         >
-          <span className="truncate max-w-[110px]">{displayText}</span>
-          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+          <span className="truncate max-w-[120px]">{displayText}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-60 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-52 p-2 bg-[#161726] border-[#25273e] text-white shadow-2xl z-[9999]"
+        className="w-56 p-2 bg-popover border-border text-popover-foreground shadow-2xl z-[9999]"
         align="start"
       >
-        <div className="flex items-center justify-between border-b border-[#25273e] pb-1.5 mb-1.5 px-1">
-          <span className="text-[11px] font-bold text-[#94a3b8] uppercase">{pluralLabel}</span>
+        <div className="flex items-center justify-between border-b border-border pb-1.5 mb-1.5 px-1">
+          <span className="text-[11px] font-bold text-muted-foreground uppercase">{pluralLabel}</span>
           {selectedValues.length > 0 && (
             <button
               type="button"
               onClick={() => onChange([])}
-              className="text-[10px] text-indigo-400 hover:underline cursor-pointer"
+              className="text-[10px] text-primary hover:underline cursor-pointer font-medium"
             >
               Clear
             </button>
@@ -1537,15 +1538,15 @@ function MultiSelectFilterPopover({
               <div
                 key={opt.id}
                 onClick={() => toggleValue(opt.id)}
-                className="flex items-center space-x-2 px-2 py-1.5 hover:bg-[#202238] rounded cursor-pointer text-xs"
+                className="flex items-center space-x-2 px-2 py-1.5 hover:bg-accent rounded-md cursor-pointer text-xs"
               >
-                <Checkbox checked={checked} className="border-indigo-400/50 data-[state=checked]:bg-indigo-600" />
-                <span className="flex-1 truncate">{opt.label}</span>
+                <Checkbox checked={checked} className="border-border data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground" />
+                <span className="flex-1 truncate text-foreground">{opt.label}</span>
               </div>
             );
           })}
           {options.length === 0 && (
-            <div className="text-[11px] text-[#94a3b8] italic p-2 text-center">No options available</div>
+            <div className="text-[11px] text-muted-foreground italic p-2 text-center">No options available</div>
           )}
         </div>
       </PopoverContent>
@@ -1554,7 +1555,7 @@ function MultiSelectFilterPopover({
 }
 
 /* -------------------------------------------------------------------------- */
-/*            INTERACTIVE MEMBER DRILLDOWN SHEET / DRAWER COMPONENT          */
+/*            INTERACTIVE MEMBER DRILLDOWN SHEET / MODAL COMPONENT           */
 /* -------------------------------------------------------------------------- */
 
 export const ExecutiveMemberInspectionDrawer = MemberDetailSheet;
@@ -1575,17 +1576,11 @@ export function MemberDetailSheet({
   checkins: EodCheckin[];
 }) {
   const [taskSearch, setTaskSearch] = useState("");
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [statusFilterTab, setStatusFilterTab] = useState<string>("all");
   const [drawerRange, setDrawerRange] = useState("all");
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [dateSortOrder, setDateSortOrder] = useState<"desc" | "asc">("desc");
-
-  const statusOptions = [
-    { id: "In Progress", label: "In Progress" },
-    { id: "Completed", label: "Completed" },
-    { id: "Blocked", label: "Blocked" },
-    { id: "To Do", label: "To Do" },
-  ];
+  const [inspectedTask, setInspectedTask] = useState<Task | null>(null);
 
   const member = useMemo(
     () => profiles.find((p) => p.id === memberId) || null,
@@ -1622,6 +1617,33 @@ export function MemberDetailSheet({
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [memberTasks, projects]);
 
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const inProgressTasks = useMemo(
+    () => memberTasks.filter((t) => t.status === "In Progress"),
+    [memberTasks],
+  );
+
+  const toDoTasks = useMemo(
+    () => memberTasks.filter((t) => t.status === "To Do" || (t.status as string) === "Pending"),
+    [memberTasks],
+  );
+
+  const completedTasks = useMemo(
+    () => memberTasks.filter((t) => t.status === "Completed"),
+    [memberTasks],
+  );
+
+  const blockedTasks = useMemo(
+    () => memberTasks.filter((t) => t.status === "Blocked"),
+    [memberTasks],
+  );
+
+  const overdueTasks = useMemo(
+    () => memberTasks.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < todayStr),
+    [memberTasks, todayStr],
+  );
+
   const filteredTasks = useMemo(() => {
     const list = memberTasks.filter((t) => {
       // 1. Search text filter
@@ -1629,11 +1651,22 @@ export function MemberDetailSheet({
         !taskSearch.trim() ||
         t.task_name.toLowerCase().includes(taskSearch.toLowerCase()) ||
         t.task_code.toLowerCase().includes(taskSearch.toLowerCase()) ||
-        (t.project_name && t.project_name.toLowerCase().includes(taskSearch.toLowerCase()));
+        (t.project_name && t.project_name.toLowerCase().includes(taskSearch.toLowerCase())) ||
+        (t.remarks && t.remarks.toLowerCase().includes(taskSearch.toLowerCase()));
 
-      // 2. Multi-select Status filter
-      const matchStatus =
-        selectedStatuses.length === 0 || selectedStatuses.includes(t.status);
+      // 2. Status filter tab
+      let matchStatus = true;
+      if (statusFilterTab === "In Progress") {
+        matchStatus = t.status === "In Progress";
+      } else if (statusFilterTab === "To Do") {
+        matchStatus = t.status === "To Do" || (t.status as string) === "Pending";
+      } else if (statusFilterTab === "Completed") {
+        matchStatus = t.status === "Completed";
+      } else if (statusFilterTab === "Blocked") {
+        matchStatus = t.status === "Blocked";
+      } else if (statusFilterTab === "Overdue") {
+        matchStatus = t.status !== "Completed" && !!t.due_date && t.due_date.slice(0, 10) < todayStr;
+      }
 
       // 3. Multi-select Project filter
       const matchProject =
@@ -1641,7 +1674,7 @@ export function MemberDetailSheet({
         (t.project_name && selectedProjects.some((sp) => t.project_name?.split("|").some((part) => part.trim().toLowerCase() === sp.toLowerCase()))) ||
         (t.project_id && selectedProjects.includes(t.project_id));
 
-      // 4. Range filter (Today, 7d, 14d, 30d, 90d, All Time)
+      // 4. Range filter
       let matchRange = true;
       if (drawerRange === "1") {
         const today = new Date().toISOString().slice(0, 10);
@@ -1662,13 +1695,12 @@ export function MemberDetailSheet({
       return matchSearch && matchStatus && matchProject && matchRange;
     });
 
-    // Date-wise sorting (Newest / Oldest)
     return list.sort((a, b) => {
       const timeA = new Date(a.due_date || a.completed_at || a.created_at || 0).getTime();
       const timeB = new Date(b.due_date || b.completed_at || b.created_at || 0).getTime();
       return dateSortOrder === "desc" ? timeB - timeA : timeA - timeB;
     });
-  }, [memberTasks, taskSearch, selectedStatuses, selectedProjects, drawerRange, dateSortOrder]);
+  }, [memberTasks, taskSearch, statusFilterTab, selectedProjects, drawerRange, dateSortOrder, todayStr]);
 
   const memberCheckins = useMemo(() => {
     if (!memberId) return [];
@@ -1676,16 +1708,17 @@ export function MemberDetailSheet({
   }, [checkins, memberId]);
 
   const stats = useMemo(() => {
-    const total = filteredTasks.length;
-    const completed = filteredTasks.filter((t) => t.status === "Completed").length;
-    const inProgress = filteredTasks.filter((t) => t.status === "In Progress").length;
-    const blocked = filteredTasks.filter((t) => t.status === "Blocked").length;
-    const plannedHours = filteredTasks.reduce((s, t) => s + (t.planned_hours ?? 0), 0);
-    const actualHours = filteredTasks.reduce((s, t) => s + (t.actual_hours ?? 0), 0);
+    const total = memberTasks.length;
+    const completed = completedTasks.length;
+    const inProgress = inProgressTasks.length;
+    const blocked = blockedTasks.length;
+    const overdue = overdueTasks.length;
+    const plannedHours = memberTasks.reduce((s, t) => s + (t.planned_hours ?? 0), 0);
+    const actualHours = memberTasks.reduce((s, t) => s + (t.actual_hours ?? 0), 0);
     const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    return { total, completed, inProgress, blocked, plannedHours, actualHours, completionPct };
-  }, [filteredTasks]);
+    return { total, completed, inProgress, blocked, overdue, plannedHours, actualHours, completionPct };
+  }, [memberTasks, completedTasks, inProgressTasks, blockedTasks, overdueTasks]);
 
   const memberProjects = useMemo(() => {
     const set = new Set<string>();
@@ -1698,276 +1731,389 @@ export function MemberDetailSheet({
   if (!memberId || !member) return null;
 
   return (
-    <div className="fixed inset-0 z-40 w-full h-full min-h-screen bg-[#080914] overflow-y-auto text-[#e2e8f0] p-4 md:p-8 space-y-6 flex flex-col">
-      {/* Top Page Header Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#25273e] pb-4">
-        <div className="flex items-center gap-4">
+    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
+      <div className="w-full max-w-4xl max-h-[92vh] bg-card border border-border shadow-2xl rounded-2xl flex flex-col overflow-hidden text-foreground">
+        {/* 1. TOP HEADER */}
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-border bg-muted/40 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <Avatar className="h-10 w-10 border border-border bg-muted shrink-0">
+              {member.avatar_url ? (
+                <AvatarImage src={member.avatar_url} alt={member.display_name} />
+              ) : (
+                <AvatarFallback className="bg-primary/20 text-foreground text-sm font-bold">
+                  {member.display_name.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              )}
+            </Avatar>
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-bold text-foreground truncate">
+                  {member.display_name}
+                </h2>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary bg-primary/10 font-medium">
+                  Member Inspection
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground truncate flex items-center gap-1.5">
+                <Mail className="h-3 w-3 text-muted-foreground" />
+                <span>{member.email || "No email"}</span>
+              </p>
+            </div>
+          </div>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onClose}
+            className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* SCROLLABLE BODY */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {/* 2. COMPACT KPI METRICS */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+            <div
+              onClick={() => setStatusFilterTab("all")}
+              className={cn(
+                "p-3 rounded-xl space-y-1 cursor-pointer transition-all border",
+                statusFilterTab === "all" ? "bg-primary/10 border-primary/40 ring-1 ring-primary/40" : "bg-muted/40 border-border/80 hover:bg-muted/70"
+              )}
+            >
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Total Tasks</div>
+              <div className="text-lg font-bold text-foreground font-mono">{stats.total}</div>
+            </div>
+
+            <div
+              onClick={() => setStatusFilterTab("Completed")}
+              className={cn(
+                "p-3 rounded-xl space-y-1 cursor-pointer transition-all border",
+                statusFilterTab === "Completed" ? "bg-emerald-500/20 border-emerald-500/50 ring-1 ring-emerald-500/50" : "bg-muted/40 border-border/80 hover:bg-muted/70"
+              )}
+            >
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Completed</div>
+              <div className="text-lg font-bold text-emerald-400 font-mono">
+                {stats.completed} <span className="text-xs font-normal text-muted-foreground">({stats.completionPct}%)</span>
+              </div>
+            </div>
+
+            <div className="bg-muted/40 border border-border/80 p-3 rounded-xl space-y-1">
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Work Hours</div>
+              <div className="text-lg font-bold text-foreground font-mono">
+                {formatHoursMins(stats.actualHours)} <span className="text-xs font-normal text-muted-foreground">/ {formatHoursMins(stats.plannedHours)}</span>
+              </div>
+            </div>
+
+            <div
+              onClick={() => setStatusFilterTab("Overdue")}
+              className={cn(
+                "border p-3 rounded-xl space-y-1 cursor-pointer transition-all",
+                statusFilterTab === "Overdue"
+                  ? "bg-rose-500/20 border-rose-500/50 ring-1 ring-rose-500/50"
+                  : stats.overdue > 0
+                  ? "bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/15"
+                  : "bg-muted/40 border-border/80 hover:bg-muted/70"
+              )}
+              title="Click to filter overdue tasks"
+            >
+              <div className={cn("text-[11px] font-medium uppercase tracking-wider", stats.overdue > 0 ? "text-rose-400" : "text-muted-foreground")}>
+                Overdue
+              </div>
+              <div className={cn("text-lg font-bold font-mono", stats.overdue > 0 ? "text-rose-400" : "text-foreground")}>
+                {stats.overdue}
+              </div>
+            </div>
+
+            <div
+              onClick={() => setStatusFilterTab("Blocked")}
+              className={cn(
+                "border p-3 rounded-xl space-y-1 cursor-pointer transition-all",
+                statusFilterTab === "Blocked"
+                  ? "bg-rose-500/20 border-rose-500/50 ring-1 ring-rose-500/50"
+                  : stats.blocked > 0
+                  ? "bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/15"
+                  : "bg-muted/40 border-border/80 hover:bg-muted/70"
+              )}
+              title="Click to filter blocked tasks"
+            >
+              <div className={cn("text-[11px] font-medium uppercase tracking-wider", stats.blocked > 0 ? "text-amber-400" : "text-muted-foreground")}>
+                Blockers
+              </div>
+              <div className={cn("text-lg font-bold font-mono", stats.blocked > 0 ? "text-amber-400" : "text-foreground")}>
+                {stats.blocked}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. CURRENT ACTIVE WORK (WHAT THEY ARE DOING RIGHT NOW) */}
+          {inProgressTasks.length > 0 ? (
+            <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-blue-400">
+                  <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+                  Currently Working On Right Now ({inProgressTasks.length})
+                </div>
+                <Badge variant="outline" className="text-[10px] font-mono border-blue-500/30 text-blue-400 bg-blue-500/20">
+                  Click to inspect task
+                </Badge>
+              </div>
+
+              <div className="space-y-1.5">
+                {inProgressTasks.map((t) => (
+                  <div
+                    key={t.id}
+                    onClick={() => setInspectedTask(t)}
+                    className="p-2.5 rounded-lg bg-card/80 hover:bg-card border border-blue-500/20 hover:border-primary/50 flex items-center justify-between gap-3 text-xs cursor-pointer transition-all hover:scale-[1.01] group/activeTask"
+                    title="Click to view all task details"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-primary font-bold text-[11px]">{t.task_code}</span>
+                        <span className="font-semibold text-foreground truncate group-hover/activeTask:text-primary">{t.task_name}</span>
+                      </div>
+                      {t.remarks && (
+                        <p className="text-[11px] text-muted-foreground truncate">{t.remarks}</p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {t.project_name && (
+                        <Badge variant="secondary" className="text-[9px] bg-muted text-muted-foreground">
+                          {t.project_name}
+                        </Badge>
+                      )}
+                      <span className="font-mono text-emerald-400 text-[11px] font-bold">
+                        {t.actual_hours || 0}h / {t.planned_hours || 1}h
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="p-2.5 rounded-lg bg-muted/20 border border-border/60 text-xs text-muted-foreground flex items-center justify-between">
+              <span>No tasks currently in progress for this member</span>
+              <span className="text-[11px] text-emerald-400 font-medium">Available for assignment</span>
+            </div>
+          )}
+
+          {/* 4. UNIFIED SINGLE FILTER TOOLBAR */}
+          <div className="space-y-2 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              {/* Status Tabs Pills */}
+              <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-lg border border-border/80 overflow-x-auto text-xs">
+                {[
+                  { id: "all", label: "All", count: memberTasks.length },
+                  { id: "In Progress", label: "In Progress", count: inProgressTasks.length },
+                  { id: "To Do", label: "To Do", count: toDoTasks.length },
+                  { id: "Overdue", label: "Overdue", count: overdueTasks.length, isOverdue: true },
+                  { id: "Completed", label: "Completed", count: completedTasks.length },
+                  { id: "Blocked", label: "Blocked", count: blockedTasks.length },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setStatusFilterTab(tab.id)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1.5 whitespace-nowrap",
+                      statusFilterTab === tab.id
+                        ? tab.id === "Overdue"
+                          ? "bg-rose-600 text-white font-semibold shadow-xs"
+                          : "bg-primary text-primary-foreground font-semibold shadow-xs"
+                        : tab.id === "Overdue" && tab.count > 0
+                        ? "text-rose-400 hover:bg-rose-500/10"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    )}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={cn(
+                      "text-[10px] font-mono px-1 py-0 rounded",
+                      statusFilterTab === tab.id
+                        ? "bg-black/20 text-white"
+                        : tab.id === "Overdue" && tab.count > 0
+                        ? "bg-rose-500/20 text-rose-400 font-bold"
+                        : "bg-muted text-muted-foreground"
+                    )}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Filters Dropdowns */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Input
+                  placeholder="Search tasks..."
+                  value={taskSearch}
+                  onChange={(e) => setTaskSearch(e.target.value)}
+                  className="h-8 w-40 text-xs bg-input/40 border-border text-foreground placeholder:text-muted-foreground/60 rounded-md"
+                />
+
+                <MultiSelectFilterPopover
+                  label="Project"
+                  options={availableDrawerProjects}
+                  selectedValues={selectedProjects}
+                  onChange={setSelectedProjects}
+                />
+
+                <Select value={dateSortOrder} onValueChange={(v) => setDateSortOrder(v as "desc" | "asc")}>
+                  <SelectTrigger className="h-8 w-[130px] text-xs bg-card border-border text-foreground font-medium gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span>{dateSortOrder === "desc" ? "Newest" : "Oldest"}</span>
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
+                    <SelectItem value="desc">Newest Date</SelectItem>
+                    <SelectItem value="asc">Oldest Date</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* 5. TASKS LIST */}
+            <div className="border border-border rounded-xl overflow-hidden bg-card">
+              <div className="max-h-72 overflow-y-auto divide-y divide-border/60">
+                {filteredTasks.length > 0 ? (
+                  filteredTasks.map((t) => (
+                    <div
+                      key={t.id}
+                      onClick={() => setInspectedTask(t)}
+                      className="p-3 hover:bg-muted/60 transition-all space-y-1.5 text-xs cursor-pointer group/taskRow hover:scale-[1.005]"
+                      title="Click to view all task details"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 font-medium text-foreground min-w-0">
+                          <span className="font-mono text-primary text-[11px] font-bold shrink-0">{t.task_code}</span>
+                          <span className="truncate font-semibold group-hover/taskRow:text-primary">{t.task_name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] px-1.5 py-0 font-medium",
+                              t.status === "Completed"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                : t.status === "In Progress"
+                                ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                                : t.status === "Blocked"
+                                ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                                : "bg-muted text-muted-foreground border-border"
+                            )}
+                          >
+                            {t.status}
+                          </Badge>
+                          <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-muted text-muted-foreground font-mono">
+                            {t.priority}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {t.remarks && (
+                        <p className="text-[11px] text-muted-foreground line-clamp-2 pl-0.5">
+                          {t.remarks}
+                        </p>
+                      )}
+
+                      {t.status === "Blocked" && t.blocker_reason && (
+                        <div className="text-[11px] text-rose-400 bg-rose-500/10 p-1.5 rounded-md border border-rose-500/20 font-medium">
+                          🚨 Blocker: {t.blocker_reason}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center justify-between text-[11px] text-muted-foreground pt-0.5 gap-2 border-t border-border/40">
+                        <span className="flex items-center gap-1">
+                          <Briefcase className="h-3 w-3 text-muted-foreground" /> {t.project_name || "General"}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          {t.due_date && (
+                            <span className="font-mono text-muted-foreground flex items-center gap-1 text-[10px]">
+                              <Calendar className="h-3 w-3 text-muted-foreground" />
+                              {formatDate(t.due_date)}
+                            </span>
+                          )}
+                          <span className="font-mono text-foreground font-medium">
+                            Hours: <strong>{formatHoursMins(t.actual_hours ?? 0)}</strong> / {formatHoursMins(t.planned_hours ?? 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-8 text-center text-xs text-muted-foreground italic">
+                    No tasks found matching current filter criteria.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 6. ASSOCIATED PROJECTS & RECENT EOD FOOTER */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {/* Associated Projects */}
+            <div className="p-3 rounded-xl bg-muted/30 border border-border/80 space-y-1.5 text-xs">
+              <span className="font-bold text-foreground flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                <Briefcase className="h-3.5 w-3.5 text-primary" /> Associated Projects ({memberProjects.length})
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {memberProjects.length > 0 ? (
+                  memberProjects.map((pName, i) => (
+                    <Badge key={i} variant="secondary" className="bg-card text-foreground border border-border text-[10px] px-2 py-0.5">
+                      {pName}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-muted-foreground italic text-[11px]">No active projects assigned</span>
+                )}
+              </div>
+            </div>
+
+            {/* Recent EOD Check-ins */}
+            <div className="p-3 rounded-xl bg-muted/30 border border-border/80 space-y-1.5 text-xs">
+              <span className="font-bold text-foreground flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                <Clock className="h-3.5 w-3.5 text-primary" /> Recent EOD Activity ({memberCheckins.length})
+              </span>
+              <div className="space-y-1">
+                {memberCheckins.slice(0, 2).map((c) => (
+                  <div key={c.id} className="flex items-center justify-between text-[11px] bg-card p-1.5 rounded border border-border/60">
+                    <span className="text-foreground">{(c.checkin_date as any) instanceof Date ? (c.checkin_date as any).toISOString().slice(0, 10) : String(c.checkin_date)}</span>
+                    <span className="text-emerald-400 font-mono font-medium">{c.completed_count} tasks completed</span>
+                  </div>
+                ))}
+                {memberCheckins.length === 0 && (
+                  <span className="text-muted-foreground italic text-[11px]">No recent EOD check-ins</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* FOOTER */}
+        <div className="px-5 py-3 border-t border-border bg-muted/30 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground font-mono">
+            Showing {filteredTasks.length} of {memberTasks.length} tasks
+          </span>
           <Button
             size="sm"
             onClick={onClose}
-            className="bg-[#181a2e] border border-[#2e3150] text-white hover:bg-indigo-600 transition-all gap-2 text-xs font-semibold px-3 py-2 shadow-lg"
+            className="h-8 text-xs px-4 bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
           >
-            <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+            Close Inspection
           </Button>
-          <div className="h-6 w-[1px] bg-[#25273e]" />
-          <Avatar className="h-12 w-12 border-2 border-indigo-500">
-            {member.avatar_url ? (
-              <AvatarImage src={member.avatar_url} alt={member.display_name} />
-            ) : (
-              <AvatarFallback className="bg-[#272942] text-white text-lg font-bold">
-                {member.display_name.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            )}
-          </Avatar>
-          <div className="space-y-0.5">
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              {member.display_name}
-              <Badge variant="outline" className="text-xs bg-[#241f3d] text-indigo-300 border-indigo-500/30">
-                Team Member Full Inspection
-              </Badge>
-            </h1>
-            <p className="text-xs text-[#94a3b8] flex items-center gap-3">
-              <span className="flex items-center gap-1">
-                <Mail className="h-3.5 w-3.5 text-indigo-400" />
-                {member.email || `${member.display_name.toLowerCase().replace(/\s+/g, ".")}@example.com`}
-              </span>
-            </p>
-          </div>
         </div>
-
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onClose}
-          className="h-8 w-8 p-0 rounded-full text-slate-400 hover:text-white hover:bg-[#1a1c30]"
-        >
-          <X className="h-5 w-5" />
-        </Button>
       </div>
 
-        {/* Member Filters Bar (Range, Project, Status & Search) */}
-        <div className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-2">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-            <Filter className="h-3.5 w-3.5" /> Member View Filters
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={drawerRange} onValueChange={setDrawerRange}>
-              <SelectTrigger className="h-7 w-28 text-xs bg-[#121320] border-[#25273e] text-white">
-                <SelectValue placeholder="Timeframe" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white z-[9999]">
-                <SelectItem value="all">All Time</SelectItem>
-                <SelectItem value="1">Today</SelectItem>
-                <SelectItem value="7">7 Days</SelectItem>
-                <SelectItem value="14">14 Days</SelectItem>
-                <SelectItem value="30">30 Days</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <MultiSelectFilterPopover
-              label="Project"
-              options={availableDrawerProjects}
-              selectedValues={selectedProjects}
-              onChange={setSelectedProjects}
-            />
-
-            <MultiSelectFilterPopover
-              label="Status"
-              options={statusOptions}
-              selectedValues={selectedStatuses}
-              onChange={setSelectedStatuses}
-            />
-
-            <Select value={dateSortOrder} onValueChange={(v) => setDateSortOrder(v as "desc" | "asc")}>
-              <SelectTrigger className="h-7 w-[138px] text-xs bg-[#121320] border-[#25273e] text-white font-medium gap-1.5">
-                <CalendarDays className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                <span>{dateSortOrder === "desc" ? "Newest Date" : "Oldest Date"}</span>
-              </SelectTrigger>
-              <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white z-[9999]">
-                <SelectItem value="desc">
-                  <div className="flex items-center gap-1.5">
-                    <CalendarDays className="h-3.5 w-3.5 text-indigo-400" /> Newest Date
-                  </div>
-                </SelectItem>
-                <SelectItem value="asc">
-                  <div className="flex items-center gap-1.5">
-                    <CalendarDays className="h-3.5 w-3.5 text-indigo-400" /> Oldest Date
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Input
-              placeholder="Search tasks..."
-              value={taskSearch}
-              onChange={(e) => setTaskSearch(e.target.value)}
-              className="h-7 w-36 text-xs bg-[#121320] border-[#25273e] text-white"
-            />
-          </div>
-        </div>
-
-        {/* Member KPI Summary Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-1">
-            <div className="text-[11px] font-medium text-[#94a3b8]">Assigned Tasks</div>
-            <div className="text-xl font-bold text-white">{stats.total}</div>
-          </div>
-          <div className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-1">
-            <div className="text-[11px] font-medium text-[#94a3b8]">Completed</div>
-            <div className="text-xl font-bold text-emerald-400">{stats.completed} ({stats.completionPct}%)</div>
-          </div>
-          <div className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-1">
-            <div className="text-[11px] font-medium text-[#94a3b8]">Work Hours</div>
-            <div className="text-xl font-bold text-indigo-300">{formatHoursMins(stats.actualHours)} / {formatHoursMins(stats.plannedHours)}</div>
-          </div>
-          <div className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-1">
-            <div className="text-[11px] font-medium text-[#94a3b8]">Active Blockers</div>
-            <div className="text-xl font-bold text-rose-400">{stats.blocked}</div>
-          </div>
-        </div>
-
-        {/* Active Projects List for Member */}
-        <div className="space-y-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-[#94a3b8] flex items-center gap-1.5">
-            <Briefcase className="h-3.5 w-3.5 text-amber-400" /> Associated Projects ({memberProjects.length})
-          </h4>
-          <div className="flex flex-wrap gap-2">
-            {memberProjects.length > 0 ? (
-              memberProjects.map((pName, i) => (
-                <Badge key={i} className="bg-[#1c1e33] border border-[#313454] text-white px-3 py-1 text-xs rounded-lg flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-amber-400" />
-                  {pName}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-xs text-[#94a3b8] italic">No active projects assigned</span>
-            )}
-          </div>
-        </div>
-
-        {/* Assigned Tasks List */}
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[#94a3b8] flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Member Tasks ({filteredTasks.length})
-            </h4>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Input
-                placeholder="Search tasks..."
-                value={taskSearch}
-                onChange={(e) => setTaskSearch(e.target.value)}
-                className="h-7 w-36 text-xs bg-[#161726] border-[#25273e]"
-              />
-              <MultiSelectFilterPopover
-                label="Project"
-                options={availableDrawerProjects}
-                selectedValues={selectedProjects}
-                onChange={setSelectedProjects}
-              />
-              <MultiSelectFilterPopover
-                label="Status"
-                options={statusOptions}
-                selectedValues={selectedStatuses}
-                onChange={setSelectedStatuses}
-              />
-              <Select value={dateSortOrder} onValueChange={(v) => setDateSortOrder(v as "desc" | "asc")}>
-                <SelectTrigger className="h-7 w-[138px] text-xs bg-[#161726] border-[#25273e] text-white font-medium gap-1.5">
-                  <CalendarDays className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                  <span>{dateSortOrder === "desc" ? "Newest Date" : "Oldest Date"}</span>
-                </SelectTrigger>
-                <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white z-[9999]">
-                  <SelectItem value="desc">
-                    <div className="flex items-center gap-1.5">
-                      <CalendarDays className="h-3.5 w-3.5 text-indigo-400" /> Newest Date
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="asc">
-                    <div className="flex items-center gap-1.5">
-                      <CalendarDays className="h-3.5 w-3.5 text-indigo-400" /> Oldest Date
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="border border-[#25273e] rounded-xl overflow-hidden bg-[#161726]">
-            <div className="max-h-64 overflow-y-auto divide-y divide-[#25273e]/50">
-              {filteredTasks.length > 0 ? (
-                filteredTasks.map((t) => (
-                  <div key={t.id} className="p-3 hover:bg-[#1f2136] transition-colors space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 font-medium text-white min-w-0">
-                        <span className="font-mono text-indigo-400 text-[11px] font-bold shrink-0">{t.task_code}</span>
-                        <span className="truncate">{t.task_name}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10) && (
-                          <Badge
-                            variant="secondary"
-                            className="bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold px-1.5 py-0.5 text-[9px]"
-                          >
-                            Overdue
-                          </Badge>
-                        )}
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "shrink-0 font-semibold px-2 py-0.5 text-[10px]",
-                            t.status === "Completed"
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                              : t.status === "Blocked"
-                              ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
-                              : "bg-indigo-500/10 text-indigo-300 border border-indigo-500/30"
-                          )}
-                        >
-                          {t.status}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between text-[11px] text-[#94a3b8] pt-0.5 gap-2">
-                      <span className="flex items-center gap-1">
-                        <Briefcase className="h-3 w-3 text-slate-500" /> {t.project_name || "General"}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-indigo-300 font-mono flex items-center gap-1 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 text-[10px]">
-                          <Calendar className="h-3 w-3 text-indigo-400" />
-                          {formatDate(t.due_date || t.completed_at || t.created_at)}
-                        </span>
-                        <span className="font-mono text-slate-300">
-                          Hours: <strong>{formatHoursMins(t.actual_hours ?? 0)}</strong> / {formatHoursMins(t.planned_hours ?? 0)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-6 text-center text-xs text-[#94a3b8]">No tasks found for this member</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* EOD Check-ins History */}
-        <div className="space-y-3 pt-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-[#94a3b8] flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 text-indigo-400" /> Recent EOD Check-ins ({memberCheckins.length})
-          </h4>
-          <div className="space-y-2">
-            {memberCheckins.slice(0, 3).map((c) => (
-              <div key={c.id} className="bg-[#161726] border border-[#25273e] p-3 rounded-xl space-y-1 text-xs">
-                <div className="flex items-center justify-between font-semibold text-white">
-                  <span>Check-in Date: {c.checkin_date}</span>
-                  <span className="text-emerald-400 font-mono">{c.completed_count} tasks completed</span>
-                </div>
-                {c.note && <div className="text-[#cbd5e1] italic">"{c.note}"</div>}
-              </div>
-            ))}
-            {memberCheckins.length === 0 && (
-              <div className="text-xs text-[#94a3b8] italic">No recent EOD check-in logs submitted</div>
-            )}
-          </div>
-        </div>
+      {/* Task Full Details Modal */}
+      {inspectedTask && (
+        <TaskDetailModal
+          task={inspectedTask}
+          open={!!inspectedTask}
+          onOpenChange={(open) => {
+            if (!open) setInspectedTask(null);
+          }}
+          assignedProfile={member}
+        />
+      )}
     </div>
   );
 }
@@ -2003,13 +2149,13 @@ function ScopeSelect({
   const canSeeOrg = boot.isAdmin;
   return (
     <Select value={scopeToValue(scope)} onValueChange={(v) => onChange(valueToScope(v))}>
-      <SelectTrigger className="h-8 w-[190px] text-xs bg-[#161726] border-[#25273e] text-white">
+      <SelectTrigger className="h-8 w-[190px] text-xs bg-input/40 border-border text-foreground">
         <SelectValue placeholder="Scope" />
       </SelectTrigger>
-      <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white">
+      <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
         {canSeeOrg && (
           <SelectGroup>
-            <SelectLabel className="text-[10px] uppercase tracking-wide text-indigo-400">Scope</SelectLabel>
+            <SelectLabel className="text-[10px] uppercase tracking-wide text-primary">Scope</SelectLabel>
             <SelectItem value="org" className="text-xs">
               Organization
             </SelectItem>
@@ -2017,7 +2163,7 @@ function ScopeSelect({
         )}
         {teams.length > 0 && (
           <SelectGroup>
-            <SelectLabel className="text-[10px] uppercase tracking-wide text-indigo-400">Teams</SelectLabel>
+            <SelectLabel className="text-[10px] uppercase tracking-wide text-primary">Teams</SelectLabel>
             {boot.primaryTeamId && (
               <SelectItem value={`team:${boot.primaryTeamId}`} className="text-xs">
                 My Team · {boot.primaryTeamName ?? "—"}
@@ -2035,7 +2181,7 @@ function ScopeSelect({
         )}
         {managers.length > 0 && (
           <SelectGroup>
-            <SelectLabel className="text-[10px] uppercase tracking-wide text-indigo-400">Managers</SelectLabel>
+            <SelectLabel className="text-[10px] uppercase tracking-wide text-primary">Managers</SelectLabel>
             {(boot.isManager || boot.isAdmin) && (
               <SelectItem value={`manager:${boot.userId}`} className="text-xs">
                 My Hierarchy
@@ -2071,10 +2217,10 @@ function FilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-8 w-[130px] text-xs bg-[#161726] border-[#25273e] text-white">
+      <SelectTrigger className="h-8 w-[130px] text-xs bg-input/40 border-border text-foreground">
         <SelectValue placeholder={label} />
       </SelectTrigger>
-      <SelectContent className="bg-[#161726] border-[#25273e] text-xs text-white">
+      <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
         {options.map(([v, l]) => (
           <SelectItem key={v} value={v} className="text-xs">
             {l}
@@ -2566,6 +2712,7 @@ function StatusDetailSheet({
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  const [inspectedTask, setInspectedTask] = useState<Task | null>(null);
 
   const activeSourceTasks = useAllTime ? allTasks : tasks;
 
@@ -2638,30 +2785,30 @@ function StatusDetailSheet({
 
   const headerConfig = {
     Completed: {
-      title: "Completed Tasks — Full Page Details & Audit",
+      title: "Completed Tasks — Details & Audit",
       badge: "Completed",
-      badgeCls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+      badgeCls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
       icon: CheckCircle2,
       iconCls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
     },
     "In Progress": {
-      title: "In Progress Tasks — Active Operations & Tracking",
+      title: "In Progress Tasks — Active Tracking",
       badge: "Active Work",
-      badgeCls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/40",
+      badgeCls: "bg-blue-500/10 text-blue-400 border-blue-500/30",
       icon: Clock,
-      iconCls: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30",
+      iconCls: "text-blue-400 bg-blue-500/10 border-blue-500/30",
     },
     Blocked: {
-      title: "Blocked Tasks & Risk Analysis Page",
+      title: "Blocked Tasks & Risk Analysis",
       badge: "Risk Alert",
-      badgeCls: "bg-rose-500/20 text-rose-400 border-rose-500/40",
+      badgeCls: "bg-rose-500/10 text-rose-400 border-rose-500/30",
       icon: AlertOctagon,
       iconCls: "text-rose-400 bg-rose-500/10 border-rose-500/30",
     },
     Pending: {
-      title: "Pending Queue — Work Backlog & Assignments",
+      title: "Pending Queue — Work Backlog",
       badge: "To Do & Review",
-      badgeCls: "bg-amber-500/20 text-amber-400 border-amber-500/40",
+      badgeCls: "bg-amber-500/10 text-amber-400 border-amber-500/30",
       icon: Users,
       iconCls: "text-amber-400 bg-amber-500/10 border-amber-500/30",
     },
@@ -2670,31 +2817,32 @@ function StatusDetailSheet({
   const IconComp = headerConfig.icon;
 
   return (
-    <div className="fixed inset-0 z-50 w-full h-full bg-[#080914] overflow-y-auto text-[#e2e8f0] p-4 md:p-8 space-y-6 flex flex-col">
+    <div className="fixed inset-0 z-50 w-full h-full bg-background overflow-y-auto text-foreground p-4 md:p-6 space-y-5 flex flex-col">
       {/* Top Page Header Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#25273e] pb-4 shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-3 shrink-0">
         <div className="flex items-center gap-3">
           <Button
             size="sm"
+            variant="outline"
             onClick={onClose}
-            className="bg-[#181a2e] border border-[#2e3150] text-white hover:bg-indigo-600 transition-all gap-2 text-xs font-semibold px-3 py-2 shadow-lg"
+            className="gap-2 text-xs font-semibold px-3 py-1.5"
           >
             <ArrowLeft className="h-4 w-4" /> Back to Dashboard
           </Button>
-          <div className="h-6 w-[1px] bg-[#25273e]" />
-          <div className="flex items-center gap-2">
-            <div className={cn("h-9 w-9 rounded-lg border flex items-center justify-center shrink-0", headerConfig.iconCls)}>
-              <IconComp className="h-5 w-5" />
+          <div className="h-5 w-[1px] bg-border" />
+          <div className="flex items-center gap-2.5">
+            <div className={cn("h-8 w-8 rounded-lg border flex items-center justify-center shrink-0", headerConfig.iconCls)}>
+              <IconComp className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="text-lg md:text-xl font-black text-white flex items-center gap-2">
+              <h1 className="text-base md:text-lg font-bold text-foreground flex items-center gap-2">
                 {headerConfig.title}
-                <Badge variant="outline" className={cn("text-xs", headerConfig.badgeCls)}>
+                <Badge variant="outline" className={cn("text-[10px]", headerConfig.badgeCls)}>
                   {headerConfig.badge}
                 </Badge>
               </h1>
-              <p className="text-xs text-[#94a3b8]">
-                Complete full page inspection for all {filteredTasks.length} tasks under {status} status
+              <p className="text-xs text-muted-foreground">
+                Showing {filteredTasks.length} tasks under {status} status (Click any task for details)
               </p>
             </div>
           </div>
@@ -2704,59 +2852,61 @@ function StatusDetailSheet({
           size="sm"
           variant="ghost"
           onClick={onClose}
-          className="h-8 w-8 p-0 rounded-full text-slate-400 hover:text-white hover:bg-[#1a1c30]"
+          className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent"
         >
-          <X className="h-5 w-5" />
+          <X className="h-4 w-4" />
         </Button>
       </div>
 
       {/* KPI Cards Row (Full Page Width) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 shrink-0">
-        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Tasks</div>
-          <div className="text-2xl font-black text-foreground">{summary.total}</div>
-          <div className="text-[11px] text-muted-foreground">Filtered items count</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Total Tasks</div>
+          <div className="text-xl font-bold font-mono text-foreground">{summary.total}</div>
+          <div className="text-[10px] text-muted-foreground">Filtered items count</div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Work Hours</div>
-          <div className="text-2xl font-black text-primary">{summary.actualHours}h <span className="text-xs text-muted-foreground font-normal">/ {summary.plannedHours}h plan</span></div>
-          <div className="text-[11px] text-muted-foreground">Actual vs Planned logged</div>
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Work Hours</div>
+          <div className="text-xl font-bold font-mono text-primary">
+            {summary.actualHours}h <span className="text-xs text-muted-foreground font-normal">/ {summary.plannedHours}h</span>
+          </div>
+          <div className="text-[10px] text-muted-foreground">Actual vs Planned logged</div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Assigned Team</div>
-          <div className="text-2xl font-black text-emerald-400">{summary.uniqueMembers}</div>
-          <div className="text-[11px] text-muted-foreground">Active team members</div>
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Assigned Team</div>
+          <div className="text-xl font-bold font-mono text-emerald-400">{summary.uniqueMembers}</div>
+          <div className="text-[10px] text-muted-foreground">Active team members</div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Projects</div>
-          <div className="text-2xl font-black text-amber-400">{summary.uniqueProjects}</div>
-          <div className="text-[11px] text-muted-foreground">Active projects</div>
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Projects</div>
+          <div className="text-xl font-bold font-mono text-purple-400">{summary.uniqueProjects}</div>
+          <div className="text-[10px] text-muted-foreground">Active projects</div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 space-y-1 shadow-sm">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">High Priority</div>
-          <div className="text-2xl font-black text-rose-400">{summary.highPriorityCount}</div>
-          <div className="text-[11px] text-muted-foreground">High urgency items</div>
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">High Priority</div>
+          <div className="text-xl font-bold font-mono text-rose-400">{summary.highPriorityCount}</div>
+          <div className="text-[10px] text-muted-foreground">High urgency items</div>
         </div>
       </div>
 
       {/* Advanced Filters & View Mode Switcher Toolbar */}
-      <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm shrink-0">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
+      <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1">
           <div className="relative min-w-[240px] flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="Search by code, title, member, project or blocker..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-9 text-xs bg-background border-input text-foreground focus:border-ring"
+              className="h-8 pl-8 text-xs bg-input/40 border-border text-foreground placeholder:text-muted-foreground/60 rounded-md"
             />
           </div>
 
           <Select value={selectedProjectFilter || "all"} onValueChange={(v) => setSelectedProjectFilter(v === "all" ? null : v)}>
-            <SelectTrigger className="h-9 w-44 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+            <SelectTrigger className="h-8 w-44 text-xs bg-input/40 border-border text-foreground rounded-md">
               <SelectValue placeholder="All Projects" />
             </SelectTrigger>
-            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+            <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
               <SelectItem value="all">All Projects</SelectItem>
               {availableProjectsInStatus.map((p) => (
                 <SelectItem key={p} value={p}>{p}</SelectItem>
@@ -2765,10 +2915,10 @@ function StatusDetailSheet({
           </Select>
 
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="h-9 w-36 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+            <SelectTrigger className="h-8 w-36 text-xs bg-input/40 border-border text-foreground rounded-md">
               <SelectValue placeholder="Priority" />
             </SelectTrigger>
-            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+            <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
               <SelectItem value="all">All Priorities</SelectItem>
               <SelectItem value="High">High Priority</SelectItem>
               <SelectItem value="Medium">Medium Priority</SelectItem>
@@ -2785,7 +2935,7 @@ function StatusDetailSheet({
                 setSelectedProjectFilter(null);
                 setPriorityFilter("all");
               }}
-              className="h-9 text-xs text-indigo-400 hover:text-white"
+              className="h-8 text-xs text-primary hover:bg-primary/10"
             >
               Reset Filters
             </Button>
@@ -2794,12 +2944,12 @@ function StatusDetailSheet({
 
         {/* View Mode Toggle & Scope Mode Toggle */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 bg-[#0b0c18] border border-[#22243d] p-1 rounded-lg">
+          <div className="flex items-center gap-1 bg-muted/40 border border-border p-0.5 rounded-lg">
             <Button
               size="sm"
               variant={!useAllTime ? "default" : "ghost"}
               onClick={() => setUseAllTime(false)}
-              className={`h-7 text-xs px-2.5 ${!useAllTime ? "bg-indigo-600 text-white font-bold" : "text-[#94a3b8]"}`}
+              className={cn("h-7 text-xs px-2.5 rounded-md", !useAllTime ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground")}
             >
               Active Dashboard Scope ({tasks.length})
             </Button>
@@ -2807,28 +2957,28 @@ function StatusDetailSheet({
               size="sm"
               variant={useAllTime ? "default" : "ghost"}
               onClick={() => setUseAllTime(true)}
-              className={`h-7 text-xs px-2.5 ${useAllTime ? "bg-indigo-600 text-white font-bold" : "text-[#94a3b8]"}`}
+              className={cn("h-7 text-xs px-2.5 rounded-md", useAllTime ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground")}
             >
               All Time ({allTasks.length})
             </Button>
           </div>
 
-          <div className="flex items-center gap-1 bg-[#0b0c18] border border-[#22243d] p-1 rounded-lg">
+          <div className="flex items-center gap-1 bg-muted/40 border border-border p-0.5 rounded-lg">
             <Button
               size="sm"
               variant={viewMode === "table" ? "default" : "ghost"}
               onClick={() => setViewMode("table")}
-              className={`h-7 text-xs px-3 gap-1.5 ${viewMode === "table" ? "bg-indigo-600 text-white" : "text-[#94a3b8]"}`}
+              className={cn("h-7 text-xs px-2.5 gap-1.5 rounded-md", viewMode === "table" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground")}
             >
-              <Table className="h-3.5 w-3.5" /> Table View
+              <Table className="h-3.5 w-3.5" /> Table
             </Button>
             <Button
               size="sm"
               variant={viewMode === "grid" ? "default" : "ghost"}
               onClick={() => setViewMode("grid")}
-              className={`h-7 text-xs px-3 gap-1.5 ${viewMode === "grid" ? "bg-indigo-600 text-white" : "text-[#94a3b8]"}`}
+              className={cn("h-7 text-xs px-2.5 gap-1.5 rounded-md", viewMode === "grid" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground")}
             >
-              <Grid className="h-3.5 w-3.5" /> Grid View
+              <Grid className="h-3.5 w-3.5" /> Grid
             </Button>
           </div>
         </div>
@@ -2836,88 +2986,96 @@ function StatusDetailSheet({
 
       {/* Main Full Page Task Details Content */}
       {viewMode === "table" ? (
-        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm flex-1 mb-8">
-          <div className="max-h-[60vh] overflow-y-auto overflow-x-auto">
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs flex-1 mb-6">
+          <div className="max-h-[62vh] overflow-y-auto overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 bg-muted/40 z-10 shadow-sm">
+              <thead className="sticky top-0 bg-muted/80 backdrop-blur-xs z-10">
                 <tr className="border-b border-border text-muted-foreground uppercase tracking-wider text-[11px]">
-                  <th className="py-3.5 px-4 font-bold bg-muted/40">Code</th>
-                  <th className="py-3.5 px-4 font-bold bg-muted/40">Task Name & Details</th>
-                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Assigned Member</th>
-                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Project</th>
-                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Priority</th>
-                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Logged / Plan</th>
-                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Due Date</th>
-                  <th className="py-3.5 px-4 font-bold bg-[#0d0e1b]">Blocker / Remarks</th>
+                  <th className="py-3 px-3.5 font-semibold">Code</th>
+                  <th className="py-3 px-3.5 font-semibold">Task Name & Details</th>
+                  <th className="py-3 px-3.5 font-semibold">Assigned Member</th>
+                  <th className="py-3 px-3.5 font-semibold">Project</th>
+                  <th className="py-3 px-3.5 font-semibold">Priority</th>
+                  <th className="py-3 px-3.5 font-semibold">Logged / Plan</th>
+                  <th className="py-3 px-3.5 font-semibold">Due Date</th>
+                  <th className="py-3 px-3.5 font-semibold">Blocker / Remarks</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#22243d]/60">
+              <tbody className="divide-y divide-border">
                 {filteredTasks.map((t) => {
                   const profile = t.assigned_to ? profilesMap.get(t.assigned_to) : null;
                   return (
-                    <tr key={t.id} className="hover:bg-[#181a30] transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-black text-indigo-400">
+                    <tr
+                      key={t.id}
+                      onClick={() => setInspectedTask(t)}
+                      className="hover:bg-muted/40 transition-colors cursor-pointer group/row"
+                      title="Click to inspect task details"
+                    >
+                      <td className="py-3 px-3.5 font-mono font-bold text-primary">
                         {t.task_code}
                       </td>
-                      <td className="py-3.5 px-4 font-medium text-white max-w-xs">
-                        <div className="font-bold text-sm text-slate-100">{t.task_name}</div>
-                        {t.remarks && <div className="text-[11px] text-[#64748b] truncate mt-0.5">{t.remarks}</div>}
+                      <td className="py-3 px-3.5 font-medium text-foreground max-w-xs">
+                        <div className="font-semibold text-foreground group-hover/row:text-primary transition-colors">{t.task_name}</div>
+                        {t.remarks && <div className="text-[11px] text-muted-foreground truncate mt-0.5">{t.remarks}</div>}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-3.5">
                         {profile ? (
                           <div
-                            onClick={() => onSelectMember(profile.id)}
-                            className="flex items-center gap-2 cursor-pointer group hover:text-indigo-300 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectMember(profile.id);
+                            }}
+                            className="flex items-center gap-2 cursor-pointer group/m hover:text-primary transition-colors"
                           >
-                            <Avatar className="h-7 w-7 border border-indigo-500/40">
+                            <Avatar className="h-6 w-6 border border-border">
                               {profile.avatar_url ? (
                                 <AvatarImage src={profile.avatar_url} alt={profile.display_name} />
                               ) : (
-                                <AvatarFallback className="bg-[#252845] text-white text-xs font-bold">
+                                <AvatarFallback className="bg-primary/20 text-foreground text-[10px] font-bold">
                                   {profile.display_name.slice(0, 2).toUpperCase()}
                                 </AvatarFallback>
                               )}
                             </Avatar>
-                            <span className="font-semibold text-slate-200 group-hover:underline">
+                            <span className="font-medium text-foreground group-hover/m:underline">
                               {profile.display_name}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-[#64748b] italic">Unassigned</span>
+                          <span className="text-muted-foreground italic">Unassigned</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 font-medium text-slate-300">
+                      <td className="py-3 px-3.5 text-muted-foreground">
                         {t.project_name || "General Workspace"}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-3.5">
                         <Badge
                           variant="outline"
                           className={cn(
-                            "text-[10px] px-2 py-0.5 font-bold",
+                            "text-[10px] px-1.5 py-0 font-medium",
                             t.priority === "High"
                               ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
                               : t.priority === "Medium"
                               ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                              : "bg-slate-500/10 text-slate-400 border-slate-500/30"
+                              : "bg-muted text-muted-foreground border-border"
                           )}
                         >
                           {t.priority}
                         </Badge>
                       </td>
-                      <td className="py-3.5 px-4 font-medium">
+                      <td className="py-3 px-3.5 font-mono text-[11px]">
                         <span className="text-emerald-400 font-bold">{t.actual_hours ?? 0}h</span>
-                        <span className="text-[#64748b]"> / {t.planned_hours ?? 0}h</span>
+                        <span className="text-muted-foreground"> / {t.planned_hours ?? 0}h</span>
                       </td>
-                      <td className="py-3.5 px-4 text-[#94a3b8]">
+                      <td className="py-3 px-3.5 text-muted-foreground font-mono text-[11px]">
                         {t.due_date ? new Date(t.due_date).toLocaleDateString() : "—"}
                       </td>
-                      <td className="py-3.5 px-4 max-w-xs">
+                      <td className="py-3 px-3.5 max-w-xs">
                         {t.status === "Blocked" && t.blocker_reason ? (
-                          <span className="bg-rose-500/10 text-rose-300 border border-rose-500/30 px-2 py-1 rounded text-[11px] font-medium block">
+                          <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-[11px] font-medium block">
                             🚨 {t.blocker_reason}
                           </span>
                         ) : (
-                          <span className="text-[#64748b] truncate block">{t.remarks || "—"}</span>
+                          <span className="text-muted-foreground truncate block">{t.remarks || "—"}</span>
                         )}
                       </td>
                     </tr>
@@ -2925,7 +3083,7 @@ function StatusDetailSheet({
                 })}
                 {filteredTasks.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 text-sm italic">
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground text-xs italic">
                       No tasks found matching your search or filters under {status} status.
                     </td>
                   </tr>
@@ -2935,28 +3093,29 @@ function StatusDetailSheet({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 flex-1 mb-6">
           {filteredTasks.map((t) => {
             const profile = t.assigned_to ? profilesMap.get(t.assigned_to) : null;
             return (
               <div
                 key={t.id}
-                className="bg-[#121324] border border-[#22243d] hover:border-indigo-500/50 rounded-xl p-5 space-y-4 shadow-md transition-all flex flex-col justify-between"
+                onClick={() => setInspectedTask(t)}
+                className="bg-card border border-border hover:border-primary/50 rounded-xl p-4 space-y-3 shadow-xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group/card"
               >
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-indigo-400 font-black text-xs px-2.5 py-1 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+                    <span className="font-mono text-primary font-bold text-xs px-2 py-0.5 bg-primary/10 rounded-md border border-primary/20">
                       {t.task_code}
                     </span>
                     <Badge
                       className={cn(
-                        "text-xs px-2.5 py-0.5 font-bold",
+                        "text-[10px] px-2 py-0.5 font-semibold",
                         t.status === "Completed"
                           ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
                           : t.status === "Blocked"
                           ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
                           : t.status === "In Progress"
-                          ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/40"
+                          ? "bg-blue-500/20 text-blue-400 border-blue-500/40"
                           : "bg-amber-500/20 text-amber-400 border-amber-500/40"
                       )}
                     >
@@ -2964,55 +3123,70 @@ function StatusDetailSheet({
                     </Badge>
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-white">{t.task_name}</h3>
-                    <p className="text-xs text-[#94a3b8] mt-1">{t.project_name || "General Workspace"}</p>
+                    <h3 className="font-semibold text-sm text-foreground group-hover/card:text-primary transition-colors">{t.task_name}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t.project_name || "General Workspace"}</p>
                   </div>
                   {t.status === "Blocked" && t.blocker_reason && (
-                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 text-xs text-rose-300 space-y-1">
-                      <div className="font-bold flex items-center gap-1.5 text-rose-400">
-                        <AlertOctagon className="h-4 w-4 shrink-0" /> Blocker Reason:
+                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-2.5 text-xs text-rose-400 space-y-0.5">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertOctagon className="h-3.5 w-3.5 shrink-0" /> Blocker Reason:
                       </div>
                       <p>{t.blocker_reason}</p>
                     </div>
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-[#22243d] flex items-center justify-between text-xs">
+                <div className="pt-2.5 border-t border-border flex items-center justify-between text-xs">
                   {profile ? (
                     <div
-                      onClick={() => onSelectMember(profile.id)}
-                      className="flex items-center gap-2 cursor-pointer group hover:text-indigo-300"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectMember(profile.id);
+                      }}
+                      className="flex items-center gap-2 cursor-pointer group/m hover:text-primary"
                     >
-                      <Avatar className="h-7 w-7 border border-indigo-500/40">
+                      <Avatar className="h-6 w-6 border border-border">
                         {profile.avatar_url ? (
                           <AvatarImage src={profile.avatar_url} alt={profile.display_name} />
                         ) : (
-                          <AvatarFallback className="bg-[#252845] text-white text-xs font-bold">
+                          <AvatarFallback className="bg-primary/20 text-foreground text-[10px] font-bold">
                             {profile.display_name.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         )}
                       </Avatar>
-                      <span className="font-semibold text-slate-200 group-hover:underline">
+                      <span className="font-medium text-foreground group-hover/m:underline">
                         {profile.display_name}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-[#64748b] italic">Unassigned</span>
+                    <span className="text-muted-foreground italic">Unassigned</span>
                   )}
-                  <div className="text-right">
-                    <div className="font-bold text-white">{t.actual_hours ?? 0}h / {t.planned_hours ?? 0}h</div>
-                    <div className="text-[10px] text-[#64748b]">Logged / Plan</div>
+                  <div className="text-right font-mono text-[11px]">
+                    <div className="font-bold text-foreground">{t.actual_hours ?? 0}h / {t.planned_hours ?? 0}h</div>
+                    <div className="text-[10px] text-muted-foreground">Logged / Plan</div>
                   </div>
                 </div>
               </div>
             );
           })}
           {filteredTasks.length === 0 && (
-            <div className="col-span-full py-12 text-center text-slate-400 text-sm italic">
+            <div className="col-span-full py-12 text-center text-muted-foreground text-xs italic">
               No tasks found matching your search or filters under {status} status.
             </div>
           )}
         </div>
+      )}
+
+      {/* Task Detail Modal */}
+      {inspectedTask && (
+        <TaskDetailModal
+          task={inspectedTask}
+          open={!!inspectedTask}
+          onOpenChange={(open) => {
+            if (!open) setInspectedTask(null);
+          }}
+          assignedProfile={inspectedTask.assigned_to ? profilesMap.get(inspectedTask.assigned_to) : null}
+        />
       )}
     </div>
   );
@@ -3042,6 +3216,7 @@ function TaskAgingDetailSheet({
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  const [inspectedTask, setInspectedTask] = useState<Task | null>(null);
 
   const profilesMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
 
@@ -3120,54 +3295,55 @@ function TaskAgingDetailSheet({
       title: "Fresh Open Tasks (0–3 Days Old)",
       subtitle: "Recent incomplete tasks created within the last 3 days",
       badge: "0-3 Days",
-      badgeCls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+      badgeCls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
     },
     "4-7d": {
       title: "Aging Open Tasks (4–7 Days Old)",
       subtitle: "Active incomplete tasks in queue for 4 to 7 days",
       badge: "4-7 Days",
-      badgeCls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/40",
+      badgeCls: "bg-blue-500/10 text-blue-400 border-blue-500/30",
     },
     "8-14d": {
       title: "Delayed Tasks (8–14 Days Old)",
       subtitle: "Older incomplete tasks requiring follow up and management review",
       badge: "8-14 Days",
-      badgeCls: "bg-amber-500/20 text-amber-400 border-amber-500/40",
+      badgeCls: "bg-amber-500/10 text-amber-400 border-amber-500/30",
     },
     "15d+": {
       title: "Critical Aged Tasks (15+ Days Old)",
       subtitle: "Long outstanding incomplete tasks requiring immediate escalation",
       badge: "15+ Days (Critical)",
-      badgeCls: "bg-rose-500/20 text-rose-400 border-rose-500/40",
+      badgeCls: "bg-rose-500/10 text-rose-400 border-rose-500/30",
     },
   }[bucket];
 
   return (
-    <div className="fixed inset-0 z-50 w-full h-full bg-[#080914] overflow-y-auto text-[#e2e8f0] p-4 md:p-8 space-y-6">
+    <div className="fixed inset-0 z-50 w-full h-full bg-background overflow-y-auto text-foreground p-4 md:p-6 space-y-5 flex flex-col">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#25273e] pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-3 shrink-0">
         <div className="flex items-center gap-3">
           <Button
             size="sm"
+            variant="outline"
             onClick={onClose}
-            className="bg-[#181a2e] border border-[#2e3150] text-white hover:bg-indigo-600 transition-all gap-2 text-xs font-semibold px-3 py-2 shadow-lg"
+            className="gap-2 text-xs font-semibold px-3 py-1.5"
           >
             <ArrowLeft className="h-4 w-4" /> Back to Dashboard
           </Button>
-          <div className="h-6 w-[1px] bg-[#25273e]" />
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-lg border border-indigo-500/30 bg-indigo-500/10 flex items-center justify-center shrink-0 text-indigo-400">
-              <Hourglass className="h-5 w-5" />
+          <div className="h-5 w-[1px] bg-border" />
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg border border-primary/30 bg-primary/10 flex items-center justify-center shrink-0 text-primary">
+              <Hourglass className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="text-lg md:text-xl font-black text-white flex items-center gap-2">
+              <h1 className="text-base md:text-lg font-bold text-foreground flex items-center gap-2">
                 {bucketConfig.title}
-                <Badge variant="outline" className={cn("text-xs font-bold", bucketConfig.badgeCls)}>
+                <Badge variant="outline" className={cn("text-[10px] font-semibold", bucketConfig.badgeCls)}>
                   {bucketConfig.badge}
                 </Badge>
               </h1>
-              <p className="text-xs text-[#94a3b8]">
-                {bucketConfig.subtitle} — showing {filteredTasks.length} tasks
+              <p className="text-xs text-muted-foreground">
+                {bucketConfig.subtitle} — showing {filteredTasks.length} tasks (Click any task for details)
               </p>
             </div>
           </div>
@@ -3177,59 +3353,61 @@ function TaskAgingDetailSheet({
           size="sm"
           variant="ghost"
           onClick={onClose}
-          className="h-8 w-8 p-0 rounded-full text-slate-400 hover:text-white hover:bg-[#1a1c30]"
+          className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent"
         >
-          <X className="h-5 w-5" />
+          <X className="h-4 w-4" />
         </Button>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
-          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">Open Tasks</div>
-          <div className="text-2xl font-black text-indigo-400">{summary.total}</div>
-          <div className="text-[11px] text-[#64748b]">In bucket {bucket}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Open Tasks</div>
+          <div className="text-xl font-bold font-mono text-primary">{summary.total}</div>
+          <div className="text-[10px] text-muted-foreground">In bucket {bucket}</div>
         </div>
-        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
-          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">Logged / Plan</div>
-          <div className="text-2xl font-black text-indigo-400">{summary.actualHours}h <span className="text-xs text-[#94a3b8] font-normal">/ {summary.plannedHours}h</span></div>
-          <div className="text-[11px] text-[#64748b]">Actual vs planned hours</div>
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Logged / Plan</div>
+          <div className="text-xl font-bold font-mono text-foreground">
+            {summary.actualHours}h <span className="text-xs text-muted-foreground font-normal">/ {summary.plannedHours}h</span>
+          </div>
+          <div className="text-[10px] text-muted-foreground">Actual vs planned hours</div>
         </div>
-        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
-          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">Assigned Members</div>
-          <div className="text-2xl font-black text-emerald-400">{summary.uniqueMembers}</div>
-          <div className="text-[11px] text-[#64748b]">Team members assigned</div>
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Assigned Members</div>
+          <div className="text-xl font-bold font-mono text-emerald-400">{summary.uniqueMembers}</div>
+          <div className="text-[10px] text-muted-foreground">Team members assigned</div>
         </div>
-        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
-          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">High Priority</div>
-          <div className="text-2xl font-black text-rose-400">{summary.highPriorityCount}</div>
-          <div className="text-[11px] text-[#64748b]">High priority tasks</div>
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">High Priority</div>
+          <div className="text-xl font-bold font-mono text-rose-400">{summary.highPriorityCount}</div>
+          <div className="text-[10px] text-muted-foreground">High priority tasks</div>
         </div>
-        <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 space-y-1 shadow-md">
-          <div className="text-xs font-medium text-[#94a3b8] uppercase tracking-wider">Blocked Tasks</div>
-          <div className="text-2xl font-black text-rose-300">{summary.blockedCount}</div>
-          <div className="text-[11px] text-[#64748b]">Tasks with blocker</div>
+        <div className="bg-card border border-border rounded-xl p-3.5 space-y-1 shadow-xs">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Blocked Tasks</div>
+          <div className="text-xl font-bold font-mono text-amber-400">{summary.blockedCount}</div>
+          <div className="text-[10px] text-muted-foreground">Tasks with blocker</div>
         </div>
       </div>
 
       {/* Filters & View Toggle Bar */}
-      <div className="bg-[#121324] border border-[#22243d] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-md">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
+      <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1">
           <div className="relative min-w-[240px] flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#94a3b8]" />
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="Search by code, title, member, project or blocker..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-9 text-xs bg-[#0b0c18] border-[#22243d] text-white focus:border-indigo-500"
+              className="h-8 pl-8 text-xs bg-input/40 border-border text-foreground placeholder:text-muted-foreground/60 rounded-md"
             />
           </div>
 
           <Select value={selectedProjectFilter || "all"} onValueChange={(v) => setSelectedProjectFilter(v === "all" ? null : v)}>
-            <SelectTrigger className="h-9 w-44 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+            <SelectTrigger className="h-8 w-44 text-xs bg-input/40 border-border text-foreground rounded-md">
               <SelectValue placeholder="All Projects" />
             </SelectTrigger>
-            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+            <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
               <SelectItem value="all">All Projects</SelectItem>
               {availableProjects.map((p) => (
                 <SelectItem key={p} value={p}>{p}</SelectItem>
@@ -3238,10 +3416,10 @@ function TaskAgingDetailSheet({
           </Select>
 
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-36 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+            <SelectTrigger className="h-8 w-36 text-xs bg-input/40 border-border text-foreground rounded-md">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
-            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+            <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="In Progress">In Progress</SelectItem>
               <SelectItem value="Blocked">Blocked</SelectItem>
@@ -3250,10 +3428,10 @@ function TaskAgingDetailSheet({
           </Select>
 
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="h-9 w-36 text-xs bg-[#0b0c18] border-[#22243d] text-white">
+            <SelectTrigger className="h-8 w-36 text-xs bg-input/40 border-border text-foreground rounded-md">
               <SelectValue placeholder="Priority" />
             </SelectTrigger>
-            <SelectContent className="bg-[#141528] border-[#22243d] text-xs text-white z-[9999]">
+            <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
               <SelectItem value="all">All Priorities</SelectItem>
               <SelectItem value="High">High Priority</SelectItem>
               <SelectItem value="Medium">Medium Priority</SelectItem>
@@ -3271,140 +3449,148 @@ function TaskAgingDetailSheet({
                 setPriorityFilter("all");
                 setStatusFilter("all");
               }}
-              className="h-9 text-xs text-indigo-400 hover:text-white"
+              className="h-8 text-xs text-primary hover:bg-primary/10"
             >
               Reset Filters
             </Button>
           )}
         </div>
 
-        <div className="flex items-center gap-1 bg-[#0b0c18] border border-[#22243d] p-1 rounded-lg">
+        <div className="flex items-center gap-1 bg-muted/40 border border-border p-0.5 rounded-lg">
           <Button
             size="sm"
             variant={viewMode === "table" ? "default" : "ghost"}
             onClick={() => setViewMode("table")}
-            className={`h-7 text-xs px-3 gap-1.5 ${viewMode === "table" ? "bg-indigo-600 text-white font-bold" : "text-[#94a3b8]"}`}
+            className={cn("h-7 text-xs px-2.5 gap-1.5 rounded-md", viewMode === "table" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground")}
           >
-            <Table className="h-3.5 w-3.5" /> Table View
+            <Table className="h-3.5 w-3.5" /> Table
           </Button>
           <Button
             size="sm"
             variant={viewMode === "grid" ? "default" : "ghost"}
             onClick={() => setViewMode("grid")}
-            className={`h-7 text-xs px-3 gap-1.5 ${viewMode === "grid" ? "bg-indigo-600 text-white font-bold" : "text-[#94a3b8]"}`}
+            className={cn("h-7 text-xs px-2.5 gap-1.5 rounded-md", viewMode === "grid" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground")}
           >
-            <Grid className="h-3.5 w-3.5" /> Grid View
+            <Grid className="h-3.5 w-3.5" /> Grid
           </Button>
         </div>
       </div>
 
       {/* Main Content Area */}
       {viewMode === "table" ? (
-        <div className="bg-[#121324] border border-[#22243d] rounded-xl overflow-hidden shadow-xl mb-6">
-          <div className="overflow-x-auto">
+        <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs mb-6 flex-1">
+          <div className="max-h-[62vh] overflow-y-auto overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-[#22243d] bg-[#0d0e1b] text-[#94a3b8] uppercase tracking-wider text-[11px]">
-                  <th className="py-3.5 px-4 font-bold">Code</th>
-                  <th className="py-3.5 px-4 font-bold">Task Name & Details</th>
-                  <th className="py-3.5 px-4 font-bold">Age (Days)</th>
-                  <th className="py-3.5 px-4 font-bold">Status</th>
-                  <th className="py-3.5 px-4 font-bold">Assigned Member</th>
-                  <th className="py-3.5 px-4 font-bold">Project</th>
-                  <th className="py-3.5 px-4 font-bold">Priority</th>
-                  <th className="py-3.5 px-4 font-bold">Logged / Plan</th>
-                  <th className="py-3.5 px-4 font-bold">Due Date</th>
-                  <th className="py-3.5 px-4 font-bold">Blocker / Remarks</th>
+              <thead className="sticky top-0 bg-muted/80 backdrop-blur-xs z-10">
+                <tr className="border-b border-border text-muted-foreground uppercase tracking-wider text-[11px]">
+                  <th className="py-3 px-3.5 font-semibold">Code</th>
+                  <th className="py-3 px-3.5 font-semibold">Task Name & Details</th>
+                  <th className="py-3 px-3.5 font-semibold">Age</th>
+                  <th className="py-3 px-3.5 font-semibold">Status</th>
+                  <th className="py-3 px-3.5 font-semibold">Assigned Member</th>
+                  <th className="py-3 px-3.5 font-semibold">Project</th>
+                  <th className="py-3 px-3.5 font-semibold">Priority</th>
+                  <th className="py-3 px-3.5 font-semibold">Logged / Plan</th>
+                  <th className="py-3 px-3.5 font-semibold">Due Date</th>
+                  <th className="py-3 px-3.5 font-semibold">Blocker / Remarks</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#22243d]/60">
+              <tbody className="divide-y divide-border">
                 {filteredTasks.map((t) => {
                   const profile = t.assigned_to ? profilesMap.get(t.assigned_to) : null;
                   const ageDays = Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400000);
                   return (
-                    <tr key={t.id} className="hover:bg-[#181a30] transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-black text-indigo-400">
+                    <tr
+                      key={t.id}
+                      onClick={() => setInspectedTask(t)}
+                      className="hover:bg-muted/40 transition-colors cursor-pointer group/row"
+                      title="Click to inspect task details"
+                    >
+                      <td className="py-3 px-3.5 font-mono font-bold text-primary">
                         {t.task_code}
                       </td>
-                      <td className="py-3.5 px-4 font-medium text-white max-w-xs">
-                        <div className="font-bold text-sm text-slate-100">{t.task_name}</div>
-                        {t.remarks && <div className="text-[11px] text-[#64748b] truncate mt-0.5">{t.remarks}</div>}
+                      <td className="py-3 px-3.5 font-medium text-foreground max-w-xs">
+                        <div className="font-semibold text-foreground group-hover/row:text-primary transition-colors">{t.task_name}</div>
+                        {t.remarks && <div className="text-[11px] text-muted-foreground truncate mt-0.5">{t.remarks}</div>}
                       </td>
-                      <td className="py-3.5 px-4">
-                        <Badge variant="outline" className="bg-indigo-500/10 text-indigo-300 border-indigo-500/30 text-[11px] font-bold">
-                          {ageDays} {ageDays === 1 ? "day" : "days"} old
+                      <td className="py-3 px-3.5">
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] font-mono font-bold">
+                          {ageDays}d old
                         </Badge>
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-3.5">
                         <Badge
                           variant="outline"
                           className={cn(
-                            "text-[10px] px-2 py-0.5 font-bold",
+                            "text-[10px] px-1.5 py-0 font-medium",
                             t.status === "Blocked"
-                              ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                              ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
                               : t.status === "In Progress"
-                              ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/40"
-                              : "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                              ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                              : "bg-amber-500/10 text-amber-400 border-amber-500/30"
                           )}
                         >
                           {t.status}
                         </Badge>
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-3.5">
                         {profile ? (
                           <div
-                            onClick={() => onSelectMember(profile.id)}
-                            className="flex items-center gap-2 cursor-pointer group hover:text-indigo-300 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectMember(profile.id);
+                            }}
+                            className="flex items-center gap-2 cursor-pointer group/m hover:text-primary transition-colors"
                           >
-                            <Avatar className="h-7 w-7 border border-indigo-500/40">
+                            <Avatar className="h-6 w-6 border border-border">
                               {profile.avatar_url ? (
                                 <AvatarImage src={profile.avatar_url} alt={profile.display_name} />
                               ) : (
-                                <AvatarFallback className="bg-[#252845] text-white text-xs font-bold">
+                                <AvatarFallback className="bg-primary/20 text-foreground text-[10px] font-bold">
                                   {profile.display_name.slice(0, 2).toUpperCase()}
                                 </AvatarFallback>
                               )}
                             </Avatar>
-                            <span className="font-semibold text-slate-200 group-hover:underline">
+                            <span className="font-medium text-foreground group-hover/m:underline">
                               {profile.display_name}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-[#64748b] italic">Unassigned</span>
+                          <span className="text-muted-foreground italic">Unassigned</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 font-medium text-slate-300">
+                      <td className="py-3 px-3.5 text-muted-foreground">
                         {t.project_name || "General Workspace"}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-3.5">
                         <Badge
                           variant="outline"
                           className={cn(
-                            "text-[10px] px-2 py-0.5 font-bold",
+                            "text-[10px] px-1.5 py-0 font-medium",
                             t.priority === "High"
                               ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
                               : t.priority === "Medium"
                               ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                              : "bg-slate-500/10 text-slate-400 border-slate-500/30"
+                              : "bg-muted text-muted-foreground border-border"
                           )}
                         >
                           {t.priority}
                         </Badge>
                       </td>
-                      <td className="py-3.5 px-4 font-medium">
+                      <td className="py-3 px-3.5 font-mono text-[11px]">
                         <span className="text-emerald-400 font-bold">{t.actual_hours ?? 0}h</span>
-                        <span className="text-[#64748b]"> / {t.planned_hours ?? 0}h</span>
+                        <span className="text-muted-foreground"> / {t.planned_hours ?? 0}h</span>
                       </td>
-                      <td className="py-3.5 px-4 text-[#94a3b8]">
+                      <td className="py-3 px-3.5 text-muted-foreground font-mono text-[11px]">
                         {t.due_date ? new Date(t.due_date).toLocaleDateString() : "—"}
                       </td>
-                      <td className="py-3.5 px-4 max-w-xs">
+                      <td className="py-3 px-3.5 max-w-xs">
                         {t.status === "Blocked" && t.blocker_reason ? (
-                          <span className="bg-rose-500/10 text-rose-300 border border-rose-500/30 px-2 py-1 rounded text-[11px] font-medium block">
+                          <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-[11px] font-medium block">
                             🚨 {t.blocker_reason}
                           </span>
                         ) : (
-                          <span className="text-[#64748b] truncate block">{t.remarks || "—"}</span>
+                          <span className="text-muted-foreground truncate block">{t.remarks || "—"}</span>
                         )}
                       </td>
                     </tr>
@@ -3412,7 +3598,7 @@ function TaskAgingDetailSheet({
                 })}
                 {filteredTasks.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-slate-400 text-sm italic">
+                    <td colSpan={10} className="py-12 text-center text-muted-foreground text-xs italic">
                       No open tasks found matching your search or filters in age bucket {bucket}.
                     </td>
                   </tr>
@@ -3422,31 +3608,32 @@ function TaskAgingDetailSheet({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 mb-6 flex-1">
           {filteredTasks.map((t) => {
             const profile = t.assigned_to ? profilesMap.get(t.assigned_to) : null;
             const ageDays = Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400000);
             return (
               <div
                 key={t.id}
-                className="bg-[#121324] border border-[#22243d] hover:border-indigo-500/50 rounded-xl p-5 space-y-4 shadow-md transition-all flex flex-col justify-between"
+                onClick={() => setInspectedTask(t)}
+                className="bg-card border border-border hover:border-primary/50 rounded-xl p-4 space-y-3 shadow-xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group/card"
               >
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-indigo-400 font-black text-xs px-2.5 py-1 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+                    <span className="font-mono text-primary font-bold text-xs px-2 py-0.5 bg-primary/10 rounded-md border border-primary/20">
                       {t.task_code}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="bg-indigo-500/10 text-indigo-300 border-indigo-500/30 text-[10px] font-bold">
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] font-mono font-bold">
                         {ageDays}d old
                       </Badge>
                       <Badge
                         className={cn(
-                          "text-xs px-2.5 py-0.5 font-bold",
+                          "text-[10px] px-2 py-0.5 font-semibold",
                           t.status === "Blocked"
                             ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
                             : t.status === "In Progress"
-                            ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/40"
+                            ? "bg-blue-500/20 text-blue-400 border-blue-500/40"
                             : "bg-amber-500/20 text-amber-400 border-amber-500/40"
                         )}
                       >
@@ -3455,55 +3642,70 @@ function TaskAgingDetailSheet({
                     </div>
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-white">{t.task_name}</h3>
-                    <p className="text-xs text-[#94a3b8] mt-1">{t.project_name || "General Workspace"}</p>
+                    <h3 className="font-semibold text-sm text-foreground group-hover/card:text-primary transition-colors">{t.task_name}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t.project_name || "General Workspace"}</p>
                   </div>
                   {t.status === "Blocked" && t.blocker_reason && (
-                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 text-xs text-rose-300 space-y-1">
-                      <div className="font-bold flex items-center gap-1.5 text-rose-400">
-                        <AlertOctagon className="h-4 w-4 shrink-0" /> Blocker Reason:
+                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-2.5 text-xs text-rose-400 space-y-0.5">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertOctagon className="h-3.5 w-3.5 shrink-0" /> Blocker Reason:
                       </div>
                       <p>{t.blocker_reason}</p>
                     </div>
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-[#22243d] flex items-center justify-between text-xs">
+                <div className="pt-2.5 border-t border-border flex items-center justify-between text-xs">
                   {profile ? (
                     <div
-                      onClick={() => onSelectMember(profile.id)}
-                      className="flex items-center gap-2 cursor-pointer group hover:text-indigo-300"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectMember(profile.id);
+                      }}
+                      className="flex items-center gap-2 cursor-pointer group/m hover:text-primary"
                     >
-                      <Avatar className="h-7 w-7 border border-indigo-500/40">
+                      <Avatar className="h-6 w-6 border border-border">
                         {profile.avatar_url ? (
                           <AvatarImage src={profile.avatar_url} alt={profile.display_name} />
                         ) : (
-                          <AvatarFallback className="bg-[#252845] text-white text-xs font-bold">
+                          <AvatarFallback className="bg-primary/20 text-foreground text-[10px] font-bold">
                             {profile.display_name.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         )}
                       </Avatar>
-                      <span className="font-semibold text-slate-200 group-hover:underline">
+                      <span className="font-medium text-foreground group-hover/m:underline">
                         {profile.display_name}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-[#64748b] italic">Unassigned</span>
+                    <span className="text-muted-foreground italic">Unassigned</span>
                   )}
-                  <div className="text-right">
-                    <div className="font-bold text-white">{t.actual_hours ?? 0}h / {t.planned_hours ?? 0}h</div>
-                    <div className="text-[10px] text-[#64748b]">Logged / Plan</div>
+                  <div className="text-right font-mono text-[11px]">
+                    <div className="font-bold text-foreground">{t.actual_hours ?? 0}h / {t.planned_hours ?? 0}h</div>
+                    <div className="text-[10px] text-muted-foreground">Logged / Plan</div>
                   </div>
                 </div>
               </div>
             );
           })}
           {filteredTasks.length === 0 && (
-            <div className="col-span-full py-12 text-center text-slate-400 text-sm italic">
+            <div className="col-span-full py-12 text-center text-muted-foreground text-xs italic">
               No open tasks found matching your search or filters under age bucket {bucket}.
             </div>
           )}
         </div>
+      )}
+
+      {/* Task Detail Modal */}
+      {inspectedTask && (
+        <TaskDetailModal
+          task={inspectedTask}
+          open={!!inspectedTask}
+          onOpenChange={(open) => {
+            if (!open) setInspectedTask(null);
+          }}
+          assignedProfile={inspectedTask.assigned_to ? profilesMap.get(inspectedTask.assigned_to) : null}
+        />
       )}
     </div>
   );
