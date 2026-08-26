@@ -645,14 +645,15 @@ function CalendarPage() {
                           {l.days_count}d
                         </span>
 
-                        {/* Edit Button strictly for the leave creator */}
-                        {l.user_id === user?.id && (
+                        {/* Edit Button for leave creator or manager/admin */}
+                        {(l.user_id === user?.id || isManager) && (
                           <button
                             type="button"
                             title="Edit leave details"
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingLeave(l);
+
                               setLeaveDialogOpen(true);
                             }}
                             className="h-5 px-1.5 rounded bg-background/80 hover:bg-primary/20 hover:text-primary text-foreground text-[10px] flex items-center gap-0.5 border border-border cursor-pointer transition-colors"

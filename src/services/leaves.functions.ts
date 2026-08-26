@@ -142,11 +142,23 @@ export const createLeaveFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await ensureLeavesTableAdmin();
-    const targetUserId = data.userId || context.userId;
+    const pool = getPool();
+
+    let targetUserId = context.userId;
+    if (data.userId && data.userId !== context.userId) {
+      // Check if current user is admin/manager
+      const roleRes = await pool.query(
+        `SELECT 1 FROM public.user_roles WHERE user_id = $1 AND role IN ('admin', 'manager')`,
+        [context.userId]
+      );
+      if (roleRes.rows.length > 0) {
+        targetUserId = data.userId;
+      }
+    }
+
     const days = data.daysCount ?? 1.0;
     const initialStatus = data.status || "approved";
 
-    const pool = getPool();
     const insertRes = await pool.query<Leave>(
       `INSERT INTO public.leaves (user_id, leave_type, start_date, end_date, days_count, reason, status, handover_note, request_to)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -166,7 +178,7 @@ export const createLeaveFn = createServerFn({ method: "POST" })
 
     const created = insertRes.rows[0];
 
-    // Notify selected manager/recipient (targeted single notification)
+    // Notifications
     try {
       const userProfile = await pool.query<{ display_name: string; manager_id: string | null }>(
         `SELECT display_name, manager_id FROM public.profiles WHERE id = $1`,
@@ -175,23 +187,42 @@ export const createLeaveFn = createServerFn({ method: "POST" })
       const empName = userProfile.rows[0]?.display_name || "Team member";
       const managerId = userProfile.rows[0]?.manager_id;
 
+      const isWfh = data.leaveType === "wfh";
+      const leaveLabel = isWfh ? "WFH" : data.leaveType.toUpperCase();
+      const reasonSuffix = data.reason ? ` (${data.reason})` : "";
+
+      // If manager created leave on behalf of employee, notify the employee
+      if (targetUserId !== context.userId) {
+        const creatorProfile = await pool.query<{ display_name: string }>(
+          `SELECT display_name FROM public.profiles WHERE id = $1`,
+          [context.userId]
+        );
+        const creatorName = creatorProfile.rows[0]?.display_name || "Manager";
+        await pool.query(
+          `INSERT INTO public.notifications (user_id, type, title, body)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            targetUserId,
+            "leave_applied",
+            isWfh ? `🏠 WFH Added: by ${creatorName}` : `🌴 Leave Added: by ${creatorName}`,
+            `${creatorName} added ${leaveLabel} for you from ${data.startDate} to ${data.endDate}${reasonSuffix}.`,
+          ]
+        );
+      }
+
+      // Notify selected manager/recipient
       const recipientIds = new Set<string>();
       if (data.requestTo) {
         recipientIds.add(data.requestTo);
       } else if (managerId) {
         recipientIds.add(managerId);
       } else {
-        // Fallback to first active admin
         const adminRes = await pool.query<{ user_id: string }>(
           `SELECT user_id FROM public.user_roles WHERE role = 'admin' LIMIT 1`
         );
         if (adminRes.rows[0]?.user_id) recipientIds.add(adminRes.rows[0].user_id);
       }
       recipientIds.delete(context.userId); // Don't notify self
-
-      const isWfh = data.leaveType === "wfh";
-      const leaveLabel = isWfh ? "WFH" : data.leaveType.toUpperCase();
-      const reasonSuffix = data.reason ? ` (${data.reason})` : "";
 
       for (const mId of recipientIds) {
         await pool.query(
@@ -262,6 +293,7 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((d: {
     id: string;
+    userId?: string;
     leaveType?: string;
     startDate?: string;
     endDate?: string;
@@ -273,6 +305,7 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
     z
       .object({
         id: z.string().uuid(),
+        userId: z.string().uuid().optional(),
         leaveType: z.string().optional(),
         startDate: z.string().optional(),
         endDate: z.string().optional(),
@@ -297,12 +330,30 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
 
     const isOwner = existing.rows[0].user_id === context.userId;
     if (!isOwner) {
-      throw new Error("Only the team member who created this leave request can edit it.");
+      const roleRes = await pool.query(
+        `SELECT 1 FROM public.user_roles WHERE user_id = $1 AND role IN ('admin', 'manager')`,
+        [context.userId]
+      );
+      if (roleRes.rows.length === 0) {
+        throw new Error("Only the leave creator, manager, or admin can edit this leave request.");
+      }
     }
-
 
     const updates: string[] = [];
     const params: any[] = [data.id];
+
+    if (data.userId !== undefined) {
+      // only manager/admin can change target user_id
+      const roleRes = await pool.query(
+        `SELECT 1 FROM public.user_roles WHERE user_id = $1 AND role IN ('admin', 'manager')`,
+        [context.userId]
+      );
+      if (roleRes.rows.length > 0) {
+        params.push(data.userId);
+        updates.push(`user_id = $${params.length}`);
+      }
+    }
+
 
     if (data.leaveType !== undefined) {
       params.push(data.leaveType);
@@ -349,11 +400,12 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
 
 export const deleteLeaveFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((d: { id: string; reason?: string }) =>
+  .validator((d: { id: string; reason?: string; permanent?: boolean }) =>
     z
       .object({
         id: z.string().uuid(),
         reason: z.string().optional(),
+        permanent: z.boolean().optional(),
       })
       .parse(d)
   )
@@ -374,6 +426,19 @@ export const deleteLeaveFn = createServerFn({ method: "POST" })
 
     const leave = existing.rows[0];
 
+    if (data.permanent) {
+      // Hard delete from database
+      await pool.query(
+        `DELETE FROM public.leaves 
+         WHERE id = $1 AND (user_id = $2 OR EXISTS (
+           SELECT 1 FROM public.user_roles WHERE user_id = $2 AND role IN ('admin', 'manager')
+         ))`,
+        [data.id, context.userId]
+      );
+      return { success: true, deleted: true };
+    }
+
+    // Soft cancel
     await pool.query(
       `UPDATE public.leaves
        SET status = 'cancelled', updated_at = now()
@@ -408,7 +473,8 @@ export const deleteLeaveFn = createServerFn({ method: "POST" })
       }
     }
 
-    return { success: true };
+    return { success: true, cancelled: true };
   });
+
 
 
