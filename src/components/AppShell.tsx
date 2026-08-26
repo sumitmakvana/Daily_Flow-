@@ -68,49 +68,14 @@ const memberNav = [
 
 const managerNav = [
   { to: "/team-capacity", icon: Users, label: "Team Capacity" },
-  { to: "/leaves", icon: Palmtree, label: "Team Leaves" },
-  { to: "/my-day", icon: Sunrise, label: "My Day" },
-  { to: "/manager", icon: ShieldAlert, label: "Manager" },
-  { to: "/command", icon: Activity, label: "Command" },
-  { to: "/executive", icon: Gauge, label: "Exec" },
-  { to: "/forecast", icon: TrendingUp, label: "Forecast" },
-  { to: "/intelligence", icon: Brain, label: "Intelligence" },
-  { to: "/planning-suggestions", icon: Sparkles, label: "Suggestions" },
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/tasks", icon: ListChecks, label: "Tasks" },
-  { to: "/calendar", icon: CalendarRange, label: "Calendar" },
-  { to: "/planning", icon: CalendarRange, label: "Planning" },
-  { to: "/eod", icon: Sun, label: "EOD" },
-  { to: "/eod-tasks", icon: Sun, label: "My EOD" },
-  { to: "/heatmap", icon: Grid3x3, label: "Heatmap" },
-  { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
-  { to: "/analytics", icon: BarChart3, label: "Analytics" },
-  { to: "/exports", icon: Download, label: "Exports" },
-];
-
-const primaryManagerNav = [
+  { to: "/executive", icon: Gauge, label: "Executive" },
   { to: "/my-day", icon: Sunrise, label: "My Day" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/leaves", icon: Palmtree, label: "Team Leaves" },
   { to: "/eod", icon: Sun, label: "EOD" },
-  { to: "/team-capacity", icon: Users, label: "Team Capacity" },
-  { to: "/executive", icon: Gauge, label: "Exec" },
-  { to: "/manager", icon: ShieldAlert, label: "Manager" },
-];
-
-const secondaryManagerNav = [
-  { to: "/command", icon: Activity, label: "Command Center" },
-  { to: "/forecast", icon: TrendingUp, label: "Forecast" },
-  { to: "/intelligence", icon: Brain, label: "Intelligence" },
-  { to: "/planning-suggestions", icon: Sparkles, label: "Suggestions" },
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
-  { to: "/heatmap", icon: Grid3x3, label: "Heatmap" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
-  { to: "/analytics", icon: BarChart3, label: "Analytics" },
-  { to: "/exports", icon: Download, label: "Exports" },
-  { to: "/admin", icon: Sparkles, label: "⭐ App Feedback" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -250,6 +215,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const mobileBottomNav = isManager
     ? [
+        { to: "/team-capacity", icon: Users, label: "Capacity" },
         { to: "/executive", icon: Gauge, label: "Exec" },
         { to: "/my-day", icon: Sunrise, label: "My Day" },
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
@@ -457,17 +423,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Realtime Sync Status Badge */}
             <SyncStatusBadge />
 
-            {/* Notification Bell Button */}
+            {/* Notifications Icon Button */}
             <button
               type="button"
               onClick={() => setNotifModalOpen(true)}
-              className="relative flex items-center justify-center h-8 w-8 rounded text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
+              className="relative flex items-center justify-center h-8 w-8 rounded-md text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors"
               title="Notifications"
             >
               <Bell className="h-4 w-4" />
               {unread > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-[#0B1120] animate-pulse">
-                  {unread > 99 ? "99+" : unread}
+                <span className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 rounded-full bg-[#5C8EFA] text-[#0A0F1D] text-[9px] font-bold flex items-center justify-center px-0.5">
+                  {unread}
                 </span>
               )}
             </button>
@@ -519,6 +485,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <span>Settings</span>
                     </Link>
                   </DropdownMenuItem>
+                  {(isManager || isAdmin) && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/exports" className="cursor-pointer">
+                        <Download className="mr-2 h-4 w-4 text-primary" />
+                        <span>Exports & Reports</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => setAccessibilityOpen(true)} className="cursor-pointer">
                     <Accessibility className="mr-2 h-4 w-4" />
                     <span>Accessibility Toolbar</span>
@@ -580,132 +554,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <span className="text-slate-700 select-none px-1.5 font-light">|</span>
 
-            {/* Primary Nav Items */}
-            {!isManager
-              ? memberNav.map((n, idx) => {
-                  const active =
-                    location.pathname === n.to || location.pathname.startsWith(n.to + "/");
-                  return (
-                    <div key={n.to} className="flex items-center shrink-0">
-                      <Link
-                        to={n.to}
-                        className={cn(
-                          "px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap",
-                          active
-                            ? "text-white bg-[#141F36] font-bold border-b-2 border-[#5C8EFA]"
-                            : "text-slate-300 hover:text-white hover:bg-slate-800/50",
-                        )}
-                      >
-                        <n.icon className={cn("h-3.5 w-3.5 shrink-0", active ? "text-[#5C8EFA]" : "text-slate-400")} />
-                        <span>{n.label}</span>
-                      </Link>
-                      {idx < memberNav.length - 1 && (
-                        <span className="text-slate-700 select-none px-1 font-light">|</span>
-                      )}
-                    </div>
-                  );
-                })
-              : (
-                <>
-                  {primaryManagerNav.map((n, idx) => {
-                    const active =
-                      location.pathname === n.to || location.pathname.startsWith(n.to + "/");
-                    return (
-                      <div key={n.to} className="flex items-center shrink-0">
-                        <Link
-                          to={n.to}
-                          className={cn(
-                            "px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap",
-                            active
-                              ? "text-white bg-[#141F36] font-bold border-b-2 border-[#5C8EFA]"
-                              : "text-slate-300 hover:text-white hover:bg-slate-800/50",
-                          )}
-                        >
-                          <n.icon className={cn("h-3.5 w-3.5 shrink-0", active ? "text-[#5C8EFA]" : "text-slate-400")} />
-                          <span>{n.label}</span>
-                        </Link>
-                        <span className="text-slate-700 select-none px-1 font-light">|</span>
-                      </div>
-                    );
-                  })}
-
-                  {/* Secondary Manager Nav Dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1 text-slate-300 hover:text-white hover:bg-slate-800/50 whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        <span>More</span>
-                        <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-52 max-h-[70vh] overflow-y-auto">
-                      {secondaryManagerNav.map((n) => {
-                        const active =
-                          location.pathname === n.to || location.pathname.startsWith(n.to + "/");
-                        return (
-                          <DropdownMenuItem key={n.to} asChild>
-                            <Link
-                              to={n.to}
-                              className={cn(
-                                "w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-sm transition-colors cursor-pointer",
-                                active
-                                  ? "bg-[#141F36] text-[#5C8EFA] font-bold"
-                                  : "text-slate-300 hover:text-white",
-                              )}
-                            >
-                              <n.icon className="h-3.5 w-3.5 text-slate-400" />
-                              <span>{n.label}</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              )}
-          </div>
-
-          {/* Right Section Action Buttons */}
-          <div className="flex items-center gap-1 shrink-0 ml-2 pl-2 border-l border-[#1A2336]">
-            
-            {/* Notifications Icon */}
-            <button
-              type="button"
-              onClick={() => setNotifModalOpen(true)}
-              className="relative flex items-center justify-center h-7 w-7 rounded-md text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors"
-              title="Notifications"
-            >
-              <Bell className="h-4 w-4" />
-              {unread > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 rounded-full bg-[#5C8EFA] text-[#0A0F1D] text-[9px] font-bold flex items-center justify-center px-0.5">
-                  {unread}
-                </span>
-              )}
-            </button>
-
-            {/* Settings Link */}
-            <Link to="/settings/notifications" className="hidden sm:inline-flex">
-              <button
-                type="button"
-                className="flex items-center justify-center h-7 w-7 rounded-md text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors"
-                title="Settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            </Link>
-
-            {/* Help / Accessibility Button */}
-            <button
-              type="button"
-              onClick={() => setAccessibilityOpen(true)}
-              className="flex items-center justify-center h-7 w-7 rounded-md text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors"
-              title="Help & Accessibility Options"
-            >
-              <HelpCircle className="h-4 w-4" />
-            </button>
-
+            {/* Nav Items */}
+            {nav.map((n, idx) => {
+              const active =
+                location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+              return (
+                <div key={n.to} className="flex items-center shrink-0">
+                  <Link
+                    to={n.to}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap",
+                      active
+                        ? "text-white bg-[#141F36] font-bold border-b-2 border-[#5C8EFA]"
+                        : "text-slate-300 hover:text-white hover:bg-slate-800/50",
+                    )}
+                  >
+                    <n.icon className={cn("h-3.5 w-3.5 shrink-0", active ? "text-[#5C8EFA]" : "text-slate-400")} />
+                    <span>{n.label}</span>
+                  </Link>
+                  {idx < nav.length - 1 && (
+                    <span className="text-slate-700 select-none px-1 font-light">|</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
         </div>
@@ -893,8 +765,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Account Controls */}
             <div className="space-y-1">
               <div className="px-3 mb-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Account
+                Account & Data
               </div>
+              {(isManager || isAdmin) && (
+                <SheetClose asChild>
+                  <Link
+                    to="/exports"
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-xs font-semibold transition-colors",
+                      location.pathname === "/exports"
+                        ? "bg-[#141F36] text-[#5C8EFA] font-bold"
+                        : "text-slate-300 hover:text-white hover:bg-slate-800/50",
+                    )}
+                  >
+                    <Download className="h-4 w-4 text-[#5C8EFA]" />
+                    <span>Exports & Reports</span>
+                  </Link>
+                </SheetClose>
+              )}
               <SheetClose asChild>
                 <Link
                   to="/settings/notifications"
