@@ -45,7 +45,6 @@ import { cn } from "@/lib/utils";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { NotificationsModal } from "@/components/NotificationsModal";
 import { useBrowserNotifications } from "@/hooks/use-browser-notifications";
-import { DesktopNotificationPromptBanner } from "@/components/DesktopNotificationPromptBanner";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import {
@@ -714,7 +713,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* MAIN CONTENT AREA */}
       <main id="main-content" tabIndex={-1} className="flex-1 pb-16 md:pb-0 focus:outline-none">
-        <DesktopNotificationPromptBanner />
         <HolidayBanner />
         {/* <AnnouncementNoticeBanner /> */}
         {children}
