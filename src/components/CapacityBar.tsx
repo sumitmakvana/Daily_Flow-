@@ -20,12 +20,12 @@ export function CapacityBar({
         <div
           className={cn(
             "absolute inset-y-0 left-0 rounded-full transition-all",
-            over ? "bg-priority-high" : "bg-primary/70",
+            over ? "bg-rose-500" : "bg-blue-500/80",
           )}
           style={{ width: `${plannedPct}%` }}
         />
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-status-completed/80"
+          className="absolute inset-y-0 left-0 rounded-full bg-blue-500"
           style={{ width: `${actualPct}%` }}
         />
       </div>
