@@ -263,6 +263,10 @@ export function TaskFormDialog({
       if (isNewOpen || isDifferentTask) {
         const defaultAssignee = (initial ? initial.assigned_to : (userId ?? null)) ?? null;
         const defaultStartDate = (initial?.start_date ?? getDefaultStartDate(null, apiHolidays, holidayCalendar)) as string | null;
+        let defaultDueDate = (initial?.due_date ?? defaultStartDate ?? todayISO()) as string | null;
+        if (defaultStartDate && defaultDueDate && defaultDueDate < defaultStartDate) {
+          defaultDueDate = defaultStartDate;
+        }
         const defaultPlannedHours = initial?.planned_hours !== undefined && initial?.planned_hours !== null ? initial.planned_hours : 4;
         const hasPreset = PLANNED_HOURS_OPTIONS.some((opt) => opt.value === defaultPlannedHours);
         setIsCustomSingleHours(!hasPreset);
@@ -274,6 +278,7 @@ export function TaskFormDialog({
                 custom_fields: {},
                 assigned_to: defaultAssignee,
                 start_date: defaultStartDate,
+                due_date: defaultDueDate,
                 planned_hours: defaultPlannedHours,
                 ...initial,
               }
@@ -283,6 +288,7 @@ export function TaskFormDialog({
                 custom_fields: {},
                 assigned_to: defaultAssignee,
                 start_date: defaultStartDate,
+                due_date: defaultDueDate,
                 planned_hours: 4,
               }
         );
@@ -294,11 +300,11 @@ export function TaskFormDialog({
             ? [defaultAssignee]
             : []
         );
-        const todayStr = todayISO();
+        const gridDefaultDue = defaultStartDate ?? todayISO();
         setGridRows([
-          { id: "1", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: todayStr, planned_hours: 4, remarks: "" },
-          { id: "2", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: todayStr, planned_hours: 4, remarks: "" },
-          { id: "3", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: todayStr, planned_hours: 4, remarks: "" },
+          { id: "1", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: gridDefaultDue, planned_hours: 4, remarks: "" },
+          { id: "2", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: gridDefaultDue, planned_hours: 4, remarks: "" },
+          { id: "3", task_name: "", assigned_to: defaultAssignee, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStartDate ?? null, due_date: gridDefaultDue, planned_hours: 4, remarks: "" },
         ]);
       }
     }
@@ -495,7 +501,22 @@ export function TaskFormDialog({
   // Grid Row Handlers
   const updateGridRow = <K extends keyof GridRow>(id: string, key: K, value: GridRow[K]) => {
     setGridRows((rows) =>
-      rows.map((row) => (row.id === id ? { ...row, [key]: value } : row))
+      rows.map((row) => {
+        if (row.id !== id) return row;
+        const updated = { ...row, [key]: value };
+        if (key === "start_date" && typeof value === "string" && value) {
+          if (!row.due_date || row.due_date < value) {
+            updated.due_date = value;
+          }
+        }
+        if (key === "due_date" && typeof value === "string" && value) {
+          if (row.start_date && value < row.start_date) {
+            toast.error("Due Date cannot be earlier than Start Date!");
+            updated.due_date = row.start_date;
+          }
+        }
+        return updated;
+      })
     );
   };
 
@@ -512,7 +533,7 @@ export function TaskFormDialog({
         project_name: form.project_name ?? "",
         priority: "Medium",
         start_date: defaultStart,
-        due_date: form.due_date ?? todayISO(),
+        due_date: form.due_date ?? defaultStart ?? todayISO(),
         planned_hours: 4,
         remarks: "",
       },
@@ -528,9 +549,8 @@ export function TaskFormDialog({
   };
 
   const clearGridRows = () => {
+    const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
     if (profiles.length > 0) {
-      const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
-      const todayStr = todayISO();
       const rows = profiles.map((p) => {
         const lastInfo = profileLastTasks[p.id] || { client: "", project_name: "" };
         return {
@@ -542,16 +562,15 @@ export function TaskFormDialog({
           project_name: lastInfo.project_name,
           priority: "Medium" as const,
           start_date: defaultStart,
-          due_date: todayStr,
+          due_date: defaultStart,
           planned_hours: 4,
           remarks: "",
         };
       });
       setGridRows(rows);
     } else {
-      const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
       setGridRows([
-        { id: String(Date.now()), task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: todayISO(), planned_hours: 4, remarks: "" },
+        { id: String(Date.now()), task_name: "", assigned_to: userId ?? null, type_id: null, client: "", project_name: "", priority: "Medium", start_date: defaultStart, due_date: defaultStart, planned_hours: 4, remarks: "" },
       ]);
     }
   };
@@ -630,6 +649,10 @@ export function TaskFormDialog({
 
   // Main Save Handler
   const handleSave = async () => {
+    if (creationMode !== "grid" && form.start_date && form.due_date && form.due_date < form.start_date) {
+      toast.error("Due Date cannot be earlier than Start Date. Please adjust the dates.");
+      return;
+    }
     if (form.project_name?.trim()) {
       await ensureMasterProject(form.project_name, form.client);
     }
@@ -684,6 +707,11 @@ export function TaskFormDialog({
       const validRows = gridRows.filter((r) => r.task_name.trim().length > 0);
       if (validRows.length === 0) {
         toast.error("Please enter at least one task name in the grid.");
+        return;
+      }
+      const invalidRow = validRows.find((r) => r.start_date && r.due_date && r.due_date < r.start_date);
+      if (invalidRow) {
+        toast.error(`Due Date cannot be earlier than Start Date on "${invalidRow.task_name || "row"}"`);
         return;
       }
       setSaving(true);
@@ -1168,6 +1196,7 @@ export function TaskFormDialog({
                         <td className="py-1.5 px-1.5 border-r border-border/40">
                           <Input
                             type="date"
+                            min={row.start_date ?? undefined}
                             className="h-7 text-[11px] cursor-pointer px-1 bg-background border-border"
                             value={row.due_date ?? ""}
                             onChange={(e) =>
@@ -1630,9 +1659,11 @@ export function TaskFormDialog({
                           setForm((prev) => {
                             const newCustom = { ...(prev.custom_fields || {}) };
                             delete newCustom.start_date;
+                            const shouldUpdateDueDate = val && (!prev.due_date || prev.due_date < val);
                             return {
                               ...prev,
                               start_date: val,
+                              due_date: shouldUpdateDueDate ? val : prev.due_date,
                               custom_fields: newCustom,
                             };
                           });
@@ -1643,9 +1674,18 @@ export function TaskFormDialog({
                       <Label className="text-xs text-muted-foreground">Due Date</Label>
                       <Input
                         type="date"
+                        min={form.start_date ?? undefined}
                         className="h-9 text-xs bg-card border-border cursor-pointer"
                         value={form.due_date ?? ""}
-                        onChange={(e) => setForm({ ...form, due_date: e.target.value || null })}
+                        onChange={(e) => {
+                          const val = e.target.value || null;
+                          if (val && form.start_date && val < form.start_date) {
+                            toast.error("Due Date cannot be earlier than Start Date!");
+                            setForm((prev) => ({ ...prev, due_date: prev.start_date }));
+                            return;
+                          }
+                          setForm((prev) => ({ ...prev, due_date: val }));
+                        }}
                       />
                       {form.due_date && (() => {
                         const holiday = getLocalHoliday(form.due_date, apiHolidays);
