@@ -61,6 +61,9 @@ export const tasksService = {
     if (cleanedPayload.start_date === undefined) {
       cleanedPayload.start_date = getDefaultStartDate();
     }
+    if (cleanedPayload.start_date && cleanedPayload.due_date && cleanedPayload.due_date < cleanedPayload.start_date) {
+      cleanedPayload.due_date = cleanedPayload.start_date;
+    }
     if ("project_id" in cleanedPayload) {
       cleanedPayload.project_id = cleanProjectId(cleanedPayload.project_id) as any;
     }
@@ -81,6 +84,11 @@ export const tasksService = {
       (globalThis as any).__test_user_id = _userId;
     }
     const cleanedPatch = { ...patch };
+    const effectiveStart = cleanedPatch.start_date !== undefined ? cleanedPatch.start_date : task.start_date;
+    const effectiveDue = cleanedPatch.due_date !== undefined ? cleanedPatch.due_date : task.due_date;
+    if (effectiveStart && effectiveDue && effectiveDue < effectiveStart) {
+      cleanedPatch.due_date = effectiveStart;
+    }
     if ("project_id" in cleanedPatch) {
       cleanedPatch.project_id = cleanProjectId(cleanedPatch.project_id) as any;
     }

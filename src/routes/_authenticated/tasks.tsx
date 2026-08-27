@@ -80,7 +80,7 @@ function groupTasksByWhatsAppDay(taskList: Task[], sortBy: string = "newest") {
   const map = new Map<string, { label: string; dateObj: Date | null; tasks: Task[] }>();
 
   for (const t of taskList) {
-    const dateStr = t.due_date ? t.due_date : t.created_at ? t.created_at.slice(0, 10) : null;
+    const dateStr = t.due_date ? t.due_date : t.start_date ? t.start_date : t.created_at ? t.created_at.slice(0, 10) : null;
     const info = getTaskDayLabel(dateStr);
 
     if (!map.has(info.key)) {
@@ -377,10 +377,11 @@ function TasksPage() {
       }
       
       // Date filters
-      if (dateFilter === "today" && t.due_date !== todayStr) return false;
-      if (dateFilter === "tomorrow" && t.due_date !== tomorrowStr) return false;
+      if (dateFilter === "today" && t.due_date !== todayStr && t.start_date !== todayStr) return false;
+      if (dateFilter === "tomorrow" && t.due_date !== tomorrowStr && t.start_date !== tomorrowStr) return false;
       if (dateFilter === "this_week") {
-        if (!t.due_date || t.due_date < startOfWeekStr || t.due_date > endOfWeekStr) return false;
+        const dt = t.due_date || t.start_date;
+        if (!dt || dt < startOfWeekStr || dt > endOfWeekStr) return false;
       }
       if (dateFilter === "overdue") {
         if (!t.due_date || t.due_date >= todayStr || t.status === "Completed") return false;
