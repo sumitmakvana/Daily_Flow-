@@ -528,7 +528,7 @@ function TeamCapacityPage() {
         </div>
       </div>
 
-      {/* Top Metric KPI Cards Bar */}
+      {/* Top Metric KPI Cards Bar (Clean, Minimal, Neutral) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Card 1: Total Tasks */}
         <div
@@ -537,19 +537,17 @@ function TeamCapacityPage() {
             setCurrentPage(1);
           }}
           className={cn(
-            "bg-card border rounded-xl p-3.5 shadow-xs space-y-1 cursor-pointer transition-all hover:border-primary/40",
-            statusFilter === "all" ? "border-primary/40 ring-1 ring-primary/30" : "border-border"
+            "bg-card border rounded-xl p-4 space-y-2 cursor-pointer transition-all hover:border-border",
+            statusFilter === "all" ? "border-primary/50 ring-1 ring-primary/30" : "border-border/70"
           )}
           title="Click to reset filters and view all tasks"
         >
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
             <span>Total Tasks</span>
-            <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
-              <ListTodo className="h-3.5 w-3.5" />
-            </div>
           </div>
-          <div className="text-xl font-bold text-foreground font-mono">{kpis.totalTasksCount}</div>
-          <div className="text-[10px] text-muted-foreground">Across all projects</div>
+          <div className="text-2xl md:text-3xl font-bold text-foreground font-mono tracking-tight">{kpis.totalTasksCount}</div>
+          <div className="text-[11px] text-muted-foreground">Across all projects</div>
         </div>
 
         {/* Card 2: Completed Today */}
@@ -559,19 +557,17 @@ function TeamCapacityPage() {
             setCurrentPage(1);
           }}
           className={cn(
-            "bg-card border rounded-xl p-3.5 shadow-xs space-y-1 cursor-pointer transition-all hover:border-emerald-500/40",
-            statusFilter === "completed" ? "border-emerald-500/50 ring-1 ring-emerald-500/40 bg-emerald-500/5" : "border-border"
+            "bg-card border rounded-xl p-4 space-y-2 cursor-pointer transition-all hover:border-border",
+            statusFilter === "completed" ? "border-primary/50 ring-1 ring-primary/30" : "border-border/70"
           )}
           title="Click to filter members who completed tasks today"
         >
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
             <span>Completed Today</span>
-            <div className="p-1.5 bg-emerald-500/10 rounded-lg text-emerald-400">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            </div>
           </div>
-          <div className="text-xl font-bold text-emerald-400 font-mono">{kpis.completedTodayCount}</div>
-          <div className="text-[10px] text-emerald-400/90 font-medium font-mono">
+          <div className="text-2xl md:text-3xl font-bold text-foreground font-mono tracking-tight">{kpis.completedTodayCount}</div>
+          <div className="text-[11px] text-muted-foreground font-mono">
             {kpis.completedTodayHoursTotal} hrs logged
           </div>
         </div>
@@ -583,19 +579,17 @@ function TeamCapacityPage() {
             setCurrentPage(1);
           }}
           className={cn(
-            "bg-card border rounded-xl p-3.5 shadow-xs space-y-1 cursor-pointer transition-all hover:border-blue-500/40",
-            statusFilter === "in_progress" ? "border-blue-500/50 ring-1 ring-blue-500/40 bg-blue-500/5" : "border-border"
+            "bg-card border rounded-xl p-4 space-y-2 cursor-pointer transition-all hover:border-border",
+            statusFilter === "in_progress" ? "border-primary/50 ring-1 ring-primary/30" : "border-border/70"
           )}
           title="Click to filter members with tasks in progress"
         >
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
             <span>In Progress</span>
-            <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-400">
-              <Clock className="h-3.5 w-3.5" />
-            </div>
           </div>
-          <div className="text-xl font-bold text-blue-400 font-mono">{kpis.inProgressCount}</div>
-          <div className="text-[10px] text-blue-400/90 font-medium">{kpis.inProgressPct}% of total</div>
+          <div className="text-2xl md:text-3xl font-bold text-foreground font-mono tracking-tight">{kpis.inProgressCount}</div>
+          <div className="text-[11px] text-muted-foreground">{kpis.inProgressPct}% of total</div>
         </div>
 
         {/* Card 4: To Do */}
@@ -605,19 +599,17 @@ function TeamCapacityPage() {
             setCurrentPage(1);
           }}
           className={cn(
-            "bg-card border rounded-xl p-3.5 shadow-xs space-y-1 cursor-pointer transition-all hover:border-amber-500/40",
-            statusFilter === "to_do" ? "border-amber-500/50 ring-1 ring-amber-500/40 bg-amber-500/5" : "border-border"
+            "bg-card border rounded-xl p-4 space-y-2 cursor-pointer transition-all hover:border-border",
+            statusFilter === "to_do" ? "border-primary/50 ring-1 ring-primary/30" : "border-border/70"
           )}
           title="Click to filter members with queued To Do tasks"
         >
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
             <span>To Do</span>
-            <div className="p-1.5 bg-amber-500/10 rounded-lg text-amber-400">
-              <TrendingUp className="h-3.5 w-3.5" />
-            </div>
           </div>
-          <div className="text-xl font-bold text-amber-400 font-mono">{kpis.toDoCount}</div>
-          <div className="text-[10px] text-amber-400/90 font-medium">{kpis.toDoPct}% queued</div>
+          <div className="text-2xl md:text-3xl font-bold text-foreground font-mono tracking-tight">{kpis.toDoCount}</div>
+          <div className="text-[11px] text-muted-foreground">{kpis.toDoPct}% queued</div>
         </div>
 
         {/* Card 5: Overdue */}
@@ -627,19 +619,17 @@ function TeamCapacityPage() {
             setCurrentPage(1);
           }}
           className={cn(
-            "bg-card border rounded-xl p-3.5 shadow-xs space-y-1 cursor-pointer transition-all hover:border-rose-500/40",
-            statusFilter === "overdue" ? "border-rose-500/50 ring-1 ring-rose-500/40 bg-rose-500/10" : "border-border"
+            "bg-card border rounded-xl p-4 space-y-2 cursor-pointer transition-all hover:border-border",
+            statusFilter === "overdue" ? "border-primary/50 ring-1 ring-primary/30" : "border-border/70"
           )}
           title="Click to filter members with overdue tasks"
         >
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <AlertOctagon className="h-3.5 w-3.5 text-muted-foreground" />
             <span>Overdue</span>
-            <div className="p-1.5 bg-rose-500/10 rounded-lg text-rose-400">
-              <AlertOctagon className="h-3.5 w-3.5" />
-            </div>
           </div>
-          <div className="text-xl font-bold text-rose-400 font-mono">{kpis.overdueCount}</div>
-          <div className="text-[10px] text-rose-400/90 font-medium">{kpis.overduePct}% past due</div>
+          <div className={cn("text-2xl md:text-3xl font-bold font-mono tracking-tight", kpis.overdueCount > 0 ? "text-rose-400" : "text-foreground")}>{kpis.overdueCount}</div>
+          <div className="text-[11px] text-muted-foreground">{kpis.overduePct}% past due</div>
         </div>
 
         {/* Card 6: Total Members */}
@@ -652,22 +642,20 @@ function TeamCapacityPage() {
             setAvailabilityFilter("all");
             setCurrentPage(1);
           }}
-          className="bg-card border border-border rounded-xl p-3.5 shadow-xs space-y-1 cursor-pointer transition-all hover:border-purple-500/40"
+          className="bg-card border border-border/70 rounded-xl p-4 space-y-2 cursor-pointer transition-all hover:border-border"
           title="Click to view all active members"
         >
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-muted-foreground" />
             <span>Total Members</span>
-            <div className="p-1.5 bg-purple-500/10 rounded-lg text-purple-400">
-              <Users className="h-3.5 w-3.5" />
-            </div>
           </div>
-          <div className="text-xl font-bold text-foreground font-mono">{kpis.totalMembersCount}</div>
-          <div className="text-[10px] text-muted-foreground">Active Team Members</div>
+          <div className="text-2xl md:text-3xl font-bold text-foreground font-mono tracking-tight">{kpis.totalMembersCount}</div>
+          <div className="text-[11px] text-muted-foreground">Active Team Members</div>
         </div>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+      <div className="bg-card border border-border/70 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
         {/* Search input */}
         <div className="relative min-w-[240px] flex-1">
           <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -736,10 +724,10 @@ function TeamCapacityPage() {
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="completed">🟢 Completed Today</SelectItem>
-              <SelectItem value="in_progress">🔵 In Progress</SelectItem>
-              <SelectItem value="to_do">🟡 To Do</SelectItem>
-              <SelectItem value="overdue">🔴 Overdue</SelectItem>
+              <SelectItem value="completed">Completed Today</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="to_do">To Do</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
             </SelectContent>
           </Select>
 
@@ -755,10 +743,10 @@ function TeamCapacityPage() {
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
               <SelectItem value="all">All Availability</SelectItem>
-              <SelectItem value="free">🟢 Free Today</SelectItem>
-              <SelectItem value="available">🟢 Available Today</SelectItem>
-              <SelectItem value="partially">🟡 Partially Available</SelectItem>
-              <SelectItem value="overloaded">🔴 Overloaded</SelectItem>
+              <SelectItem value="free">Free Today</SelectItem>
+              <SelectItem value="available">Available</SelectItem>
+              <SelectItem value="partially">Partially Available</SelectItem>
+              <SelectItem value="overloaded">Overloaded</SelectItem>
             </SelectContent>
           </Select>
 
@@ -799,21 +787,21 @@ function TeamCapacityPage() {
                 <div className="flex items-start gap-2">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 mt-1 shrink-0" />
                   <div>
-                    <span className="font-bold text-emerald-400">🟢 Free / Available (&lt;5.5h):</span>
+                    <span className="font-bold text-foreground">Free / Available (&lt;5.5h):</span>
                     <span className="text-muted-foreground block text-[10px]">Low workload with clear capacity.</span>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="h-2 w-2 rounded-full bg-amber-500 mt-1 shrink-0" />
                   <div>
-                    <span className="font-bold text-amber-400">🟡 Partially Available (5.5h – 8h):</span>
+                    <span className="font-bold text-foreground">Partially Available (5.5h – 8h):</span>
                     <span className="text-muted-foreground block text-[10px]">Near max daily hours.</span>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="h-2 w-2 rounded-full bg-rose-500 mt-1 shrink-0" />
                   <div>
-                    <span className="font-bold text-rose-400">🔴 Overloaded (&gt;8h / Blocked):</span>
+                    <span className="font-bold text-foreground">Overloaded (&gt;8h / Blocked):</span>
                     <span className="text-muted-foreground block text-[10px]">Overcapacity or active blocker.</span>
                   </div>
                 </div>
@@ -830,11 +818,11 @@ function TeamCapacityPage() {
               className={cn(
                 "h-6 text-xs px-2.5 gap-1.5 font-medium rounded-xs",
                 viewMode === "table"
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-primary-foreground font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Table className="h-3 w-3" /> Table View
+              <Table className="h-3 w-3" /> Table
             </Button>
             <Button
               size="sm"
@@ -843,11 +831,11 @@ function TeamCapacityPage() {
               className={cn(
                 "h-6 text-xs px-2.5 gap-1.5 font-medium rounded-xs",
                 viewMode === "card"
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-primary-foreground font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Grid className="h-3 w-3" /> Card View
+              <Grid className="h-3 w-3" /> Cards
             </Button>
           </div>
         </div>
@@ -855,21 +843,20 @@ function TeamCapacityPage() {
 
       {/* MAIN TABLE VIEW */}
       {viewMode === "table" ? (
-        <div className="bg-card border border-border rounded-xl overflow-x-auto shadow-xs">
-          <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+        <div className="bg-card border border-border/70 rounded-xl overflow-x-auto shadow-xs">
+          <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
             <thead>
-              <tr className="border-b border-border bg-muted/50 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
-                <th className="py-3 px-3.5 w-[20%] min-w-[170px]">Member</th>
-                <th className="py-3 px-3.5 w-[22%] min-w-[190px]">Current Work (Active Task)</th>
-                <th className="py-3 px-3.5 w-[18%] min-w-[160px]">Upcoming Work</th>
-                <th className="py-3 px-3.5 w-[14%] min-w-[140px]">Availability & Capacity</th>
-                <th className="py-3 px-3.5 w-[12%] min-w-[120px]">Completed Today</th>
-                <th className="py-3 px-3.5 w-[14%] min-w-[140px]">Completed History</th>
-                <th className="py-3 px-3.5 w-[10%] min-w-[100px]">Projects</th>
-                <th className="py-3 px-2 text-center w-[4%] min-w-[70px]">Actions</th>
+              <tr className="border-b border-border/70 text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">
+                <th className="py-3 px-3.5 w-[22%] min-w-[180px] font-semibold">Member</th>
+                <th className="py-3 px-3.5 w-[24%] min-w-[200px] font-semibold">Current Work</th>
+                <th className="py-3 px-3.5 w-[16%] min-w-[150px] font-semibold">Upcoming Work</th>
+                <th className="py-3 px-3.5 w-[16%] min-w-[160px] font-semibold">Capacity</th>
+                <th className="py-3 px-3.5 w-[10%] min-w-[110px] font-semibold">Done Today</th>
+                <th className="py-3 px-3.5 w-[12%] min-w-[120px] font-semibold">History</th>
+                <th className="py-3 px-3.5 w-[10%] min-w-[100px] font-semibold">Projects</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/60">
+            <tbody className="divide-y divide-border/40 font-medium">
               {paginatedMembers.length > 0 ? (
                 paginatedMembers.map((item) => {
                   const p = item.profile;
@@ -880,38 +867,35 @@ function TeamCapacityPage() {
                       {/* Main Member Table Row */}
                       <tr
                         className={cn(
-                          "hover:bg-accent/40 transition-colors text-foreground group",
-                          isExpanded && "bg-muted/30"
+                          "hover:bg-accent/30 transition-colors text-foreground group",
+                          isExpanded && "bg-muted/20"
                         )}
                       >
-                        {/* 1. Member Info (Click to inspect) */}
+                        {/* 1. Member Info */}
                         <td
                           className="py-3 px-3.5 cursor-pointer"
                           onClick={() => setInspectMemberId(p.id)}
                         >
                           <div className="flex items-center gap-2.5">
-                            <div className="relative shrink-0">
-                              <Avatar className="h-8 w-8 border border-border bg-muted">
-                                {p.avatar_url ? (
-                                  <AvatarImage src={p.avatar_url} alt={p.display_name} />
-                                ) : (
-                                  <AvatarFallback className="text-foreground text-xs font-semibold bg-primary/20">
-                                    {p.display_name.slice(0, 2).toUpperCase()}
-                                  </AvatarFallback>
-                                )}
-                              </Avatar>
-                              <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-card" />
-                            </div>
+                            <Avatar className="h-8 w-8 border border-border shrink-0">
+                              {p.avatar_url ? (
+                                <AvatarImage src={p.avatar_url} alt={p.display_name} />
+                              ) : (
+                                <AvatarFallback className="bg-muted text-foreground text-[10px] font-bold">
+                                  {p.display_name.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              )}
+                            </Avatar>
                             <div className="min-w-0 space-y-0.5">
-                              <div className="font-semibold text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
-                                <span>{p.display_name}</span>
+                              <div className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                                {p.display_name}
                               </div>
-                              <div className="text-[11px] text-muted-foreground truncate">{item.title}</div>
+                              <div className="text-[10px] text-muted-foreground truncate">{item.title}</div>
                             </div>
                           </div>
                         </td>
 
-                        {/* 2. Current Work (Click task to open Detailed Modal) */}
+                        {/* 2. Current Work */}
                         <td className="py-3 px-3.5">
                           {item.activeTasks.length > 0 ? (
                             <div className="space-y-1.5">
@@ -922,22 +906,18 @@ function TeamCapacityPage() {
                                     e.stopPropagation();
                                     setInspectTaskItem({ task: t, profile: p });
                                   }}
-                                  className="flex items-center justify-between gap-2 p-1.5 rounded-md bg-muted/40 hover:bg-muted/80 border border-border/80 cursor-pointer transition-all hover:scale-[1.01] group/task"
-                                  title="Click to view all task details & notes"
+                                  className="flex items-center justify-between gap-2 p-1.5 rounded-md bg-muted/40 hover:bg-muted/80 border border-border/80 cursor-pointer transition-all group/task"
+                                  title="Click to view all task details"
                                 >
                                   <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0 animate-pulse" />
+                                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
                                     <span className="font-medium text-foreground truncate max-w-[140px] group-hover/task:text-primary">
                                       {t.task_name}
                                     </span>
                                   </div>
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[9px] px-1.5 py-0 shrink-0 bg-blue-500/10 text-blue-400 border-blue-500/30 flex items-center gap-0.5 font-mono"
-                                  >
-                                    <Play className="h-2 w-2 fill-current" />
-                                    In Progress
-                                  </Badge>
+                                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                                    {t.planned_hours ? `${t.planned_hours}h` : "Active"}
+                                  </span>
                                 </div>
                               ))}
                               {item.activeTasks.length > 2 && (
@@ -947,18 +927,18 @@ function TeamCapacityPage() {
                                     e.stopPropagation();
                                     setInspectTaskItem({ task: item.activeTasks[0], profile: p });
                                   }}
-                                  className="text-[10px] text-primary hover:underline font-medium block"
+                                  className="text-[10px] text-muted-foreground hover:text-foreground font-medium block"
                                 >
-                                  +{item.activeTasks.length - 2} more active tasks
+                                  +{item.activeTasks.length - 2} more
                                 </button>
                               )}
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground/60 italic">— No Active Tasks</span>
+                            <span className="text-xs text-muted-foreground/60">—</span>
                           )}
                         </td>
 
-                        {/* 3. Upcoming Work (Click to open Upcoming Tasks Mini Modal) */}
+                        {/* 3. Upcoming Work */}
                         <td className="py-3 px-3.5">
                           {item.upcomingTasks.length > 0 ? (
                             <div
@@ -967,114 +947,47 @@ function TeamCapacityPage() {
                                 setUpcomingTasksModalItem({ member: p, tasks: item.upcomingTasks });
                               }}
                               className="p-1.5 rounded-md bg-muted/30 hover:bg-muted/70 border border-border/80 cursor-pointer transition-all space-y-1 group/upc"
-                              title="Click to inspect all upcoming queued tasks for this member"
+                              title="Click to inspect queued tasks"
                             >
-                              <div className="flex items-center justify-between text-[11px] text-muted-foreground pb-0.5">
-                                <span className="text-[10px] font-medium text-foreground">Queued Tasks</span>
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-500/30 text-amber-400 bg-amber-500/10 font-mono">
-                                  {item.upcomingTasks.length} tasks
-                                </Badge>
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-[10px] font-medium text-foreground">{item.upcomingTasks.length} queued</span>
+                                <span className="text-[10px] font-mono text-muted-foreground">
+                                  {item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0)}h total
+                                </span>
                               </div>
-                              <div className="space-y-0.5">
-                                {item.upcomingTasks.slice(0, 2).map((t) => (
-                                  <div key={t.id} className="flex items-center justify-between gap-1 text-[11px]">
-                                    <span className="truncate max-w-[130px] text-muted-foreground group-hover/upc:text-foreground">
-                                      • {t.task_name}
-                                    </span>
-                                    <span className="text-[9px] font-mono text-amber-400 shrink-0">
-                                      {t.planned_hours || 1}h
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                              {item.upcomingTasks.length > 2 && (
-                                <div className="text-[9px] font-medium text-primary text-right pr-0.5">
-                                  +{item.upcomingTasks.length - 2} more...
-                                </div>
-                              )}
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground/60 italic">— No Queued Tasks</span>
+                            <span className="text-xs text-muted-foreground/60">—</span>
                           )}
                         </td>
 
                         {/* 4. Availability & Capacity */}
                         <td className="py-3 px-3.5">
-                          <div className="flex items-center gap-2.5">
-                            {/* Ring */}
-                            <div className="relative h-9 w-9 flex items-center justify-center shrink-0">
-                              <svg className="h-full w-full transform -rotate-90" viewBox="0 0 36 36">
-                                <path
-                                  className="text-muted-foreground/20"
-                                  strokeWidth="3.5"
-                                  stroke="currentColor"
-                                  fill="none"
-                                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                />
-                                <path
-                                  className={
-                                    item.capacityPct > 100
-                                      ? "text-rose-500"
-                                      : item.capacityPct >= 70
-                                      ? "text-amber-500"
-                                      : "text-emerald-500"
-                                  }
-                                  strokeDasharray={`${Math.min(100, item.capacityPct)}, 100`}
-                                  strokeWidth="3.5"
-                                  strokeLinecap="round"
-                                  stroke="currentColor"
-                                  fill="none"
-                                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                />
-                              </svg>
-                              <span className="absolute text-[9px] font-bold text-foreground font-mono">
-                                {item.capacityPct}%
-                              </span>
+                          <div className="space-y-1.5 max-w-[180px]">
+                            <div className="flex items-center justify-between text-[11px] font-mono">
+                              <span className="text-foreground">{formatHoursMins(item.plannedHours)} / 8h</span>
+                              <span className="text-[10px] text-muted-foreground">{item.capacityPct}%</span>
                             </div>
-
-                            <div className="space-y-0.5 shrink-0">
-                              <Badge
-                                variant="outline"
+                            <div className="h-2 w-full bg-muted/60 rounded-full overflow-hidden flex">
+                              <div
                                 className={cn(
-                                  "text-[9px] px-1.5 py-0 font-medium flex items-center gap-1 w-fit border-0",
-                                  item.capacityStatus === "free" || item.capacityStatus === "available"
-                                    ? "bg-emerald-500/10 text-emerald-400"
-                                    : item.capacityStatus === "partially"
-                                    ? "bg-amber-500/10 text-amber-400"
-                                    : "bg-rose-500/10 text-rose-400"
+                                  "h-full rounded-full transition-all",
+                                  item.capacityStatus === "overloaded" ? "bg-rose-500" : "bg-blue-500"
                                 )}
-                              >
-                                {item.capacityStatus === "free"
-                                  ? "Free Today"
-                                  : item.capacityStatus === "available"
-                                  ? "Available"
-                                  : item.capacityStatus === "partially"
-                                  ? "Partially Free"
-                                  : "Overloaded"}
-                              </Badge>
-                              <div className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                                {formatHoursMins(item.plannedHours)} / 8 hrs
-                              </div>
+                                style={{ width: `${Math.min(100, item.capacityPct)}%` }}
+                              />
                             </div>
                           </div>
                         </td>
 
                         {/* 5. Completed Today */}
                         <td className="py-3 px-3.5">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2
-                              className={cn(
-                                "h-4 w-4 shrink-0",
-                                item.completedTodayTasks.length > 0 ? "text-emerald-400" : "text-muted-foreground/40"
-                              )}
-                            />
-                            <div className="space-y-0.5">
-                              <div className="text-xs font-semibold text-foreground font-mono">
-                                {item.completedTodayHours} hrs
-                              </div>
-                              <div className="text-[10px] text-muted-foreground font-mono">
-                                {item.completedTodayTasks.length} tasks today
-                              </div>
+                          <div className="space-y-0.5 font-mono">
+                            <div className="text-xs font-semibold text-foreground">
+                              {item.completedTodayHours} hrs
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {item.completedTodayTasks.length} tasks
                             </div>
                           </div>
                         </td>
@@ -1082,51 +995,17 @@ function TeamCapacityPage() {
                         {/* 6. Completed History */}
                         <td className="py-3 px-3.5" onClick={(e) => e.stopPropagation()}>
                           {item.historyList.length > 0 ? (
-                            <div
+                            <button
+                              type="button"
                               onClick={() => toggleExpandHistory(p.id)}
-                              className={cn(
-                                "p-1.5 rounded-md border cursor-pointer transition-all space-y-1 group/hist",
-                                isExpanded
-                                  ? "bg-primary/10 border-primary/40"
-                                  : "bg-muted/40 border-border hover:bg-muted/80"
-                              )}
-                              title="Click to toggle detailed task breakdown"
+                              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-medium p-1 rounded hover:bg-muted/40 transition-colors"
                             >
-                              <div className="flex items-center justify-between gap-1 text-[11px]">
-                                <div className="flex items-center gap-1 font-medium text-foreground">
-                                  <Calendar className="h-3 w-3 text-primary shrink-0" />
-                                  <span className="text-[10px] text-muted-foreground">Past History</span>
-                                </div>
-                                {isExpanded ? (
-                                  <ChevronUp className="h-3 w-3 text-primary shrink-0" />
-                                ) : (
-                                  <ChevronDown className="h-3 w-3 text-muted-foreground group-hover/hist:text-foreground shrink-0" />
-                                )}
-                              </div>
-
-                              <div className="space-y-0.5">
-                                {item.historyList.slice(0, 2).map((hist) => (
-                                  <div
-                                    key={hist.dateStr}
-                                    className="flex items-center justify-between gap-1.5 text-[10px] bg-background px-1.5 py-0.5 rounded border border-border/60"
-                                  >
-                                    <span className="text-foreground font-medium truncate max-w-[90px]">
-                                      {hist.relativeLabel || hist.formattedDate}:
-                                    </span>
-                                    <span className="text-emerald-400 font-mono font-bold shrink-0">
-                                      {hist.totalHours}h ({hist.tasks.length}t)
-                                    </span>
-                                  </div>
-                                ))}
-                                {item.historyList.length > 2 && (
-                                  <div className="text-[9px] font-medium text-primary text-right pr-0.5">
-                                    +{item.historyList.length - 2} more days...
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+                              <Calendar className="h-3.5 w-3.5" />
+                              <span>{item.historyList.length} days</span>
+                              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </button>
                           ) : (
-                            <span className="text-xs text-muted-foreground/60 italic">— No Past History</span>
+                            <span className="text-xs text-muted-foreground/60">—</span>
                           )}
                         </td>
 
@@ -1138,46 +1017,19 @@ function TeamCapacityPage() {
                                 <Badge
                                   key={idx}
                                   variant="secondary"
-                                  className="text-[9px] px-1.5 py-0.5 truncate max-w-[90px] bg-muted text-muted-foreground border border-border"
+                                  className="text-[9px] px-1.5 py-0.5 truncate max-w-[90px] bg-muted/60 text-muted-foreground border border-border/60"
                                 >
                                   {proj}
                                 </Badge>
                               ))
                             ) : (
-                              <span className="text-xs text-muted-foreground/60 italic">—</span>
+                              <span className="text-xs text-muted-foreground/60">—</span>
                             )}
                             {item.skills.length > 2 && (
-                              <Badge
-                                variant="outline"
-                                className="text-[9px] px-1 py-0 border-border text-muted-foreground bg-muted/40 font-mono"
-                              >
+                              <span className="text-[10px] text-muted-foreground font-mono">
                                 +{item.skills.length - 2}
-                              </Badge>
+                              </span>
                             )}
-                          </div>
-                        </td>
-
-                        {/* 8. Actions */}
-                        <td className="py-3 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleAssignTask(p.id)}
-                              className="h-7 w-7 p-0 rounded-md hover:bg-accent text-foreground"
-                              title="Assign Task"
-                            >
-                              <UserPlus className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setInspectMemberId(p.id)}
-                              className="h-7 w-7 p-0 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground"
-                              title="Member Details / Actions"
-                            >
-                              <MoreVertical className="h-3.5 w-3.5" />
-                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -1185,7 +1037,7 @@ function TeamCapacityPage() {
                       {/* EXPANDED COMPLETED HISTORY DRAWER ROW */}
                       {isExpanded && (
                         <tr className="bg-muted/20">
-                          <td colSpan={8} className="p-4 border-t border-b border-border/80">
+                          <td colSpan={7} className="p-4 border-t border-b border-border/80">
                             <div className="space-y-3 max-w-4xl">
                               <div className="flex items-center justify-between border-b border-border pb-2">
                                 <div className="flex items-center gap-2 text-xs font-bold text-foreground">
@@ -1270,7 +1122,7 @@ function TeamCapacityPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-xs text-muted-foreground">
+                  <td colSpan={7} className="py-12 text-center text-xs text-muted-foreground">
                     No team members found matching search & filter criteria.
                   </td>
                 </tr>
@@ -1361,97 +1213,46 @@ function TeamCapacityPage() {
             return (
               <Card
                 key={p.id}
-                className="bg-card border-border shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                className="bg-card border-border/70 shadow-xs hover:border-border transition-all flex flex-col justify-between"
               >
                 <CardContent className="p-4 space-y-3.5">
                   {/* Card Header */}
-                  <div className="flex items-start justify-between gap-2 border-b border-border pb-3">
+                  <div className="flex items-start justify-between gap-2 border-b border-border/70 pb-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="relative shrink-0">
-                        <Avatar className="h-10 w-10 border border-border bg-muted">
-                          {p.avatar_url ? (
-                            <AvatarImage src={p.avatar_url} alt={p.display_name} />
-                          ) : (
-                            <AvatarFallback className="text-foreground text-xs font-semibold bg-primary/20">
-                              {p.display_name.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
-                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-card" />
-                      </div>
+                      <Avatar className="h-9 w-9 border border-border shrink-0">
+                        {p.avatar_url ? (
+                          <AvatarImage src={p.avatar_url} alt={p.display_name} />
+                        ) : (
+                          <AvatarFallback className="bg-muted text-foreground text-[10px] font-bold">
+                            {p.display_name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
                       <div className="min-w-0 space-y-0.5">
                         <h3 className="font-semibold text-sm text-foreground truncate">{p.display_name}</h3>
                         <p className="text-xs text-muted-foreground truncate">{item.title}</p>
                       </div>
                     </div>
 
-                    {/* Capacity Ring Widget */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="relative h-10 w-10 flex items-center justify-center">
-                        <svg className="h-full w-full transform -rotate-90" viewBox="0 0 36 36">
-                          <path
-                            className="text-muted-foreground/20"
-                            strokeWidth="3.5"
-                            stroke="currentColor"
-                            fill="none"
-                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          />
-                          <path
-                            className={
-                              item.capacityPct > 100
-                                ? "text-rose-500"
-                                : item.capacityPct >= 70
-                                ? "text-amber-500"
-                                : "text-emerald-500"
-                            }
-                            strokeDasharray={`${Math.min(100, item.capacityPct)}, 100`}
-                            strokeWidth="3.5"
-                            strokeLinecap="round"
-                            stroke="currentColor"
-                            fill="none"
-                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          />
-                        </svg>
-                        <span className="absolute text-[9px] font-bold text-foreground font-mono">
-                          {item.capacityPct}%
-                        </span>
+                    {/* Capacity Indicator */}
+                    <div className="flex flex-col items-end space-y-1">
+                      <div className="text-xs font-mono font-medium text-foreground">
+                        {item.capacityPct}% capacity
                       </div>
-
-                      <div className="flex flex-col items-end space-y-0.5">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[9px] px-1.5 py-0 font-medium border-0",
-                            item.capacityStatus === "free" || item.capacityStatus === "available"
-                              ? "bg-emerald-500/10 text-emerald-400"
-                              : item.capacityStatus === "partially"
-                              ? "bg-amber-500/10 text-amber-400"
-                              : "bg-rose-500/10 text-rose-400"
-                          )}
-                        >
-                          {item.capacityStatus === "free"
-                            ? "Free Today"
-                            : item.capacityStatus === "available"
-                            ? "Available"
-                            : item.capacityStatus === "partially"
-                            ? "Partially Free"
-                            : "Overloaded"}
-                        </Badge>
-                        <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                          {formatHoursMins(item.plannedHours)} / 8h
-                        </span>
-                      </div>
+                      <span className="text-[10px] font-mono text-muted-foreground">
+                        {formatHoursMins(item.plannedHours)} / 8h
+                      </span>
                     </div>
                   </div>
 
-                  {/* Current Active Tasks in Card (Click to open detailed modal) */}
+                  {/* Current Active Tasks in Card */}
                   <div className="space-y-1.5">
                     <div className="text-[11px] font-semibold text-muted-foreground flex items-center justify-between">
                       <span>Current Active Work</span>
                       {item.activeTasks.length > 0 && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-500/30 text-blue-400 bg-blue-500/10 font-mono">
+                        <span className="text-[10px] font-mono text-muted-foreground font-medium">
                           {item.activeTasks.length} active
-                        </Badge>
+                        </span>
                       )}
                     </div>
                     {item.activeTasks.length > 0 ? (
@@ -1459,22 +1260,22 @@ function TeamCapacityPage() {
                         <div
                           key={t.id}
                           onClick={() => setInspectTaskItem({ task: t, profile: p })}
-                          className="p-2 rounded-lg bg-muted/40 hover:bg-muted/80 border border-border flex items-center justify-between gap-2 cursor-pointer transition-all group/activeCard"
+                          className="p-2 rounded-lg bg-muted/40 hover:bg-muted/80 border border-border/70 flex items-center justify-between gap-2 cursor-pointer transition-all group/activeCard"
                           title="Click to view all task details"
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0 animate-pulse" />
+                            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
                             <span className="text-xs font-medium text-foreground truncate group-hover/activeCard:text-primary">
                               {t.task_name}
                             </span>
                           </div>
-                          <span className="text-[10px] font-mono text-blue-400 shrink-0 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
-                            View ↗
+                          <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                            {t.planned_hours ? `${t.planned_hours}h` : "Active"}
                           </span>
                         </div>
                       ))
                     ) : (
-                      <div className="text-xs text-muted-foreground/60 italic p-1.5 rounded bg-muted/20">
+                      <div className="text-xs text-muted-foreground/60 p-1.5 rounded bg-muted/20">
                         No tasks currently in progress
                       </div>
                     )}
@@ -1484,25 +1285,25 @@ function TeamCapacityPage() {
                   {item.upcomingTasks.length > 0 && (
                     <div
                       onClick={() => setUpcomingTasksModalItem({ member: p, tasks: item.upcomingTasks })}
-                      className="p-2 rounded-lg bg-muted/30 hover:bg-muted/70 border border-border flex items-center justify-between gap-2 cursor-pointer transition-all text-xs"
+                      className="p-2 rounded-lg bg-muted/30 hover:bg-muted/70 border border-border/70 flex items-center justify-between gap-2 cursor-pointer transition-all text-xs"
                     >
                       <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
-                        <ListTodo className="h-3.5 w-3.5 text-amber-400" />
+                        <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
                         <span>{item.upcomingTasks.length} Queued Tasks</span>
                       </div>
-                      <span className="text-[10px] text-primary font-medium hover:underline">
-                        View Upcoming ↗
+                      <span className="text-[10px] text-foreground font-mono">
+                        {item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0)}h total
                       </span>
                     </div>
                   )}
 
                   {/* Completed Today Bar in Card */}
-                  <div className="p-2.5 bg-muted/40 border border-border rounded-lg flex items-center justify-between gap-2 text-xs">
+                  <div className="p-2.5 bg-muted/40 border border-border/70 rounded-lg flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
                       <div>
                         <div className="font-semibold text-foreground">Completed Today</div>
-                        <div className="text-[10px] text-emerald-400 font-mono">
+                        <div className="text-[10px] text-muted-foreground font-mono">
                           {item.completedTodayHours} hrs ({item.completedTodayTasks.length} tasks)
                         </div>
                       </div>
@@ -1513,7 +1314,7 @@ function TeamCapacityPage() {
                       onClick={() => toggleExpandHistory(p.id)}
                       className="text-xs font-semibold px-2.5 py-1 rounded bg-card hover:bg-accent text-foreground border border-border flex items-center gap-1"
                     >
-                      <Calendar className="h-3.5 w-3.5 text-primary" />
+                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                       <span>{item.historyList.length} Days</span>
                       {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                     </button>
@@ -1531,7 +1332,7 @@ function TeamCapacityPage() {
                           <div key={hist.dateStr} className="text-xs space-y-1 border-b border-border pb-1.5 last:border-0 last:pb-0">
                             <div className="flex items-center justify-between text-foreground font-semibold text-[11px]">
                               <span>{hist.formattedDate} ({hist.relativeLabel || "Past"})</span>
-                              <span className="text-emerald-400 font-mono">{hist.totalHours} hrs</span>
+                              <span className="font-mono text-foreground">{hist.totalHours} hrs</span>
                             </div>
                             {hist.tasks.map((t) => (
                               <div
@@ -1539,14 +1340,14 @@ function TeamCapacityPage() {
                                 onClick={() => setInspectTaskItem({ task: t, profile: p })}
                                 className="text-[11px] text-muted-foreground hover:text-foreground flex items-center justify-between pl-2 cursor-pointer transition-colors"
                               >
-                                <span className="truncate">✓ {t.task_name}</span>
-                                <span className="font-mono text-[10px] text-emerald-400">{t.actual_hours || t.planned_hours || 0}h</span>
+                                <span className="truncate">• {t.task_name}</span>
+                                <span className="font-mono text-[10px] text-muted-foreground">{t.actual_hours || t.planned_hours || 0}h</span>
                               </div>
                             ))}
                           </div>
                         ))
                       ) : (
-                        <div className="text-[11px] text-muted-foreground italic">No past completed history.</div>
+                        <div className="text-xs text-muted-foreground/60 italic">No past history recorded</div>
                       )}
                     </div>
                   )}

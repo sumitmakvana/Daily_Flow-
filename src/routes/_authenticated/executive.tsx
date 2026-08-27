@@ -397,6 +397,29 @@ function ExecutivePage() {
     toast.success("Executive EOD HTML Report exported successfully!");
   };
 
+  // Scope-filtered profiles for top Member multi-select
+  const scopedProfiles = useMemo(() => {
+    if (!scope || scope.kind === "org") return eodProfiles;
+    if (scope.kind === "team") {
+      return eodProfiles.filter((p) => (p as any).team_id === scope.id);
+    }
+    if (scope.kind === "manager") {
+      const managerIds = new Set<string>([scope.id]);
+      let added = true;
+      while (added) {
+        added = false;
+        eodProfiles.forEach((p) => {
+          if (p.manager_id && managerIds.has(p.manager_id) && !managerIds.has(p.id)) {
+            managerIds.add(p.id);
+            added = true;
+          }
+        });
+      }
+      return eodProfiles.filter((p) => managerIds.has(p.id));
+    }
+    return eodProfiles;
+  }, [eodProfiles, scope]);
+
   return (
     <div className="max-w-7xl mx-auto px-3 md:px-6 py-4 md:py-6 space-y-6">
       {/* Header controls */}
@@ -445,7 +468,7 @@ function ExecutivePage() {
           />
           <MultiSelectFilterPopover
             label="Member"
-            options={eodProfiles.map((p) => ({ id: p.id, label: p.display_name }))}
+            options={scopedProfiles.map((p) => ({ id: p.id, label: p.display_name }))}
             selectedValues={selectedMembers}
             onChange={setSelectedMembers}
           />
@@ -459,10 +482,11 @@ function ExecutivePage() {
           )}
           <Button
             size="sm"
+            variant="outline"
             onClick={handleExportGlobalReport}
-            className="h-8 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold gap-1.5 shadow-md"
+            className="h-8 border-border bg-card/80 hover:bg-accent text-foreground text-xs font-medium gap-1.5"
           >
-            <Download className="h-3.5 w-3.5" /> Export EOD Report
+            <Download className="h-3.5 w-3.5 text-muted-foreground" /> Export EOD Report
           </Button>
         </div>
       </header>
@@ -538,21 +562,33 @@ function ExecutiveRealDashboard({
   onSelectMember: (memberId: string) => void;
 }) {
   const [memberSearch, setMemberSearch] = useState("");
-  const [taskFilter, setTaskFilter] = useState<"all" | "Completed" | "In Progress" | "Blocked" | "Pending">("all");
   const [showOnlyActiveMembers, setShowOnlyActiveMembers] = useState(false);
-  const [selectedStatusDetails, setSelectedStatusDetails] = useState<"Completed" | "In Progress" | "Blocked" | "Pending" | null>(null);
+  const [selectedStatusDetails, setSelectedStatusDetails] = useState<"Completed" | "In Progress" | "In Review" | "Blocked" | "Pending" | null>(null);
   const [selectedAgingBucket, setSelectedAgingBucket] = useState<"0-3d" | "4-7d" | "8-14d" | "15d+" | null>(null);
 
   // 1. Dynamic Filtering for Profiles by Scope & Member Filter
   const filteredProfiles = useMemo(() => {
     let result = profiles;
 
-    if (selectedMembers && selectedMembers.length > 0) {
-      result = result.filter((p) => selectedMembers.includes(p.id));
-    } else if (scope && scope.kind === "team") {
+    if (scope && scope.kind === "team") {
       result = result.filter((p) => (p as any).team_id === scope.id);
     } else if (scope && scope.kind === "manager") {
-      result = result.filter((p) => p.manager_id === scope.id || p.id === scope.id);
+      const managerIds = new Set<string>([scope.id]);
+      let added = true;
+      while (added) {
+        added = false;
+        profiles.forEach((p) => {
+          if (p.manager_id && managerIds.has(p.manager_id) && !managerIds.has(p.id)) {
+            managerIds.add(p.id);
+            added = true;
+          }
+        });
+      }
+      result = result.filter((p) => managerIds.has(p.id));
+    }
+
+    if (selectedMembers && selectedMembers.length > 0) {
+      result = result.filter((p) => selectedMembers.includes(p.id));
     }
 
     return result;
@@ -562,7 +598,7 @@ function ExecutiveRealDashboard({
   const filteredTasks = useMemo(() => {
     let result = tasks;
 
-    // Member filter (multi-select)
+    // Member / Scope filter
     if (selectedMembers && selectedMembers.length > 0) {
       result = result.filter((t) => t.assigned_to && selectedMembers.includes(t.assigned_to));
     } else if (scope && scope.kind === "team") {
@@ -571,10 +607,18 @@ function ExecutiveRealDashboard({
         (t) => (t.assigned_to && teamMemberIds.has(t.assigned_to)) || t.team_id === scope.id,
       );
     } else if (scope && scope.kind === "manager") {
-      const managedMemberIds = new Set(
-        profiles.filter((p) => p.manager_id === scope.id || p.id === scope.id).map((p) => p.id),
-      );
-      result = result.filter((t) => t.assigned_to && managedMemberIds.has(t.assigned_to));
+      const managerIds = new Set<string>([scope.id]);
+      let added = true;
+      while (added) {
+        added = false;
+        profiles.forEach((p) => {
+          if (p.manager_id && managerIds.has(p.manager_id) && !managerIds.has(p.id)) {
+            managerIds.add(p.id);
+            added = true;
+          }
+        });
+      }
+      result = result.filter((t) => t.assigned_to && managerIds.has(t.assigned_to));
     }
 
     // Project filter (multi-select)
@@ -598,15 +642,15 @@ function ExecutiveRealDashboard({
     }
 
     // Range / Timeframe filter
+    const today = new Date().toISOString().slice(0, 10);
     const days = Number(range) || 7;
     if (range === "1") {
-      const today = new Date().toISOString().slice(0, 10);
       result = result.filter((t) => {
         const createdDay = t.created_at ? t.created_at.slice(0, 10) : "";
         const completedDay = t.completed_at ? t.completed_at.slice(0, 10) : "";
         const dueDay = t.due_date ? t.due_date.slice(0, 10) : "";
         const isActiveToday = t.status !== "Completed" && t.status !== "On Hold";
-        return createdDay === today || completedDay === today || dueDay === today || isActiveToday;
+        return completedDay === today || createdDay === today || dueDay === today || isActiveToday;
       });
     } else {
       const cutoff = Date.now() - days * 86400000;
@@ -623,45 +667,124 @@ function ExecutiveRealDashboard({
 
   // 3. Dynamic Metrics derived from filteredTasks
   const metrics = useMemo(() => {
-    const completed = filteredTasks.filter((t) => t.status === "Completed").length;
+    const today = new Date().toISOString().slice(0, 10);
+    const completed = range === "1"
+      ? filteredTasks.filter((t) => t.status === "Completed" && t.completed_at && t.completed_at.slice(0, 10) === today).length
+      : filteredTasks.filter((t) => t.status === "Completed").length;
+    const completedToday = filteredTasks.filter(
+      (t) => t.status === "Completed" && t.completed_at && t.completed_at.slice(0, 10) === today,
+    ).length;
     const inProgress = filteredTasks.filter((t) => t.status === "In Progress").length;
-    const blocked = filteredTasks.filter((t) => t.status === "Blocked").length;
+    const inReview = filteredTasks.filter((t) => t.status === "In Review").length;
     const pending = filteredTasks.filter(
-      (t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked",
+      (t) => t.status === "To Do" || t.status === "Pending" || (t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold"),
+    ).length;
+    const blocked = filteredTasks.filter((t) => t.status === "Blocked" || t.status === "On Hold").length;
+    const overdue = filteredTasks.filter(
+      (t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today,
     ).length;
     const total = filteredTasks.length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    return { completed, inProgress, blocked, pending, total, completionRate };
-  }, [filteredTasks]);
+    return { completed, completedToday, inProgress, inReview, pending, blocked, overdue, total, completionRate };
+  }, [filteredTasks, range]);
 
-  // 4. Dynamic Memberwise Bar Chart Data
-  const memberBarChartData = useMemo(() => {
-    const targetProfiles = filteredProfiles.length > 0 ? filteredProfiles : profiles;
+  // 4. Team Workload List
+  const memberWorkloadList = useMemo(() => {
+    const targetProfiles = filteredProfiles;
     const today = new Date().toISOString().slice(0, 10);
     const list = targetProfiles.map((p) => {
       const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
-      const completed = pTasks.filter((t) => t.status === "Completed").length;
+      const completed = range === "1"
+        ? pTasks.filter((t) => t.status === "Completed" && t.completed_at && t.completed_at.slice(0, 10) === today).length
+        : pTasks.filter((t) => t.status === "Completed").length;
       const inProgress = pTasks.filter((t) => t.status === "In Progress").length;
-      const blocked = pTasks.filter((t) => t.status === "Blocked").length;
+      const inReview = pTasks.filter((t) => t.status === "In Review").length;
       const pending = pTasks.filter(
-        (t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked",
+        (t) => t.status === "To Do" || t.status === "Pending" || (t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold"),
       ).length;
+      const blocked = pTasks.filter((t) => t.status === "Blocked" || t.status === "On Hold").length;
+      const overdue = pTasks.filter(
+        (t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today,
+      ).length;
+      const total = pTasks.length;
+      const plannedHours = pTasks.reduce((s, t) => s + Number(t.planned_hours ?? 0), 0);
+      const actualHours = pTasks.reduce((s, t) => s + Number(t.actual_hours ?? 0), 0);
+
+      const cleanName = p.display_name.includes("@")
+        ? p.display_name.split("@")[0].toLowerCase()
+        : p.display_name.toLowerCase().replace(/\s+/g, ".");
+
+      const userProjects =
+        Array.from(new Set(pTasks.map((t) => t.project_name).filter(Boolean))).join(", ") ||
+        "General Workspace";
+
+      return {
+        id: p.id,
+        name: cleanName,
+        displayName: p.display_name,
+        avatar: p.avatar_url,
+        completed,
+        inProgress,
+        inReview,
+        pending,
+        blocked,
+        overdue,
+        total,
+        plannedHours,
+        actualHours,
+        userProjects,
+      };
+    });
+
+    let filtered = list;
+    if (showOnlyActiveMembers) {
+      filtered = filtered.filter((m) => m.total > 0 || m.inProgress > 0 || m.inReview > 0);
+    }
+    if (memberSearch.trim()) {
+      const q = memberSearch.toLowerCase();
+      filtered = filtered.filter(
+        (m) =>
+          m.name.includes(q) ||
+          m.displayName.toLowerCase().includes(q) ||
+          m.userProjects.toLowerCase().includes(q),
+      );
+    }
+    return filtered;
+  }, [filteredProfiles, filteredTasks, showOnlyActiveMembers, memberSearch, range]);
+
+  // 5. Memberwise Bar Chart Data
+  const memberBarChartData = useMemo(() => {
+    const targetProfiles = filteredProfiles;
+    const today = new Date().toISOString().slice(0, 10);
+    const list = targetProfiles.map((p) => {
+      const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
+      const completed = range === "1"
+        ? pTasks.filter((t) => t.status === "Completed" && t.completed_at && t.completed_at.slice(0, 10) === today).length
+        : pTasks.filter((t) => t.status === "Completed").length;
+      const inProgress = pTasks.filter((t) => t.status === "In Progress").length;
+      const inReview = pTasks.filter((t) => t.status === "In Review").length;
+      const pending = pTasks.filter(
+        (t) => t.status === "To Do" || t.status === "Pending" || (t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold"),
+      ).length;
+      const blocked = pTasks.filter((t) => t.status === "Blocked" || t.status === "On Hold").length;
       const overdue = pTasks.filter(
         (t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today,
       ).length;
 
       const cleanName = p.display_name.includes("@")
         ? p.display_name.split("@")[0]
-        : p.display_name;
+        : p.display_name.split(" ")[0];
 
       return {
+        id: p.id,
         name: cleanName,
         fullName: p.display_name,
         Completed: completed,
         InProgress: inProgress,
-        Blocked: blocked,
+        InReview: inReview,
         Pending: pending,
+        Blocked: blocked,
         overdue: overdue,
         total: pTasks.length,
       };
@@ -671,12 +794,12 @@ function ExecutiveRealDashboard({
       return list.filter((m) => m.total > 0);
     }
     return list;
-  }, [filteredProfiles, profiles, filteredTasks, showOnlyActiveMembers]);
+  }, [filteredProfiles, filteredTasks, showOnlyActiveMembers, range]);
 
-  // 5. Original Report Graph: Planned vs Actual Hours BarChart
+  // 6. Planned vs Actual Hours BarChart Data
   const planVsActualData = useMemo(() => {
-    const targetProfiles = filteredProfiles.length > 0 ? filteredProfiles : profiles;
-    return targetProfiles.map((p) => {
+    const targetProfiles = filteredProfiles;
+    const list = targetProfiles.map((p) => {
       const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
       const planned = pTasks.reduce((s, t) => s + Number(t.planned_hours ?? 0), 0);
       const actual = pTasks.reduce((s, t) => s + Number(t.actual_hours ?? 0), 0);
@@ -688,9 +811,13 @@ function ExecutiveRealDashboard({
         actual,
       };
     });
-  }, [filteredProfiles, profiles, filteredTasks]);
+    if (showOnlyActiveMembers) {
+      return list.filter((m) => m.planned > 0 || m.actual > 0);
+    }
+    return list;
+  }, [filteredProfiles, filteredTasks, showOnlyActiveMembers]);
 
-  // 6. Original Report Graph: Task Aging BarChart (Open Tasks)
+  // 7. Task Aging Data
   const taskAgingData = useMemo(() => {
     const buckets = { "0-3d": 0, "4-7d": 0, "8-14d": 0, "15d+": 0 };
     filteredTasks
@@ -705,7 +832,7 @@ function ExecutiveRealDashboard({
     return Object.entries(buckets).map(([k, v]) => ({ bucket: k, count: v }));
   }, [filteredTasks]);
 
-  // 7. Dynamic Team Completion Velocity Line Chart
+  // 8. Dynamic Team Completion Velocity Line Chart
   const completionTrendData = useMemo(() => {
     const days: Array<{ date: string; completed: number }> = [];
     const daysCount = range === "1" ? 1 : Number(range) || 7;
@@ -727,13 +854,14 @@ function ExecutiveRealDashboard({
     return days;
   }, [filteredTasks, range]);
 
-  // 8. Workload Donut Chart Data
+  // 9. Workload Donut Chart Data
   const donutData = useMemo(() => {
     const list = [
       { name: "Completed", value: metrics.completed, color: "#10b981" },
       { name: "In Progress", value: metrics.inProgress, color: "#3b82f6" },
-      { name: "Blocked", value: metrics.blocked, color: "#f43f5e" },
+      { name: "In Review", value: metrics.inReview, color: "#a855f7" },
       { name: "Pending", value: metrics.pending, color: "#f59e0b" },
+      { name: "Blocked", value: metrics.blocked, color: "#f43f5e" },
     ].filter((item) => item.value > 0);
 
     return list.length > 0
@@ -744,705 +872,535 @@ function ExecutiveRealDashboard({
         ];
   }, [metrics]);
 
-  // 9. Member Performance Table Data
-  const memberPerformanceList = useMemo(() => {
-    const targetProfiles = filteredProfiles.length > 0 ? filteredProfiles : profiles;
-    const today = new Date().toISOString().slice(0, 10);
-    return targetProfiles
-      .map((p) => {
-        const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
-        const completed = pTasks.filter((t) => t.status === "Completed").length;
-        const inProgress = pTasks.filter((t) => t.status === "In Progress").length;
-        const blocked = pTasks.filter((t) => t.status === "Blocked").length;
-        const pending = pTasks.filter(
-          (t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked",
-        ).length;
-        const overdue = pTasks.filter(
-          (t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today,
-        ).length;
-        const total = pTasks.length;
-        const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-        const userProjects =
-          Array.from(new Set(pTasks.map((t) => t.project_name).filter(Boolean))).join(", ") ||
-          "General Workspace";
-
-        return {
-          id: p.id,
-          name: p.display_name,
-          email: p.email || `${p.display_name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
-          avatar: p.avatar_url,
-          completed,
-          inProgress,
-          blocked,
-          pending,
-          overdue,
-          total,
-          completionRate,
-          userProjects,
-        };
-      })
-      .filter(
-        (m) =>
-          m.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-          m.email.toLowerCase().includes(memberSearch.toLowerCase()) ||
-          m.userProjects.toLowerCase().includes(memberSearch.toLowerCase()),
-      );
-  }, [filteredProfiles, profiles, filteredTasks, memberSearch]);
-
-  // 10. Inspected Tasks
-  const inspectedTasks = useMemo(() => {
-    if (taskFilter === "all") return filteredTasks;
-    if (taskFilter === "Pending") {
-      return filteredTasks.filter(
-        (t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked",
-      );
-    }
-    return filteredTasks.filter((t) => t.status === taskFilter);
-  }, [filteredTasks, taskFilter]);
-
   return (
     <div className="space-y-6">
-      {/* 1. Top Real Metric Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Completed Tasks */}
+      {/* 1. Top Metrics KPI Summary (Clean, Simple & Minimal 6 Cards) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total */}
         <div
-          onClick={() => {
-            setTaskFilter("Completed");
-            setSelectedStatusDetails("Completed");
-          }}
-          className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-emerald-500/50 hover:shadow-emerald-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
+          onClick={() => setSelectedStatusDetails("Completed")}
+          className="bg-card border border-border/70 rounded-xl p-4 space-y-2 hover:border-border transition-colors cursor-pointer"
         >
-          <div className="space-y-1">
-            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider group-hover:text-emerald-400 transition-colors">
-              Completed Tasks
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-white">{metrics.completed}</span>
-              <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
-                {metrics.completionRate}% rate
-              </span>
-            </div>
-            <div className="text-[11px] text-[#64748b] group-hover:text-emerald-300/80 transition-colors flex items-center gap-1">
-              Out of {metrics.total} total assigned · Click for details →
-            </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <ListFilter className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>Total</span>
           </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setTaskFilter("Completed");
-              setSelectedStatusDetails("Completed");
-            }}
-            className="h-11 w-11 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-inner group-hover:bg-emerald-500/20 group-hover:scale-105 transition-all"
-          >
-            <CheckCircle2 className="h-5 w-5" />
-          </button>
+          <div className="text-2xl md:text-3xl font-bold font-mono text-foreground tracking-tight">
+            {metrics.total}
+          </div>
         </div>
 
-        {/* Card 2: In Progress Tasks */}
+        {/* Completed / Done */}
         <div
-          onClick={() => {
-            setTaskFilter("In Progress");
-            setSelectedStatusDetails("In Progress");
-          }}
-          className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-indigo-500/50 hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
+          onClick={() => setSelectedStatusDetails("Completed")}
+          className="bg-card border border-border/70 rounded-xl p-4 space-y-2 hover:border-border transition-colors cursor-pointer"
         >
-          <div className="space-y-1">
-            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider group-hover:text-indigo-400 transition-colors">
-              In Progress Tasks
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-white">{metrics.inProgress}</span>
-              <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/25">
-                Active Work
-              </span>
-            </div>
-            <div className="text-[11px] text-[#64748b] group-hover:text-indigo-300/80 transition-colors flex items-center gap-1">
-              Currently being worked on · Click for details →
-            </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>{range === "1" ? "Done today" : "Completed"}</span>
           </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setTaskFilter("In Progress");
-              setSelectedStatusDetails("In Progress");
-            }}
-            className="h-11 w-11 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner group-hover:bg-indigo-500/20 group-hover:scale-105 transition-all"
-          >
-            <Clock className="h-5 w-5" />
-          </button>
+          <div className="text-2xl md:text-3xl font-bold font-mono text-foreground tracking-tight">
+            {range === "1" ? metrics.completedToday : metrics.completed}
+          </div>
         </div>
 
-        {/* Card 3: Blocked Tasks */}
+        {/* In Progress */}
         <div
-          onClick={() => {
-            setTaskFilter("Blocked");
-            setSelectedStatusDetails("Blocked");
-          }}
-          className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-rose-500/50 hover:shadow-rose-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
+          onClick={() => setSelectedStatusDetails("In Progress")}
+          className="bg-card border border-border/70 rounded-xl p-4 space-y-2 hover:border-border transition-colors cursor-pointer"
         >
-          <div className="space-y-1">
-            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider group-hover:text-rose-400 transition-colors">
-              Blocked Tasks
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-rose-400">{metrics.blocked}</span>
-              <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/25">
-                Risk Alert
-              </span>
-            </div>
-            <div className="text-[11px] text-[#64748b] group-hover:text-rose-300/80 transition-colors flex items-center gap-1">
-              Requires manager unblock · Click for details →
-            </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>In Progress</span>
           </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setTaskFilter("Blocked");
-              setSelectedStatusDetails("Blocked");
-            }}
-            className="h-11 w-11 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-inner group-hover:bg-rose-500/20 group-hover:scale-105 transition-all"
-          >
-            <AlertOctagon className="h-5 w-5" />
-          </button>
+          <div className="text-2xl md:text-3xl font-bold font-mono text-foreground tracking-tight">
+            {metrics.inProgress}
+          </div>
         </div>
 
-        {/* Card 4: Total Assigned & Active Members */}
+        {/* In Review */}
         <div
-          onClick={() => {
-            setTaskFilter("Pending");
-            setSelectedStatusDetails("Pending");
-          }}
-          className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-amber-500/50 hover:shadow-amber-500/10 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
+          onClick={() => setSelectedStatusDetails("In Review")}
+          className="bg-card border border-border/70 rounded-xl p-4 space-y-2 hover:border-border transition-colors cursor-pointer"
         >
-          <div className="space-y-1">
-            <div className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider group-hover:text-amber-400 transition-colors">
-              Pending Queue
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-white">{metrics.pending}</span>
-              <span className="text-xs font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/25">
-                {filteredProfiles.length} Members
-              </span>
-            </div>
-            <div className="text-[11px] text-[#64748b] group-hover:text-amber-300/80 transition-colors flex items-center gap-1">
-              To Do & Review queue · Click for details →
-            </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>In Review</span>
           </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setTaskFilter("Pending");
-              setSelectedStatusDetails("Pending");
-            }}
-            className="h-11 w-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-300 shadow-inner group-hover:bg-amber-500/20 group-hover:scale-105 transition-all"
-          >
-            <Users className="h-5 w-5" />
-          </button>
+          <div className="text-2xl md:text-3xl font-bold font-mono text-foreground tracking-tight">
+            {metrics.inReview}
+          </div>
+        </div>
+
+        {/* Pending */}
+        <div
+          onClick={() => setSelectedStatusDetails("Pending")}
+          className="bg-card border border-border/70 rounded-xl p-4 space-y-2 hover:border-border transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>Pending</span>
+          </div>
+          <div className="text-2xl md:text-3xl font-bold font-mono text-foreground tracking-tight">
+            {metrics.pending}
+          </div>
+        </div>
+
+        {/* Blocked */}
+        <div
+          onClick={() => setSelectedStatusDetails("Blocked")}
+          className="bg-card border border-border/70 rounded-xl p-4 space-y-2 hover:border-border transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <AlertOctagon className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>Blocked</span>
+          </div>
+          <div className={`text-2xl md:text-3xl font-bold font-mono tracking-tight ${metrics.blocked > 0 ? "text-rose-400" : "text-foreground"}`}>
+            {metrics.blocked}
+          </div>
         </div>
       </div>
 
-      {/* 2. Top Charts Grid: Real Member Bar Chart (Left) + Completion Velocity Trend (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left: Memberwise Task Breakdown Bar Chart */}
-        <div className="lg:col-span-7 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-bold text-foreground tracking-tight">Memberwise Task Status</h3>
-              <p className="text-xs text-muted-foreground">Real task allocation per team member</p>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              <div className="flex items-center gap-1 bg-background border border-input p-0.5 rounded-lg">
-                <Button
-                  size="sm"
-                  variant={!showOnlyActiveMembers ? "default" : "ghost"}
-                  onClick={() => setShowOnlyActiveMembers(false)}
-                  className={`h-6 text-[11px] px-2 ${!showOnlyActiveMembers ? "bg-indigo-600 text-white" : "text-[#94a3b8]"}`}
-                >
-                  All Members
-                </Button>
-                <Button
-                  size="sm"
-                  variant={showOnlyActiveMembers ? "default" : "ghost"}
-                  onClick={() => setShowOnlyActiveMembers(true)}
-                  className={`h-6 text-[11px] px-2 ${showOnlyActiveMembers ? "bg-indigo-600 text-white" : "text-[#94a3b8]"}`}
-                >
-                  Active Only
-                </Button>
-              </div>
-              <div className="hidden sm:flex items-center gap-2">
-                <span className="flex items-center gap-1 text-emerald-400 font-medium">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-[#10b981]" /> Done
-                </span>
-                <span className="flex items-center gap-1 text-indigo-400 font-medium">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-[#6366f1]" /> In Prog
-                </span>
-                <span className="flex items-center gap-1 text-rose-400 font-medium">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-[#f43f5e]" /> Blocked
-                </span>
-                <span className="flex items-center gap-1 text-slate-400 font-medium">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-[#64748b]" /> Pending
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-[290px] w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={memberBarChartData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
-                <XAxis
-                  dataKey="name"
-                  stroke="#64748b"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={{ stroke: "#25273e" }}
-                  interval={0}
-                  angle={-25}
-                  textAnchor="end"
-                  height={50}
-                />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const full = payload[0]?.payload?.fullName || label;
-                      const tot = payload[0]?.payload?.total || 0;
-                      const overdueCount = payload[0]?.payload?.overdue || 0;
-                      return (
-                        <div className="bg-[#1a1c2e]/95 border border-[#313454] rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[160px]">
-                          <div className="font-bold text-indigo-300 border-b border-[#313454] pb-1.5 flex items-center justify-between">
-                            <span>{full}</span>
-                            <span className="text-[10px] text-slate-400 font-normal">({tot} tasks)</span>
-                          </div>
-                          {payload.map((entry: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between gap-3">
-                              <span style={{ color: entry.color }} className="font-medium">{entry.name}:</span>
-                              <span className="font-bold text-white">{entry.value}</span>
-                            </div>
-                          ))}
-                          {overdueCount > 0 && (
-                            <div className="flex items-center justify-between gap-3 pt-1 border-t border-[#313454]/60 text-amber-400 font-medium">
-                              <span>Overdue:</span>
-                              <span className="font-bold">{overdueCount}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar dataKey="Completed" fill="#10b981" stackId="a" radius={[0, 0, 0, 0]} barSize={22} />
-                <Bar dataKey="InProgress" fill="#6366f1" stackId="a" radius={[0, 0, 0, 0]} barSize={22} />
-                <Bar dataKey="Blocked" fill="#f43f5e" stackId="a" radius={[0, 0, 0, 0]} barSize={22} />
-                <Bar dataKey="Pending" fill="#64748b" stackId="a" radius={[3, 3, 0, 0]} barSize={22} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Right: Team Completion Velocity Line Chart */}
-        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+      {/* 2. Team Workload Section (Clean Table with exact Status columns and Capacity Progress) */}
+      <div className="bg-card border border-border/70 rounded-xl p-4 md:p-5 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-foreground tracking-tight">Team Completion Velocity</h3>
-            <p className="text-xs text-muted-foreground">Daily task completions over {RANGE_LABEL[range as RangeKey]}</p>
+            <h3 className="text-base font-bold text-foreground tracking-tight">Team workload</h3>
+            <p className="text-xs text-muted-foreground">Real task allocation, status breakdown, and capacity per team member</p>
           </div>
-
-          <div className="h-[290px] w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={completionTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} axisLine={{ stroke: "#25273e" }} />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      return (
-                        <div className="bg-[#1a1c2e]/95 border border-emerald-500/40 rounded-xl p-3 shadow-2xl text-xs space-y-1">
-                          <div className="font-bold text-slate-300 border-b border-[#313454] pb-1">{label}</div>
-                          <div className="flex items-center justify-between gap-4 font-bold text-emerald-400">
-                            <span>Tasks Completed:</span>
-                            <span className="text-sm font-extrabold">{payload[0]?.value}</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="completed"
-                  stroke="#10b981"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: "#10b981" }}
-                  activeDot={{ r: 6, strokeWidth: 2, stroke: "#161726" }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Original Reports Charts Grid: Planned vs Actual Hours & Task Aging */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Graph 1: Planned vs Actual Hours per Member */}
-        <div className="lg:col-span-7 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-primary" /> Planned vs Actual Hours
-              </h3>
-              <p className="text-xs text-muted-foreground">Comparison of planned hours vs actual work logged</p>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5 text-indigo-300 font-medium">
-                <span className="h-2.5 w-2.5 rounded-sm bg-[#6366f1]" /> Planned
-              </span>
-              <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
-                <span className="h-2.5 w-2.5 rounded-sm bg-[#10b981]" /> Actual
-              </span>
-              <span className="text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-md border border-indigo-500/25">
-                Click bar for member details
-              </span>
-            </div>
-          </div>
-
-          <div className="h-[250px] w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={planVsActualData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={{ stroke: "#25273e" }} interval={0} angle={-20} textAnchor="end" />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const full = payload[0]?.payload?.fullName || label;
-                      return (
-                        <div className="bg-[#1a1c2e]/95 border border-indigo-500/40 rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[170px]">
-                          <div className="font-bold text-indigo-300 border-b border-[#313454] pb-1">{full}</div>
-                          {payload.map((entry: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between gap-3">
-                              <span style={{ color: entry.color }} className="font-medium">{entry.name}:</span>
-                              <span className="font-bold text-white">{entry.value}h</span>
-                            </div>
-                          ))}
-                          <div className="text-[10px] text-indigo-300 pt-1 font-semibold flex items-center gap-1 border-t border-[#313454]/60 mt-1">
-                            <span>💡 Click bar to inspect member's tasks & hours</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar
-                  dataKey="planned"
-                  fill="#6366f1"
-                  radius={[3, 3, 0, 0]}
-                  barSize={16}
-                  className="cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={(entry: any) => {
-                    if (entry && entry.id) {
-                      onSelectMember(entry.id);
-                    }
-                  }}
-                />
-                <Bar
-                  dataKey="actual"
-                  fill="#10b981"
-                  radius={[3, 3, 0, 0]}
-                  barSize={16}
-                  className="cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={(entry: any) => {
-                    if (entry && entry.id) {
-                      onSelectMember(entry.id);
-                    }
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Graph 2: Task Aging (Open Tasks) */}
-        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h3 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
-                <Hourglass className="h-4 w-4 text-amber-500" /> Task Aging (Open Tasks)
-              </h3>
-              <p className="text-xs text-muted-foreground">Age distribution of active incomplete tasks</p>
-            </div>
-            <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/25">
-              Click bar for details
-            </span>
-          </div>
-
-          <div className="h-[250px] w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={taskAgingData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <XAxis dataKey="bucket" stroke="#64748b" fontSize={11} tickLine={false} axisLine={{ stroke: "#25273e" }} />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      return (
-                        <div className="bg-[#1a1c2e]/95 border border-amber-500/40 rounded-xl p-3 shadow-2xl text-xs space-y-1">
-                          <div className="font-bold text-amber-300 border-b border-[#313454] pb-1 flex items-center justify-between gap-2">
-                            <span>Age Bucket: {label}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4 font-bold text-white pt-0.5">
-                            <span>Open Tasks:</span>
-                            <span className="text-amber-400 font-extrabold">{payload[0]?.value}</span>
-                          </div>
-                          <div className="text-[10px] text-amber-300 pt-1 font-semibold flex items-center gap-1 border-t border-[#313454]/60 mt-1">
-                            <span>💡 Click bar to view detailed task list</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar
-                  dataKey="count"
-                  radius={[4, 4, 0, 0]}
-                  barSize={32}
-                  className="cursor-pointer"
-                  onClick={(data: any) => {
-                    if (data && data.bucket) {
-                      setSelectedAgingBucket(data.bucket as any);
-                    }
-                  }}
-                >
-                  {taskAgingData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={selectedAgingBucket === entry.bucket ? "#fbbf24" : "#f59e0b"}
-                      className="cursor-pointer hover:opacity-80 transition-all"
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. Middle Section: Real Work Distribution Donut & Member Breakdown Table */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Donut Chart: Task Status Breakdown */}
-        <div className="lg:col-span-4 bg-card border border-border rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
-          <h3 className="text-base font-bold text-foreground tracking-tight">Workload Distribution</h3>
-
-          <div className="relative h-[200px] w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={donutData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={85}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {donutData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="#161726" strokeWidth={3} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-              <span className="text-2xl font-black text-white">{metrics.total}</span>
-              <span className="text-[11px] font-medium text-[#94a3b8]">Total Tasks</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-            {donutData.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-sm shrink-0" style={{ backgroundColor: item.color }} />
-                <span className="text-[#cbd5e1] font-medium truncate">{item.name}: {item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Member Performance Breakdown Table (With Click Drilldown) */}
-        <div className="lg:col-span-8 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-bold text-foreground tracking-tight">Member Performance Breakdown</h3>
-              <p className="text-xs text-muted-foreground">Click any member row for full task & project inspection</p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-background border border-border p-0.5 rounded-lg">
+              <Button
+                size="sm"
+                variant={!showOnlyActiveMembers ? "default" : "ghost"}
+                onClick={() => setShowOnlyActiveMembers(false)}
+                className={`h-7 text-xs px-2.5 ${!showOnlyActiveMembers ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                All
+              </Button>
+              <Button
+                size="sm"
+                variant={showOnlyActiveMembers ? "default" : "ghost"}
+                onClick={() => setShowOnlyActiveMembers(true)}
+                className={`h-7 text-xs px-2.5 ${showOnlyActiveMembers ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Active
+              </Button>
             </div>
             <Input
-              placeholder="Filter members or projects..."
+              placeholder="Filter member..."
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
-              className="h-8 w-48 text-xs bg-background border-input text-foreground"
+              className="h-8 w-44 md:w-52 text-xs bg-input/40 border-border text-foreground placeholder:text-muted-foreground/60"
             />
           </div>
+        </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-[#25273e] text-[#94a3b8]">
-                  <th className="py-3 px-3 font-semibold">Team Member</th>
-                  <th className="py-3 px-3 font-semibold text-center">Completed</th>
-                  <th className="py-3 px-3 font-semibold text-center">In Progress</th>
-                  <th className="py-3 px-3 font-semibold text-center">Pending</th>
-                  <th className="py-3 px-3 font-semibold text-center">Blocked</th>
-                  <th className="py-3 px-3 font-semibold text-center">Total</th>
-                  <th className="py-3 px-3 font-semibold text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#25273e]/50">
-                {memberPerformanceList.map((m) => (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-border/70 text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">
+                <th className="py-2.5 px-3 font-semibold">Member</th>
+                <th className="py-2.5 px-3 font-semibold text-center">Completed</th>
+                <th className="py-2.5 px-3 font-semibold text-center">In Progress</th>
+                <th className="py-2.5 px-3 font-semibold text-center">In Review</th>
+                <th className="py-2.5 px-3 font-semibold text-center">Pending</th>
+                <th className="py-2.5 px-3 font-semibold text-center">Blocked</th>
+                <th className="py-2.5 px-3 font-semibold text-center">Total</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[200px]">Capacity</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40 font-medium">
+              {memberWorkloadList.map((m) => {
+                const targetCap = range === "1" ? 8 : 40;
+                const plannedOrCap = m.plannedHours > 0 ? m.plannedHours : targetCap;
+                const pct = Math.min(100, Math.round((m.actualHours / (plannedOrCap || 1)) * 100));
+                const isOverloaded = m.actualHours > plannedOrCap;
+
+                return (
                   <tr
                     key={m.id}
                     onClick={() => onSelectMember(m.id)}
-                    className="hover:bg-[#202237] transition-colors cursor-pointer group"
+                    className="hover:bg-accent/30 transition-colors cursor-pointer group"
                   >
-                    <td className="py-3 px-3 flex items-center gap-3">
-                      <Avatar className="h-8 w-8 border border-[#313454]">
-                        {m.avatar ? (
-                          <AvatarImage src={m.avatar} alt={m.name} />
-                        ) : (
-                          <AvatarFallback className="bg-[#2a2c47] text-white text-xs font-bold">
-                            {m.name.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
-                      <div>
-                        <div className="font-semibold text-white group-hover:text-indigo-400 transition-colors">
-                          {m.name}
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="h-7 w-7 border border-border shrink-0">
+                          {m.avatar ? (
+                            <AvatarImage src={m.avatar} alt={m.displayName} />
+                          ) : (
+                            <AvatarFallback className="bg-muted text-foreground text-[10px] font-bold">
+                              {m.displayName.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                            {m.name}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground truncate max-w-[170px]">{m.userProjects}</div>
                         </div>
-                        <div className="text-[11px] text-[#64748b] truncate max-w-[180px]">{m.userProjects}</div>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-center">
-                      <span className="bg-emerald-500/10 text-emerald-400 font-bold px-2 py-0.5 rounded border border-emerald-500/20">
-                        {m.completed}
-                      </span>
+                    <td className="py-3 px-3 text-center font-mono font-medium text-foreground">
+                      {m.completed}
                     </td>
-                    <td className="py-3 px-3 text-center">
-                      <div className="inline-flex items-center gap-1.5 justify-center">
-                        <span className="bg-blue-500/10 text-blue-400 font-bold px-2 py-0.5 rounded border border-blue-500/20">
-                          {m.inProgress}
-                        </span>
-                        {m.overdue > 0 && (
-                          <span
-                            className="bg-amber-500/10 text-amber-400 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-500/20"
-                            title={`${m.overdue} task(s) past due date`}
-                          >
-                            {m.overdue} overdue
-                          </span>
-                        )}
-                      </div>
+                    <td className="py-3 px-3 text-center font-mono font-medium text-foreground">
+                      {m.inProgress}
                     </td>
-                    <td className="py-3 px-3 text-center">
-                      <span className="bg-amber-500/10 text-amber-400 font-bold px-2 py-0.5 rounded border border-amber-500/20">
-                        {m.pending}
-                      </span>
+                    <td className="py-3 px-3 text-center font-mono font-medium text-foreground">
+                      {m.inReview}
                     </td>
-                    <td className="py-3 px-3 text-center">
-                      <span className="bg-rose-500/10 text-rose-400 font-bold px-2 py-0.5 rounded border border-rose-500/20">
+                    <td className="py-3 px-3 text-center font-mono font-medium text-foreground">
+                      {m.pending}
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono font-medium">
+                      <span className={m.blocked > 0 ? "text-rose-400 font-bold" : "text-muted-foreground"}>
                         {m.blocked}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-center font-bold text-white">{m.total}</td>
-                    <td className="py-3 px-3 text-right">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs text-indigo-400 hover:text-white hover:bg-indigo-600/30">
-                        Inspect
-                      </Button>
+                    <td className="py-3 px-3 text-center font-mono font-bold text-foreground">
+                      {m.total}
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="space-y-1.5 max-w-[220px]">
+                        <div className="flex items-center justify-between text-[11px] font-mono">
+                          <span className="text-foreground/90 font-medium">
+                            {m.actualHours.toFixed(1)}h <span className="text-muted-foreground font-normal">/ {plannedOrCap.toFixed(1)}h</span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">{pct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-muted/50 rounded-full overflow-hidden flex">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              isOverloaded ? "bg-rose-500" : "bg-blue-500"
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
                     </td>
                   </tr>
-                ))}
-                {memberPerformanceList.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-center text-xs text-[#94a3b8]">
-                      No team members match your search query
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Interactive Task Inspection List */}
-      <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-foreground tracking-tight">Interactive Task Inspection</h3>
-            <p className="text-xs text-muted-foreground">Review real task statuses, codes, priorities and blocker reasons</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {(["all", "Completed", "In Progress", "Blocked", "Pending"] as const).map((st) => (
-              <Button
-                key={st}
-                size="sm"
-                variant={taskFilter === st ? "default" : "outline"}
-                onClick={() => setTaskFilter(st)}
-                className={`h-7 text-xs ${
-                  taskFilter === st
-                    ? "bg-primary text-primary-foreground font-semibold"
-                    : "bg-background border-input text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {st}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto">
-          {inspectedTasks.slice(0, 14).map((t) => (
-            <div
-              key={t.id}
-              className="bg-background border border-border rounded-xl p-3 space-y-2 hover:border-primary/50 transition-all text-xs"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 font-medium text-foreground">
-                  <span className="font-mono text-primary font-bold">{t.task_code}</span>
-                  <span className="truncate max-w-[220px] font-semibold text-foreground">{t.task_name}</span>
-                </div>
-                <Badge
-                  variant="outline"
-                  className={
-                    t.status === "Completed"
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-semibold text-[10px]"
-                      : t.status === "Blocked"
-                      ? "bg-rose-500/10 text-rose-400 border-rose-500/30 font-semibold text-[10px]"
-                      : "bg-indigo-500/10 text-indigo-300 border-indigo-500/30 font-semibold text-[10px]"
-                  }
-                >
-                  {t.status}
-                </Badge>
-              </div>
-              <div className="flex flex-wrap items-center justify-between text-[11px] text-muted-foreground">
-                <span>Project: {t.project_name || "General"}</span>
-                <span>Priority: {t.priority}</span>
-              </div>
-              {t.status === "Blocked" && t.blocker_reason && (
-                <div className="text-[11px] text-rose-400 bg-rose-500/10 p-1.5 rounded border border-rose-500/20 font-medium">
-                  🚨 Blocker: {t.blocker_reason}
-                </div>
+                );
+              })}
+              {memberWorkloadList.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-xs text-muted-foreground">
+                    No team members match your search query
+                  </td>
+                </tr>
               )}
-            </div>
-          ))}
-          {inspectedTasks.length === 0 && (
-            <div className="col-span-2 py-6 text-center text-xs text-muted-foreground">
-              No tasks found under filter "{taskFilter}"
-            </div>
-          )}
+            </tbody>
+          </table>
         </div>
       </div>
+
+      {/* 3. Analytics & Charts Section (Clean, consistent, placed below table) */}
+      <div className="space-y-4 pt-1">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold text-foreground tracking-tight">Execution Analytics</h3>
+            <p className="text-xs text-muted-foreground">Task status allocation, velocity, aging and hour breakdown</p>
+          </div>
+        </div>
+
+        {/* Row 1: Memberwise Task Status & Team Velocity */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Memberwise Task Breakdown Stacked Bar Chart */}
+          <div className="lg:col-span-7 bg-card border border-border/70 rounded-xl p-4 md:p-5 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-foreground tracking-tight">Memberwise Task Status</h4>
+                <p className="text-xs text-muted-foreground">Real task allocation per team member</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="flex items-center gap-1 text-emerald-400 font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-[#10b981]" /> Done
+                </span>
+                <span className="flex items-center gap-1 text-blue-400 font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-[#3b82f6]" /> In Prog
+                </span>
+                <span className="flex items-center gap-1 text-purple-400 font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-[#a855f7]" /> Review
+                </span>
+                <span className="flex items-center gap-1 text-amber-400 font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-[#f59e0b]" /> Pending
+                </span>
+                <span className="flex items-center gap-1 text-rose-400 font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-[#f43f5e]" /> Blocked
+                </span>
+              </div>
+            </div>
+
+            <div className="h-[250px] w-full pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={memberBarChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                  <XAxis
+                    dataKey="name"
+                    stroke="#64748b"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={{ stroke: "#25273e" }}
+                    interval={0}
+                    angle={-20}
+                    textAnchor="end"
+                    height={40}
+                  />
+                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const full = payload[0]?.payload?.fullName || label;
+                        const tot = payload[0]?.payload?.total || 0;
+                        const overdueCount = payload[0]?.payload?.overdue || 0;
+                        return (
+                          <div className="bg-popover border border-border rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[160px]">
+                            <div className="font-bold text-foreground border-b border-border pb-1.5 flex items-center justify-between">
+                              <span>{full}</span>
+                              <span className="text-[10px] text-muted-foreground font-normal">({tot} tasks)</span>
+                            </div>
+                            {payload.map((entry: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between gap-3">
+                                <span style={{ color: entry.color }} className="font-medium">{entry.name}:</span>
+                                <span className="font-mono font-bold text-foreground">{entry.value}</span>
+                              </div>
+                            ))}
+                            {overdueCount > 0 && (
+                              <div className="flex items-center justify-between gap-3 pt-1 border-t border-border/60 text-rose-400 font-medium">
+                                <span>Overdue:</span>
+                                <span className="font-mono font-bold">{overdueCount}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="Completed" fill="#10b981" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
+                  <Bar dataKey="InProgress" fill="#3b82f6" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
+                  <Bar dataKey="InReview" fill="#a855f7" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
+                  <Bar dataKey="Pending" fill="#f59e0b" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
+                  <Bar dataKey="Blocked" fill="#f43f5e" stackId="a" radius={[2, 2, 0, 0]} barSize={18} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Team Completion Velocity Line Chart */}
+          <div className="lg:col-span-5 bg-card border border-border/70 rounded-xl p-4 md:p-5 shadow-sm space-y-3">
+            <div>
+              <h4 className="text-sm font-bold text-foreground tracking-tight">Team Completion Velocity</h4>
+              <p className="text-xs text-muted-foreground">Daily task completions over {RANGE_LABEL[range as RangeKey]}</p>
+            </div>
+
+            <div className="h-[250px] w-full pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={completionTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} axisLine={{ stroke: "#25273e" }} />
+                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-popover border border-border rounded-lg p-2.5 shadow-xl text-xs space-y-1">
+                            <div className="font-bold text-foreground border-b border-border pb-1">{label}</div>
+                            <div className="flex items-center justify-between gap-4 font-semibold text-emerald-400">
+                              <span>Completed:</span>
+                              <span className="font-mono font-bold">{payload[0]?.value}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="completed"
+                    stroke="#10b981"
+                    strokeWidth={2.5}
+                    dot={{ r: 3, fill: "#10b981" }}
+                    activeDot={{ r: 5, strokeWidth: 2, stroke: "#161726" }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Planned vs Actual Hours & Task Aging & Workload Distribution */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Planned vs Actual Hours BarChart */}
+          <div className="lg:col-span-5 bg-card border border-border/70 rounded-xl p-4 md:p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-foreground tracking-tight flex items-center gap-1.5">
+                  <BarChart2 className="h-3.5 w-3.5 text-primary" /> Planned vs Actual Hours
+                </h4>
+                <p className="text-xs text-muted-foreground">Logged vs planned hours per member</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="flex items-center gap-1 text-indigo-400 font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-[#6366f1]" /> Plan
+                </span>
+                <span className="flex items-center gap-1 text-emerald-400 font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-[#10b981]" /> Act
+                </span>
+              </div>
+            </div>
+
+            <div className="h-[220px] w-full pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={planVsActualData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                  <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={{ stroke: "#25273e" }} interval={0} angle={-20} textAnchor="end" />
+                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const full = payload[0]?.payload?.fullName || label;
+                        return (
+                          <div className="bg-popover border border-border rounded-xl p-2.5 shadow-xl text-xs space-y-1 min-w-[150px]">
+                            <div className="font-bold text-foreground border-b border-border pb-1">{full}</div>
+                            {payload.map((entry: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between gap-3">
+                                <span style={{ color: entry.color }} className="font-medium">{entry.name}:</span>
+                                <span className="font-mono font-bold text-foreground">{entry.value}h</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar
+                    dataKey="planned"
+                    fill="#6366f1"
+                    radius={[2, 2, 0, 0]}
+                    barSize={14}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={(entry: any) => {
+                      if (entry && entry.id) onSelectMember(entry.id);
+                    }}
+                  />
+                  <Bar
+                    dataKey="actual"
+                    fill="#10b981"
+                    radius={[2, 2, 0, 0]}
+                    barSize={14}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={(entry: any) => {
+                      if (entry && entry.id) onSelectMember(entry.id);
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Task Aging BarChart */}
+          <div className="lg:col-span-4 bg-card border border-border/70 rounded-xl p-4 md:p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-foreground tracking-tight flex items-center gap-1.5">
+                  <Hourglass className="h-3.5 w-3.5 text-amber-400" /> Task Aging
+                </h4>
+                <p className="text-xs text-muted-foreground">Open tasks age distribution</p>
+              </div>
+              <span className="text-[10px] font-medium text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                Click bar
+              </span>
+            </div>
+
+            <div className="h-[220px] w-full pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={taskAgingData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="bucket" stroke="#64748b" fontSize={11} tickLine={false} axisLine={{ stroke: "#25273e" }} />
+                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-popover border border-border rounded-lg p-2.5 shadow-xl text-xs space-y-1">
+                            <div className="font-bold text-amber-400 border-b border-border pb-1">Bucket: {label}</div>
+                            <div className="flex items-center justify-between gap-4 font-semibold text-foreground">
+                              <span>Open Tasks:</span>
+                              <span className="font-mono font-bold text-amber-400">{payload[0]?.value}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar
+                    dataKey="count"
+                    radius={[3, 3, 0, 0]}
+                    barSize={24}
+                    className="cursor-pointer"
+                    onClick={(data: any) => {
+                      if (data && data.bucket) {
+                        setSelectedAgingBucket(data.bucket as any);
+                      }
+                    }}
+                  >
+                    {taskAgingData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={selectedAgingBucket === entry.bucket ? "#fbbf24" : "#f59e0b"}
+                        className="cursor-pointer hover:opacity-80 transition-all"
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Workload Distribution Donut */}
+          <div className="lg:col-span-3 bg-card border border-border/70 rounded-xl p-4 md:p-5 shadow-sm flex flex-col justify-between space-y-3">
+            <div>
+              <h4 className="text-sm font-bold text-foreground tracking-tight">Workload Mix</h4>
+              <p className="text-xs text-muted-foreground">Status proportion</p>
+            </div>
+
+            <div className="relative h-[160px] w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={donutData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={48}
+                    outerRadius={68}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {donutData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} stroke="#161726" strokeWidth={2} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                <span className="text-xl font-black text-foreground font-mono">{metrics.total}</span>
+                <span className="text-[10px] font-medium text-muted-foreground">Total</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5 text-[11px] pt-1">
+              {donutData.map((item, idx) => (
+                <div key={idx} className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-sm shrink-0" style={{ backgroundColor: item.color }} />
+                  <span className="text-muted-foreground font-medium truncate">{item.name}: <span className="font-mono text-foreground font-bold">{item.value}</span></span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
 
       {/* Status Details Full Page View Modal */}
       <StatusDetailSheet
@@ -2698,7 +2656,7 @@ function StatusDetailSheet({
   range = "7",
   onSelectMember,
 }: {
-  status: "Completed" | "In Progress" | "Blocked" | "Pending" | null;
+  status: "Completed" | "In Progress" | "In Review" | "Blocked" | "Pending" | null;
   onClose: () => void;
   profiles: Profile[];
   tasks: Task[];
@@ -2726,8 +2684,11 @@ function StatusDetailSheet({
     if (!status) return [];
     if (status === "Pending") {
       return activeSourceTasks.filter(
-        (t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "Blocked",
+        (t) => t.status === "To Do" || t.status === "Pending" || (t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold"),
       );
+    }
+    if (status === "Blocked") {
+      return activeSourceTasks.filter((t) => t.status === "Blocked" || t.status === "On Hold");
     }
     return activeSourceTasks.filter((t) => t.status === status);
   }, [activeSourceTasks, status]);
@@ -2798,6 +2759,13 @@ function StatusDetailSheet({
       icon: Clock,
       iconCls: "text-blue-400 bg-blue-500/10 border-blue-500/30",
     },
+    "In Review": {
+      title: "In Review Tasks — QA & Approvals",
+      badge: "In Review",
+      badgeCls: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+      icon: Clock,
+      iconCls: "text-purple-400 bg-purple-500/10 border-purple-500/30",
+    },
     Blocked: {
       title: "Blocked Tasks & Risk Analysis",
       badge: "Risk Alert",
@@ -2807,7 +2775,7 @@ function StatusDetailSheet({
     },
     Pending: {
       title: "Pending Queue — Work Backlog",
-      badge: "To Do & Review",
+      badge: "To Do",
       badgeCls: "bg-amber-500/10 text-amber-400 border-amber-500/30",
       icon: Users,
       iconCls: "text-amber-400 bg-amber-500/10 border-amber-500/30",
