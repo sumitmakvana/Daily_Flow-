@@ -239,7 +239,7 @@ export const addHolidayFn = createServerFn({ method: "POST" })
 
 export const removeHolidayFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string }) =>
+  .validator((d: { id: string }) =>
     z.object({ id: z.string().uuid() }).parse(d),
   )
   .handler(async ({ data, context }) => {
