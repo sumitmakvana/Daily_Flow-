@@ -399,6 +399,116 @@ function TeamCapacityPage() {
     });
   }, [memberData, search, teamFilter, projectFilter, statusFilter, availabilityFilter]);
 
+  // 5. Group data by project for Project View
+  const projectGroupedData = useMemo(() => {
+    const groupMap = new Map<
+      string,
+      {
+        projectName: string;
+        membersMap: Map<
+          string,
+          {
+            profile: Profile;
+            title: string;
+            teamName: string;
+            tasks: Task[];
+            activeTask: Task | null;
+            upcomingTasks: Task[];
+            completedTodayTasks: Task[];
+            totalPlannedHours: number;
+            totalActualHours: number;
+          }
+        >;
+      }
+    >();
+
+    filteredMembers.forEach((item) => {
+      const p = item.profile;
+      if (item.memberTasks.length === 0) {
+        const key = "unassigned / general";
+        if (!groupMap.has(key)) {
+          groupMap.set(key, { projectName: "Unassigned / General", membersMap: new Map() });
+        }
+        groupMap.get(key)!.membersMap.set(p.id, {
+          profile: p,
+          title: item.title,
+          teamName: item.teamName,
+          tasks: [],
+          activeTask: null,
+          upcomingTasks: [],
+          completedTodayTasks: [],
+          totalPlannedHours: 0,
+          totalActualHours: 0,
+        });
+      } else {
+        item.memberTasks.forEach((t) => {
+          const rawPName = t.project_name && t.project_name.trim() ? t.project_name.trim() : "Unassigned / General";
+          const key = rawPName.toLowerCase();
+          if (!groupMap.has(key)) {
+            groupMap.set(key, { projectName: rawPName, membersMap: new Map() });
+          }
+          const group = groupMap.get(key)!;
+          if (!group.membersMap.has(p.id)) {
+            group.membersMap.set(p.id, {
+              profile: p,
+              title: item.title,
+              teamName: item.teamName,
+              tasks: [],
+              activeTask: null,
+              upcomingTasks: [],
+              completedTodayTasks: [],
+              totalPlannedHours: 0,
+              totalActualHours: 0,
+            });
+          }
+          const mEntry = group.membersMap.get(p.id)!;
+          mEntry.tasks.push(t);
+          mEntry.totalPlannedHours += Number(t.planned_hours || 0);
+          mEntry.totalActualHours += Number(t.actual_hours || 0);
+        });
+      }
+    });
+
+    const result = Array.from(groupMap.values()).map((g) => {
+      const membersList = Array.from(g.membersMap.values()).map((m) => {
+        const activeTask = m.tasks.find((t) => t.status === "In Progress") || m.tasks[0] || null;
+        const upcomingTasks = m.tasks.filter((t) => t.status === "To Do" || (t.status as string) === "Pending");
+        const completedTodayTasks = m.tasks.filter((t) => isTaskCompletedToday(t, todayStr));
+        return {
+          ...m,
+          activeTask,
+          upcomingTasks,
+          completedTodayTasks,
+        };
+      });
+
+      const totalProjectTasks = membersList.reduce((sum, m) => sum + m.tasks.length, 0);
+      const activeTasksCount = membersList.reduce(
+        (sum, m) => sum + m.tasks.filter((t) => t.status === "In Progress").length,
+        0,
+      );
+      const totalPlannedHours = membersList.reduce((sum, m) => sum + m.totalPlannedHours, 0);
+
+      return {
+        projectName: g.projectName,
+        members: membersList,
+        totalProjectTasks,
+        activeTasksCount,
+        totalPlannedHours,
+      };
+    });
+
+    const filteredByProj = projectFilter === "all"
+      ? result
+      : result.filter((g) => g.projectName.toLowerCase().includes(projectFilter.toLowerCase()));
+
+    return filteredByProj.sort((a, b) => {
+      if (a.projectName === "Unassigned / General") return 1;
+      if (b.projectName === "Unassigned / General") return -1;
+      return a.projectName.localeCompare(b.projectName);
+    });
+  }, [filteredMembers, projectFilter, todayStr]);
+
   // Pagination calculation
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
   const paginatedMembers = useMemo(() => {
@@ -844,18 +954,18 @@ function TeamCapacityPage() {
       </div>
 
       {/* MAIN TABLE VIEW */}
-      {viewMode === "table" ? (
+      {viewMode === "table" && (
         <div className="bg-card border border-border/70 rounded-xl overflow-x-auto shadow-xs">
-          <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+          <table className="w-full text-left text-xs border-collapse min-w-[900px]">
             <thead>
               <tr className="border-b border-border/70 text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">
-                <th className="py-3 px-3.5 w-[22%] min-w-[180px] font-semibold">Member</th>
-                <th className="py-3 px-3.5 w-[24%] min-w-[200px] font-semibold">Current Work</th>
-                <th className="py-3 px-3.5 w-[16%] min-w-[150px] font-semibold">Upcoming Work</th>
-                <th className="py-3 px-3.5 w-[16%] min-w-[160px] font-semibold">Capacity</th>
-                <th className="py-3 px-3.5 w-[10%] min-w-[110px] font-semibold">Done Today</th>
-                <th className="py-3 px-3.5 w-[12%] min-w-[120px] font-semibold">History</th>
-                <th className="py-3 px-3.5 w-[10%] min-w-[100px] font-semibold">Projects</th>
+                <th className="py-3 pl-3.5 pr-2 w-[18%] min-w-[150px] font-semibold">Member</th>
+                <th className="py-3 px-2 w-[26%] min-w-[180px] font-semibold">Current Work</th>
+                <th className="py-3 px-2 w-[13%] min-w-[110px] font-semibold">Upcoming Work</th>
+                <th className="py-3 px-2 w-[13%] min-w-[120px] font-semibold">Capacity</th>
+                <th className="py-3 px-2 w-[10%] min-w-[85px] font-semibold">Done Today</th>
+                <th className="py-3 px-2 w-[10%] min-w-[85px] font-semibold">History</th>
+                <th className="py-3 pl-2 pr-3.5 w-[10%] min-w-[95px] font-semibold">Projects</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40 font-medium">
@@ -875,7 +985,7 @@ function TeamCapacityPage() {
                       >
                         {/* 1. Member Info */}
                         <td
-                          className="py-3 px-3.5 cursor-pointer"
+                          className="py-3 pl-3.5 pr-2 cursor-pointer"
                           onClick={() => setInspectMemberId(p.id)}
                         >
                           <div className="flex items-center gap-2.5">
@@ -898,83 +1008,89 @@ function TeamCapacityPage() {
                         </td>
 
                         {/* 2. Current Work */}
-                        <td className="py-3 px-3.5">
+                        <td className="py-3 px-2">
                           {item.activeTasks.length > 0 ? (
-                            <div className="space-y-1.5">
+                            <div className="space-y-1">
                               {item.activeTasks.slice(0, 2).map((t) => (
                                 <div
                                   key={t.id}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setInspectTaskItem({ task: t, profile: p });
-                                  }}
-                                  className="flex items-center justify-between gap-2 p-1.5 rounded-md bg-muted/40 hover:bg-muted/80 border border-border/80 cursor-pointer transition-all group/task"
-                                  title="Click to view all task details"
+                                  onClick={() => setActiveTaskModalItem({ task: t, member: p })}
+                                  className="flex items-center justify-between gap-2 p-1.5 rounded-md bg-muted/40 hover:bg-accent/50 border border-border/50 cursor-pointer transition-colors group/item"
                                 >
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
-                                    <span className="font-medium text-foreground truncate max-w-[140px] group-hover/task:text-primary">
+                                  <div className="min-w-0 flex items-center gap-1.5">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+                                    <span className="truncate text-foreground font-semibold group-hover/item:text-primary transition-colors">
                                       {t.task_name}
                                     </span>
                                   </div>
-                                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">
-                                    {t.planned_hours ? `${t.planned_hours}h` : "Active"}
+                                  <span className="font-mono text-[10px] text-muted-foreground shrink-0 bg-background px-1 py-0.5 rounded border border-border">
+                                    {t.planned_hours || 0}h
                                   </span>
                                 </div>
                               ))}
                               {item.activeTasks.length > 2 && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setInspectTaskItem({ task: item.activeTasks[0], profile: p });
-                                  }}
-                                  className="text-[10px] text-muted-foreground hover:text-foreground font-medium block"
-                                >
-                                  +{item.activeTasks.length - 2} more
-                                </button>
+                                <div className="text-[10px] text-muted-foreground font-mono pl-1">
+                                  +{item.activeTasks.length - 2} more active
+                                </div>
                               )}
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground/60">—</span>
+                            <span className="text-muted-foreground/60 italic text-[11px]">No active work</span>
                           )}
                         </td>
 
                         {/* 3. Upcoming Work */}
-                        <td className="py-3 px-3.5">
+                        <td className="py-3 px-2">
                           {item.upcomingTasks.length > 0 ? (
                             <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setUpcomingTasksModalItem({ member: p, tasks: item.upcomingTasks });
-                              }}
-                              className="p-1.5 rounded-md bg-muted/30 hover:bg-muted/70 border border-border/80 cursor-pointer transition-all space-y-1 group/upc"
-                              title="Click to inspect queued tasks"
+                              onClick={() => setUpcomingTasksModalItem({ member: p, tasks: item.upcomingTasks })}
+                              className="p-1.5 rounded-md bg-muted/30 hover:bg-accent/40 border border-border/40 cursor-pointer transition-colors flex items-center justify-between"
                             >
-                              <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-[10px] font-medium text-foreground">{item.upcomingTasks.length} queued</span>
-                                <span className="text-[10px] font-mono text-muted-foreground">
-                                  {item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0)}h total
-                                </span>
-                              </div>
+                              <span className="font-medium text-foreground">
+                                {item.upcomingTasks.length} queued
+                              </span>
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                {item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0)}h total
+                              </span>
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground/60">—</span>
+                            <span className="text-muted-foreground/60 italic text-[11px]">Queue clear</span>
                           )}
                         </td>
 
-                        {/* 4. Availability & Capacity */}
-                        <td className="py-3 px-3.5">
-                          <div className="space-y-1.5 max-w-[180px]">
-                            <div className="flex items-center justify-between text-[11px] font-mono">
-                              <span className="text-foreground">{formatHoursMins(item.plannedHours)} / 8h</span>
-                              <span className="text-[10px] text-muted-foreground">{item.capacityPct}%</span>
+                        {/* 4. Capacity */}
+                        <td className="py-3 px-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-mono text-foreground font-semibold">
+                                {item.plannedHours}h / 8h
+                              </span>
+                              <span
+                                className={cn(
+                                  "font-mono font-bold text-[10px]",
+                                  item.capacityStatus === "overloaded"
+                                    ? "text-rose-400"
+                                    : item.capacityStatus === "partially"
+                                    ? "text-amber-400"
+                                    : item.capacityStatus === "free"
+                                    ? "text-emerald-400"
+                                    : "text-blue-400"
+                                )}
+                              >
+                                {item.capacityPct}%
+                              </span>
                             </div>
-                            <div className="h-2 w-full bg-muted/60 rounded-full overflow-hidden flex">
+                            <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
                               <div
                                 className={cn(
-                                  "h-full rounded-full transition-all",
-                                  item.capacityStatus === "overloaded" ? "bg-rose-500" : "bg-blue-500"
+                                  "h-full rounded-full transition-all duration-300",
+                                  item.capacityStatus === "overloaded"
+                                    ? "bg-rose-500"
+                                    : item.capacityStatus === "partially"
+                                    ? "bg-amber-500"
+                                    : item.capacityStatus === "free"
+                                    ? "bg-emerald-500"
+                                    : "bg-blue-500"
                                 )}
                                 style={{ width: `${Math.min(100, item.capacityPct)}%` }}
                               />
@@ -982,53 +1098,45 @@ function TeamCapacityPage() {
                           </div>
                         </td>
 
-                        {/* 5. Completed Today */}
-                        <td className="py-3 px-3.5">
-                          <div className="space-y-0.5 font-mono">
-                            <div className="text-xs font-semibold text-foreground">
+                        {/* 5. Done Today */}
+                        <td className="py-3 px-2">
+                          <div className="space-y-0.5">
+                            <div className="font-mono text-foreground font-semibold">
                               {item.completedTodayHours} hrs
                             </div>
-                            <div className="text-[10px] text-muted-foreground">
+                            <div className="text-[10px] text-muted-foreground font-mono">
                               {item.completedTodayTasks.length} tasks
                             </div>
                           </div>
                         </td>
 
-                        {/* 6. Completed History */}
-                        <td className="py-3 px-3.5" onClick={(e) => e.stopPropagation()}>
-                          {item.historyList.length > 0 ? (
-                            <button
-                              type="button"
-                              onClick={() => toggleExpandHistory(p.id)}
-                              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-medium p-1 rounded hover:bg-muted/40 transition-colors"
-                            >
-                              <Calendar className="h-3.5 w-3.5" />
-                              <span>{item.historyList.length} days</span>
-                              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/60">—</span>
-                          )}
+                        {/* 6. History */}
+                        <td className="py-3 px-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpandHistory(p.id)}
+                            className="text-[11px] font-semibold px-2 py-1 rounded bg-muted/40 hover:bg-accent text-foreground border border-border/50 flex items-center gap-1"
+                          >
+                            <Calendar className="h-3 w-3 text-muted-foreground" />
+                            <span>{item.historyList.length} days</span>
+                            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                          </button>
                         </td>
 
                         {/* 7. Projects */}
-                        <td className="py-3 px-3.5">
-                          <div className="flex flex-wrap gap-1 max-w-[120px]">
-                            {item.skills.length > 0 ? (
-                              item.skills.slice(0, 2).map((proj, idx) => (
-                                <Badge
-                                  key={idx}
-                                  variant="secondary"
-                                  className="text-[9px] px-1.5 py-0.5 truncate max-w-[90px] bg-muted/60 text-muted-foreground border border-border/60"
-                                >
-                                  {proj}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-xs text-muted-foreground/60">—</span>
-                            )}
+                        <td className="py-3 pl-2 pr-3.5">
+                          <div className="flex flex-wrap gap-1">
+                            {item.skills.slice(0, 2).map((sk, idx) => (
+                              <Badge
+                                key={idx}
+                                variant="secondary"
+                                className="text-[9px] px-1.5 py-0.2 bg-muted/50 text-muted-foreground border border-border/50 truncate max-w-[90px]"
+                              >
+                                {sk}
+                              </Badge>
+                            ))}
                             {item.skills.length > 2 && (
-                              <span className="text-[10px] text-muted-foreground font-mono">
+                              <span className="text-[9px] text-muted-foreground font-mono">
                                 +{item.skills.length - 2}
                               </span>
                             )}
@@ -1036,83 +1144,46 @@ function TeamCapacityPage() {
                         </td>
                       </tr>
 
-                      {/* EXPANDED COMPLETED HISTORY DRAWER ROW */}
+                      {/* Expandable History Detail Row */}
                       {isExpanded && (
-                        <tr className="bg-muted/20">
-                          <td colSpan={7} className="p-4 border-t border-b border-border/80">
-                            <div className="space-y-3 max-w-4xl">
-                              <div className="flex items-center justify-between border-b border-border pb-2">
-                                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                                  <Calendar className="h-4 w-4 text-primary" />
-                                  <span>Completed Tasks History for {p.display_name}</span>
-                                </div>
-                                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary bg-primary/10 font-mono">
-                                  {item.completedTasks.length} Total Tasks Completed
-                                </Badge>
+                        <tr className="bg-muted/10 border-b border-border/50">
+                          <td colSpan={7} className="p-3 pl-12">
+                            <div className="p-3 bg-card border border-border rounded-lg space-y-2 max-w-2xl">
+                              <div className="text-xs font-bold text-foreground flex items-center justify-between">
+                                <span>Completed Tasks History for {p.display_name}</span>
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  {item.completedTasks.length} Total Completed
+                                </span>
                               </div>
-
                               {item.historyList.length > 0 ? (
-                                <div className="space-y-2.5">
-                                  {item.historyList.map((hist) => (
-                                    <div
-                                      key={hist.dateStr}
-                                      className="bg-card border border-border rounded-lg p-3 space-y-2"
-                                    >
-                                      {/* Date Header */}
-                                      <div className="flex items-center justify-between text-xs font-semibold text-foreground border-b border-border/80 pb-1.5">
-                                        <div className="flex items-center gap-2">
-                                          <span>{hist.formattedDate}</span>
-                                          {hist.relativeLabel && (
-                                            <span className="text-[10px] font-normal text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                                              {hist.relativeLabel}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <span className="text-emerald-400 font-mono text-[11px]">
-                                          {hist.totalHours} hrs Completed
+                                item.historyList.map((hist) => (
+                                  <div
+                                    key={hist.dateStr}
+                                    className="text-xs space-y-1 border-b border-border/50 pb-1.5 last:border-0 last:pb-0"
+                                  >
+                                    <div className="flex items-center justify-between text-foreground font-semibold text-[11px]">
+                                      <span>
+                                        {hist.formattedDate} ({hist.relativeLabel || "Past"})
+                                      </span>
+                                      <span className="font-mono text-foreground">{hist.totalHours} hrs</span>
+                                    </div>
+                                    {hist.tasks.map((t) => (
+                                      <div
+                                        key={t.id}
+                                        onClick={() => setInspectTaskItem({ task: t, profile: p })}
+                                        className="text-[11px] text-muted-foreground hover:text-foreground flex items-center justify-between pl-2 cursor-pointer transition-colors"
+                                      >
+                                        <span className="truncate">• {t.task_name}</span>
+                                        <span className="font-mono text-[10px] text-muted-foreground">
+                                          {t.actual_hours || t.planned_hours || 0}h
                                         </span>
                                       </div>
-
-                                      {/* Completed Tasks List */}
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-0.5">
-                                        {hist.tasks.map((task) => (
-                                          <div
-                                            key={task.id}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setInspectTaskItem({ task, profile: p });
-                                            }}
-                                            className="flex items-center justify-between gap-2 p-2 bg-muted/40 hover:bg-muted/80 border border-border rounded text-xs cursor-pointer transition-all hover:scale-[1.01] group/histTask"
-                                            title="Click to view all task details"
-                                          >
-                                            <div className="flex items-center gap-2 min-w-0">
-                                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                                              <div className="min-w-0 space-y-0.5">
-                                                <div className="font-medium text-foreground truncate group-hover/histTask:text-primary" title={task.task_name}>
-                                                  {task.task_name}
-                                                </div>
-                                                {task.project_name && (
-                                                  <span className="text-[9px] text-muted-foreground block truncate">
-                                                    Proj: {task.project_name}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </div>
-                                            <Badge
-                                              variant="secondary"
-                                              className="text-[9px] font-mono shrink-0 bg-muted text-emerald-400 border border-emerald-500/20"
-                                            >
-                                              {task.actual_hours || task.planned_hours || 0} hrs
-                                            </Badge>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                                    ))}
+                                  </div>
+                                ))
                               ) : (
-                                <div className="py-3 text-center text-xs text-muted-foreground italic">
-                                  No past completed tasks recorded for this member.
+                                <div className="text-xs text-muted-foreground/60 italic">
+                                  No past history recorded
                                 </div>
                               )}
                             </div>
@@ -1124,258 +1195,336 @@ function TeamCapacityPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-xs text-muted-foreground">
-                    No team members found matching search & filter criteria.
+                  <td colSpan={7} className="py-12 text-center text-muted-foreground text-xs">
+                    No team members found matching current filters.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
 
-          {/* Pagination Controls */}
-          <div className="bg-muted/30 border-t border-border px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-            <div>
-              Showing {filteredMembers.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{" "}
-              {Math.min(currentPage * pageSize, filteredMembers.length)} of {filteredMembers.length} members
+          {/* Pagination Controls inside Table View */}
+          <div className="p-3 border-t border-border flex items-center justify-between gap-2 text-xs">
+            <div className="text-muted-foreground text-[11px]">
+              Showing <span className="font-mono text-foreground">{paginatedMembers.length}</span> of{" "}
+              <span className="font-mono text-foreground">{filteredMembers.length}</span> members
             </div>
-
             <div className="flex items-center gap-1">
               <Button
-                variant="outline"
                 size="sm"
+                variant="outline"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(1)}
-                className="h-7 w-7 p-0 border-border bg-card text-foreground disabled:opacity-40"
+                className="h-7 w-7 p-0"
               >
                 <ChevronsLeft className="h-3.5 w-3.5" />
               </Button>
               <Button
-                variant="outline"
                 size="sm"
+                variant="outline"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="h-7 w-7 p-0 border-border bg-card text-foreground disabled:opacity-40"
+                className="h-7 w-7 p-0"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
 
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                <Button
-                  key={pageNum}
-                  variant={pageNum === currentPage ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={cn(
-                    "h-7 w-7 p-0 text-xs font-semibold font-mono",
-                    pageNum === currentPage
-                      ? "bg-primary text-primary-foreground"
-                      : "border-border bg-card text-foreground hover:bg-accent"
-                  )}
-                >
-                  {pageNum}
-                </Button>
-              ))}
+              <span className="px-2 text-foreground font-mono text-[11px]">
+                Page {currentPage} of {totalPages}
+              </span>
 
               <Button
-                variant="outline"
                 size="sm"
+                variant="outline"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="h-7 w-7 p-0 border-border bg-card text-foreground disabled:opacity-40"
+                className="h-7 w-7 p-0"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </Button>
               <Button
-                variant="outline"
                 size="sm"
+                variant="outline"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(totalPages)}
-                className="h-7 w-7 p-0 border-border bg-card text-foreground disabled:opacity-40"
+                className="h-7 w-7 p-0"
               >
                 <ChevronsRight className="h-3.5 w-3.5" />
               </Button>
             </div>
-
-            <Button
-              size="sm"
-              onClick={() => handleAssignTask(user?.id ?? "")}
-              className="h-8 text-xs font-semibold gap-1.5 shadow-sm px-3.5 bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Task
-            </Button>
           </div>
         </div>
-      ) : (
-        /* CARD GRID VIEW MODE */
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredMembers.map((item) => {
-            const p = item.profile;
-            const isExpanded = !!expandedHistoryMemberIds[p.id];
+      )}
 
-            return (
-              <Card
-                key={p.id}
-                className="bg-card border-border/70 shadow-xs hover:border-border transition-all flex flex-col justify-between"
+      {/* CARD GRID VIEW MODE (GROUPED BY PROJECT) */}
+      {viewMode === "card" && (
+        <div className="space-y-6">
+          {projectGroupedData.length > 0 ? (
+            projectGroupedData.map((group) => (
+              <div
+                key={group.projectName}
+                className="bg-card border border-border/80 rounded-xl p-4 space-y-3.5 shadow-xs"
               >
-                <CardContent className="p-4 space-y-3.5">
-                  {/* Card Header */}
-                  <div className="flex items-start justify-between gap-2 border-b border-border/70 pb-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Avatar className="h-9 w-9 border border-border shrink-0">
-                        {p.avatar_url ? (
-                          <AvatarImage src={p.avatar_url} alt={p.display_name} />
-                        ) : (
-                          <AvatarFallback className="bg-muted text-foreground text-[10px] font-bold">
-                            {p.display_name.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
-                      <div className="min-w-0 space-y-0.5">
-                        <h3 className="font-semibold text-sm text-foreground truncate">{p.display_name}</h3>
-                        <p className="text-xs text-muted-foreground truncate">{item.title}</p>
-                      </div>
-                    </div>
-
-                    {/* Capacity Indicator */}
-                    <div className="flex flex-col items-end space-y-1">
-                      <div className="text-xs font-mono font-medium text-foreground">
-                        {item.capacityPct}% capacity
-                      </div>
-                      <span className="text-[10px] font-mono text-muted-foreground">
-                        {formatHoursMins(item.plannedHours)} / 8h
-                      </span>
+                {/* Project Header Banner */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                      <Briefcase className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground tracking-tight flex items-center gap-2">
+                        {group.projectName}
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground">
+                        Project Workload & Member Work Details
+                      </p>
                     </div>
                   </div>
 
-                  {/* Current Active Tasks in Card */}
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-semibold text-muted-foreground flex items-center justify-between">
-                      <span>Current Active Work</span>
-                      {item.activeTasks.length > 0 && (
-                        <span className="text-[10px] font-mono text-muted-foreground font-medium">
-                          {item.activeTasks.length} active
-                        </span>
-                      )}
-                    </div>
-                    {item.activeTasks.length > 0 ? (
-                      item.activeTasks.map((t) => (
-                        <div
-                          key={t.id}
-                          onClick={() => setInspectTaskItem({ task: t, profile: p })}
-                          className="p-2 rounded-lg bg-muted/40 hover:bg-muted/80 border border-border/70 flex items-center justify-between gap-2 cursor-pointer transition-all group/activeCard"
-                          title="Click to view all task details"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
-                            <span className="text-xs font-medium text-foreground truncate group-hover/activeCard:text-primary">
-                              {t.task_name}
-                            </span>
-                          </div>
-                          <span className="text-[10px] font-mono text-muted-foreground shrink-0">
-                            {t.planned_hours ? `${t.planned_hours}h` : "Active"}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-xs text-muted-foreground/60 p-1.5 rounded bg-muted/20">
-                        No tasks currently in progress
-                      </div>
+                  {/* Project Summary Metrics Badges */}
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <Badge variant="outline" className="bg-muted/40 border-border text-foreground font-mono text-[11px] px-2 py-0.5">
+                      <Users className="h-3 w-3 mr-1 text-muted-foreground" />
+                      {group.members.length} {group.members.length === 1 ? "Member" : "Members"}
+                    </Badge>
+                    <Badge variant="outline" className="bg-blue-500/10 border-blue-500/30 text-blue-400 font-mono text-[11px] px-2 py-0.5">
+                      <ListTodo className="h-3 w-3 mr-1" />
+                      {group.totalProjectTasks} Tasks ({group.activeTasksCount} In Progress)
+                    </Badge>
+                    {group.totalPlannedHours > 0 && (
+                      <Badge variant="outline" className="bg-amber-500/10 border-amber-500/30 text-amber-400 font-mono text-[11px] px-2 py-0.5">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {group.totalPlannedHours}h Allocated
+                      </Badge>
                     )}
                   </div>
+                </div>
 
-                  {/* Upcoming Tasks in Card */}
-                  {item.upcomingTasks.length > 0 && (
-                    <div
-                      onClick={() => setUpcomingTasksModalItem({ member: p, tasks: item.upcomingTasks })}
-                      className="p-2 rounded-lg bg-muted/30 hover:bg-muted/70 border border-border/70 flex items-center justify-between gap-2 cursor-pointer transition-all text-xs"
-                    >
-                      <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
-                        <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span>{item.upcomingTasks.length} Queued Tasks</span>
-                      </div>
-                      <span className="text-[10px] text-foreground font-mono">
-                        {item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0)}h total
-                      </span>
-                    </div>
-                  )}
+                {/* Member Cards Grid for this Project */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {group.members.map((mItem) => {
+                    const p = mItem.profile;
+                    const item = memberData.find((md) => md.profile.id === p.id) || {
+                      profile: p,
+                      title: mItem.title,
+                      capacityStatus: "available",
+                      plannedHours: mItem.totalPlannedHours,
+                      activeTasks: mItem.tasks.filter((t) => t.status === "In Progress"),
+                      upcomingTasks: mItem.upcomingTasks,
+                      completedTodayTasks: mItem.completedTodayTasks,
+                      completedTodayHours: 0,
+                      historyList: [],
+                      completedTasks: [],
+                      skills: [],
+                    };
+                    const isExpanded = !!expandedHistoryMemberIds[p.id];
+                    const projectTasks = mItem.tasks;
+                    const projectActiveTasks = projectTasks.filter((t) => t.status === "In Progress");
 
-                  {/* Completed Today Bar in Card */}
-                  <div className="p-2.5 bg-muted/40 border border-border/70 rounded-lg flex items-center justify-between gap-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <div className="font-semibold text-foreground">Completed Today</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          {item.completedTodayHours} hrs ({item.completedTodayTasks.length} tasks)
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleExpandHistory(p.id)}
-                      className="text-xs font-semibold px-2.5 py-1 rounded bg-card hover:bg-accent text-foreground border border-border flex items-center gap-1"
-                    >
-                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span>{item.historyList.length} Days</span>
-                      {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    </button>
-                  </div>
-
-                  {/* Expandable History in Card */}
-                  {isExpanded && (
-                    <div className="p-3 bg-muted/20 border border-border rounded-lg space-y-2">
-                      <div className="text-xs font-bold text-foreground flex items-center justify-between">
-                        <span>Completed Tasks History</span>
-                        <span className="text-[10px] text-muted-foreground font-mono">{item.completedTasks.length} Total</span>
-                      </div>
-                      {item.historyList.length > 0 ? (
-                        item.historyList.map((hist) => (
-                          <div key={hist.dateStr} className="text-xs space-y-1 border-b border-border pb-1.5 last:border-0 last:pb-0">
-                            <div className="flex items-center justify-between text-foreground font-semibold text-[11px]">
-                              <span>{hist.formattedDate} ({hist.relativeLabel || "Past"})</span>
-                              <span className="font-mono text-foreground">{hist.totalHours} hrs</span>
-                            </div>
-                            {hist.tasks.map((t) => (
-                              <div
-                                key={t.id}
-                                onClick={() => setInspectTaskItem({ task: t, profile: p })}
-                                className="text-[11px] text-muted-foreground hover:text-foreground flex items-center justify-between pl-2 cursor-pointer transition-colors"
-                              >
-                                <span className="truncate">• {t.task_name}</span>
-                                <span className="font-mono text-[10px] text-muted-foreground">{t.actual_hours || t.planned_hours || 0}h</span>
+                    return (
+                      <Card
+                        key={p.id}
+                        className="bg-card border-border/70 shadow-xs hover:border-border transition-all flex flex-col justify-between"
+                      >
+                        <CardContent className="p-4 space-y-3.5">
+                          {/* Card Header */}
+                          <div className="flex items-start justify-between gap-2 border-b border-border/70 pb-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <Avatar className="h-9 w-9 border border-border shrink-0">
+                                {p.avatar_url ? (
+                                  <AvatarImage src={p.avatar_url} alt={p.display_name} />
+                                ) : (
+                                  <AvatarFallback className="bg-muted text-foreground text-[10px] font-bold">
+                                    {p.display_name.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                )}
+                              </Avatar>
+                              <div className="min-w-0">
+                                <div className="font-semibold text-sm text-foreground truncate">{p.display_name}</div>
+                                <div className="text-xs text-muted-foreground truncate">{mItem.title}</div>
                               </div>
-                            ))}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-xs text-muted-foreground/60 italic">No past history recorded</div>
-                      )}
-                    </div>
-                  )}
+                            </div>
 
-                  {/* Actions Footer */}
-                  <div className="pt-2 border-t border-border flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {item.skills.map((skill, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground border border-border">
-                          {skill}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Button size="sm" variant="outline" onClick={() => setInspectMemberId(p.id)} className="h-7 text-xs border-border text-foreground bg-card hover:bg-accent">
-                        Inspect
-                      </Button>
-                      <Button size="sm" onClick={() => handleAssignTask(p.id)} className="h-7 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90">
-                        Assign Task
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] font-semibold px-2 py-0.5",
+                                item.capacityStatus === "overloaded"
+                                  ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                                  : item.capacityStatus === "partially"
+                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                  : item.capacityStatus === "free"
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                  : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                              )}
+                            >
+                              {item.capacityStatus.toUpperCase()} ({item.plannedHours}h)
+                            </Badge>
+                          </div>
+
+                          {/* Current Active Work in this Project */}
+                          <div className="space-y-1.5">
+                            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                              <span>Work in {group.projectName}</span>
+                              <span className="font-mono text-foreground">{projectTasks.length} Tasks</span>
+                            </div>
+
+                            {projectActiveTasks.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {projectActiveTasks.map((t) => (
+                                  <div
+                                    key={t.id}
+                                    onClick={() => setActiveTaskModalItem({ task: t, member: p })}
+                                    className="p-2.5 rounded-lg bg-muted/30 border border-border/60 hover:border-primary/40 cursor-pointer transition-all space-y-1"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="font-semibold text-xs text-foreground truncate">{t.task_name}</span>
+                                      <StatusBadge status={t.status as TaskStatus} />
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+                                      <span>{t.project_name || "General"}</span>
+                                      <span>{t.planned_hours || 0} hrs planned</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : projectTasks.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {projectTasks.slice(0, 2).map((t) => (
+                                  <div
+                                    key={t.id}
+                                    onClick={() => setActiveTaskModalItem({ task: t, member: p })}
+                                    className="p-2.5 rounded-lg bg-muted/30 border border-border/60 hover:border-primary/40 cursor-pointer transition-all space-y-1"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="font-semibold text-xs text-foreground truncate">{t.task_name}</span>
+                                      <StatusBadge status={t.status as TaskStatus} />
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+                                      <span>{t.project_name || "General"}</span>
+                                      <span>{t.planned_hours || 0} hrs planned</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-3 rounded-lg bg-muted/20 border border-dashed border-border text-center text-xs text-muted-foreground italic">
+                                No active task in this project
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Completed Today Bar in Card */}
+                          <div className="p-2.5 bg-muted/40 border border-border/70 rounded-lg flex items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <div>
+                                <div className="font-semibold text-foreground">Completed Today</div>
+                                <div className="text-[10px] text-muted-foreground font-mono">
+                                  {item.completedTodayHours} hrs ({(item.completedTodayTasks || []).length} tasks)
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandHistory(p.id)}
+                              className="text-xs font-semibold px-2.5 py-1 rounded bg-card hover:bg-accent text-foreground border border-border flex items-center gap-1"
+                            >
+                              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span>{(item.historyList || []).length} Days</span>
+                              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </button>
+                          </div>
+
+                          {/* Expandable History in Card */}
+                          {isExpanded && (
+                            <div className="p-3 bg-muted/20 border border-border rounded-lg space-y-2">
+                              <div className="text-xs font-bold text-foreground flex items-center justify-between">
+                                <span>Completed Tasks History</span>
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  {(item.completedTasks || []).length} Total
+                                </span>
+                              </div>
+                              {item.historyList && item.historyList.length > 0 ? (
+                                item.historyList.map((hist) => (
+                                  <div
+                                    key={hist.dateStr}
+                                    className="text-xs space-y-1 border-b border-border pb-1.5 last:border-0 last:pb-0"
+                                  >
+                                    <div className="flex items-center justify-between text-foreground font-semibold text-[11px]">
+                                      <span>
+                                        {hist.formattedDate} ({hist.relativeLabel || "Past"})
+                                      </span>
+                                      <span className="font-mono text-foreground">{hist.totalHours} hrs</span>
+                                    </div>
+                                    {hist.tasks.map((t) => (
+                                      <div
+                                        key={t.id}
+                                        onClick={() => setInspectTaskItem({ task: t, profile: p })}
+                                        className="text-[11px] text-muted-foreground hover:text-foreground flex items-center justify-between pl-2 cursor-pointer transition-colors"
+                                      >
+                                        <span className="truncate">• {t.task_name}</span>
+                                        <span className="font-mono text-[10px] text-muted-foreground">
+                                          {t.actual_hours || t.planned_hours || 0}h
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-xs text-muted-foreground/60 italic">No past history recorded</div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Actions Footer */}
+                          <div className="pt-2 border-t border-border flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {(item.skills || []).map((skill, idx) => (
+                                <Badge
+                                  key={idx}
+                                  variant="secondary"
+                                  className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground border border-border"
+                                >
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setInspectMemberId(p.id)}
+                                className="h-7 text-xs border-border text-foreground bg-card hover:bg-accent"
+                              >
+                                Inspect
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => handleAssignTask(p.id)}
+                                className="h-7 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+                              >
+                                Assign Task
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-12 text-center bg-card border border-border rounded-xl space-y-3">
+              <Briefcase className="h-8 w-8 text-muted-foreground mx-auto" />
+              <div className="text-sm font-semibold text-foreground">No Project Tasks Found</div>
+              <div className="text-xs text-muted-foreground max-w-sm mx-auto">
+                Try clearing your search query or filters to view all project categorized cards.
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1391,10 +1540,7 @@ function TeamCapacityPage() {
             <>
               <DialogHeader className="space-y-1.5 border-b border-border pb-3">
                 <div className="flex items-center justify-between gap-2">
-                  <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 font-mono text-xs flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                    Currently In Progress
-                  </Badge>
+                  <StatusBadge status={activeTaskModalItem.task.status as TaskStatus} />
                   {activeTaskModalItem.task.task_code && (
                     <span className="font-mono text-xs text-muted-foreground font-semibold">
                       {activeTaskModalItem.task.task_code}
@@ -1405,7 +1551,7 @@ function TeamCapacityPage() {
                   {activeTaskModalItem.task.task_name}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Task actively worked on by {activeTaskModalItem.member.display_name}
+                  Task details for {activeTaskModalItem.member.display_name}
                 </DialogDescription>
               </DialogHeader>
 
@@ -1435,13 +1581,13 @@ function TeamCapacityPage() {
                 {/* What they are doing (Remarks / Notes) */}
                 <div className="space-y-1">
                   <div className="font-semibold text-foreground flex items-center gap-1 text-[11px] uppercase tracking-wider">
-                    <Layers className="h-3 w-3 text-primary" /> What they are doing right now:
+                    <Layers className="h-3 w-3 text-primary" /> Task Remarks & Notes:
                   </div>
                   <div className="p-3 rounded-lg bg-card border border-border text-foreground text-xs leading-relaxed max-h-32 overflow-y-auto">
                     {activeTaskModalItem.task.remarks && activeTaskModalItem.task.remarks.trim() ? (
                       activeTaskModalItem.task.remarks
                     ) : (
-                      <span className="text-muted-foreground italic">No detailed remarks provided for this in-progress task.</span>
+                      <span className="text-muted-foreground italic">No detailed remarks provided for this task.</span>
                     )}
                   </div>
                 </div>
