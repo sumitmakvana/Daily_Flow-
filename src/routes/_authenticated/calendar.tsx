@@ -16,6 +16,7 @@ import type { Profile, Task, Leave } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getLocalHoliday, fetchIndianHolidays, toLocalISO, type Holiday } from "@/lib/format";
 import { statusColor, leaveColor, leaveDot, priorityDot } from "@/lib/colors";
+import { toast } from "sonner";
 
 
 
@@ -223,6 +224,16 @@ function CalendarPage() {
   const selectedDateLeaves = useMemo(() => {
     return leavesByDate[selectedDateStr] || [];
   }, [selectedDateStr, leavesByDate]);
+
+  const selectedDateLeaveSummary = useMemo(() => {
+    const actualLeaves = selectedDateLeaves.filter((l) => l.leave_type !== "wfh");
+    const wfhLeaves = selectedDateLeaves.filter((l) => l.leave_type === "wfh");
+    const parts: string[] = [];
+    if (actualLeaves.length > 0) parts.push(`${actualLeaves.length} leave${actualLeaves.length > 1 ? "s" : ""}`);
+    if (wfhLeaves.length > 0) parts.push(`${wfhLeaves.length} WFH`);
+    if (parts.length === 0) return "0 leave/WFH";
+    return parts.join(" and ");
+  }, [selectedDateLeaves]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -456,6 +467,8 @@ function CalendarPage() {
             const dateStr = toLocalISO(date);
             const dayTasks = tasksByDate[dateStr] || [];
             const dayLeaves = leavesByDate[dateStr] || [];
+            const dayActualLeaves = dayLeaves.filter((l) => l.leave_type !== "wfh");
+            const dayWfh = dayLeaves.filter((l) => l.leave_type === "wfh");
             const isToday = toLocalISO(new Date()) === dateStr;
             const holiday = getLocalHoliday(date, apiHolidays);
 
@@ -485,10 +498,16 @@ function CalendarPage() {
                   </span>
                   
                   <div className="flex items-center gap-1">
-                    {dayLeaves.length > 0 && (
-                      <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded-md border border-border/40 flex items-center gap-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-status-review/80 shrink-0" />
-                        {dayLeaves.length} away
+                    {dayActualLeaves.length > 0 && (
+                      <span className="text-[9px] sm:text-[10px] font-medium text-amber-500 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded-md border border-amber-500/20 flex items-center gap-0.5" title={`${dayActualLeaves.length} on leave`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                        {dayActualLeaves.length} leave
+                      </span>
+                    )}
+                    {dayWfh.length > 0 && (
+                      <span className="text-[9px] sm:text-[10px] font-medium text-sky-500 dark:text-sky-400 bg-sky-500/10 px-1.5 py-0.2 rounded-md border border-sky-500/20 flex items-center gap-0.5" title={`${dayWfh.length} WFH`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
+                        {dayWfh.length} WFH
                       </span>
                     )}
                     {dayTasks.length > 0 && (
@@ -530,7 +549,7 @@ function CalendarPage() {
                     })}
                     {dayLeaves.length > 2 && (
                       <div className="text-[9px] font-medium text-muted-foreground pl-1">
-                        +{dayLeaves.length - 2} more away
+                        +{dayLeaves.length - 2} more
                       </div>
                     )}
 
@@ -587,7 +606,7 @@ function CalendarPage() {
               {selectedDate && selectedDate.toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </SheetTitle>
             <SheetDescription className="text-xs text-muted-foreground">
-              {selectedDateTasks.length} tasks and {selectedDateLeaves.length} leave/WFH records for this date.
+              {selectedDateTasks.length} task{selectedDateTasks.length === 1 ? "" : "s"} and {selectedDateLeaveSummary} for this date.
             </SheetDescription>
           </SheetHeader>
 
