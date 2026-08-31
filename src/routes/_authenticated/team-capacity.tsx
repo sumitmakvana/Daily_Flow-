@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, Fragment } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +53,7 @@ import {
   ExternalLink,
   Layers,
   Sparkles,
+  FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Profile, Task, Project, TaskStatus } from "@/lib/types";
@@ -510,14 +511,15 @@ function TeamCapacityPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => window.print()}
-            className="h-8 text-xs gap-1.5 font-medium border-border bg-card text-foreground hover:bg-accent"
-          >
-            <BarChart2 className="h-3.5 w-3.5 text-primary" /> Export Report
-          </Button>
+          <Link to="/exports">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5 font-medium border-border bg-card text-foreground hover:bg-accent"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" /> Export Report (Excel/CSV)
+            </Button>
+          </Link>
           <Button
             size="sm"
             onClick={() => handleAssignTask(user?.id ?? "")}

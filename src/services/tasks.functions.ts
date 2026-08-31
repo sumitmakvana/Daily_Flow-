@@ -17,7 +17,7 @@ const PartialTaskSchema = z.record(z.string(), z.unknown());
 
 export const createTaskFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { payload: Record<string, unknown> }) =>
+  .validator((d: { payload: Record<string, unknown> }) =>
     z.object({ payload: PartialTaskSchema }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -71,7 +71,7 @@ export const createTaskFn = createServerFn({ method: "POST" })
 
 export const updateTaskFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string; version: number; patch: Record<string, unknown> }) =>
+  .validator((d: { id: string; version: number; patch: Record<string, unknown> }) =>
     z
       .object({
         id: z.string(),
@@ -148,7 +148,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
 
 export const notifyTaskBlockedFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { taskId: string; reason: string }) =>
+  .validator((d: { taskId: string; reason: string }) =>
     z.object({ taskId: z.string(), reason: z.string() }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -160,7 +160,7 @@ export const notifyTaskBlockedFn = createServerFn({ method: "POST" })
 
 export const insertAssignmentNotificationFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { userId: string; taskId: string }) =>
+  .validator((d: { userId: string; taskId: string }) =>
     z.object({ userId: z.string(), taskId: z.string() }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -197,7 +197,7 @@ export const insertAssignmentNotificationFn = createServerFn({ method: "POST" })
 
 export const addTaskCommentHistoryFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { taskId: string; comment: string; status: string }) =>
+  .validator((d: { taskId: string; comment: string; status: string }) =>
     z
       .object({ taskId: z.string(), comment: z.string(), status: z.string() })
       .parse(d),
@@ -215,7 +215,7 @@ export const addTaskCommentHistoryFn = createServerFn({ method: "POST" })
 
 export const deleteTaskFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string }) => z.object({ id: z.string() }).parse(d))
+  .validator((d: { id: string }) => z.object({ id: z.string() }).parse(d))
   .handler(async ({ data, context }) => {
     const res = await withUser(context.userId, async (client) => {
       return await client.query(`DELETE FROM public.tasks WHERE id = $1`, [data.id]);

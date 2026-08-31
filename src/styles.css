@@ -296,6 +296,21 @@ html.ux4g-large-cursor, html.ux4g-large-cursor * {
   outline-offset: 2px;
 }
 
+/* Force native calendar picker icon to crisp white in dark theme */
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.8) !important;
+  cursor: pointer !important;
+  opacity: 0.95 !important;
+}
+
+input[type="month"]::-webkit-calendar-picker-indicator:hover,
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1 !important;
+  filter: invert(1) brightness(2.2) !important;
+}
+
+
 
 
 

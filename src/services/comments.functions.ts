@@ -91,7 +91,7 @@ export const addCommentFn = createServerFn({ method: "POST" })
 
 export const editCommentFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { commentId: string; body: string }) =>
+  .validator((d: { commentId: string; body: string }) =>
     z.object({ commentId: z.string(), body: z.string() }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -109,7 +109,7 @@ export const editCommentFn = createServerFn({ method: "POST" })
 
 export const removeCommentFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { commentId: string }) =>
+  .validator((d: { commentId: string }) =>
     z.object({ commentId: z.string() }).parse(d),
   )
   .handler(async ({ data, context }) => {
