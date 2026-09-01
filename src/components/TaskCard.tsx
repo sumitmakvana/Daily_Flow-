@@ -446,8 +446,8 @@ export function TaskCard({
                   <Button
                     size="sm"
                     className={cn(
-                      "h-11 md:h-8 px-3 text-xs flex-1 md:flex-none min-w-[88px] font-medium transition-all",
-                      isCompletingInline ? "bg-indigo-600 text-white font-bold" : "bg-indigo-600 hover:bg-indigo-500 text-white"
+                      "h-11 md:h-8 px-3 text-xs flex-1 md:flex-none min-w-[88px] font-semibold transition-all cursor-pointer bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 shadow-xs",
+                      isCompletingInline && "bg-primary text-primary-foreground font-bold"
                     )}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -462,20 +462,20 @@ export function TaskCard({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-11 md:h-8 px-3 text-xs flex-1 md:flex-none min-w-[80px] border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                    className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none min-w-[76px] border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent/40 cursor-pointer"
                     onClick={() => setOnHoldOpen(true)}
                   >
-                    <PauseCircle className="mr-1 h-3.5 w-3.5" /> Hold
+                    <PauseCircle className="mr-1 h-3.5 w-3.5 text-amber-400/80" /> Hold
                   </Button>
                 )}
                 {task.status !== "Blocked" && task.status !== "Completed" && (
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-11 md:h-8 px-3 text-xs flex-1 md:flex-none min-w-[88px] border-status-blocked/40 text-status-blocked hover:bg-status-blocked/10"
+                    className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none min-w-[80px] border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent/40 cursor-pointer"
                     onClick={() => setBlockOpen(true)}
                   >
-                    <AlertOctagon className="mr-1 h-3.5 w-3.5" /> Block
+                    <AlertOctagon className="mr-1 h-3.5 w-3.5 text-rose-400/80" /> Block
                   </Button>
                 )}
                 {task.status === "Completed" && (

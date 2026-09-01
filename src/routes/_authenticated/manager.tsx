@@ -105,10 +105,11 @@ function ManagerPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <RiskBucket label="Blocked" tone="destructive" items={d.at_risk.blocked} />
+          <RiskBucket label="Time Overrun (>8h / 2x Plan)" tone="warn" items={d.at_risk.overrun || []} />
           <RiskBucket label="Delayed" tone="warn" items={d.at_risk.delayed} />
           <RiskBucket label="High severity" tone="destructive" items={d.at_risk.high_risk} />
           <RiskBucket label="Repeated carry-forward" tone="warn" items={d.at_risk.repeat_cf} />
-          {d.at_risk.blocked.length + d.at_risk.delayed.length + d.at_risk.high_risk.length + d.at_risk.repeat_cf.length === 0 && (
+          {d.at_risk.blocked.length + (d.at_risk.overrun?.length || 0) + d.at_risk.delayed.length + d.at_risk.high_risk.length + d.at_risk.repeat_cf.length === 0 && (
             <Empty text="Nothing at risk right now." />
           )}
         </CardContent>

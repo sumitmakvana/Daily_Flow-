@@ -7,6 +7,7 @@ export interface TaskHoursData {
   actual_hours?: number | null;
   started_at?: string | null;
   system_hours?: number | null;
+  status?: string | null;
 }
 
 interface TaskHoursBadgesProps {
@@ -23,6 +24,9 @@ export function TaskHoursBadges({ task, variant = "capsule", className }: TaskHo
     : Number(task.system_hours ?? 0);
 
   const hasGap = sysHrs > 0 && Math.abs(sysHrs - logged) >= 1.0;
+  const isOverrun =
+    (task.status === "In Progress" && (sysHrs >= 8.0 || (plan > 0 && sysHrs > plan))) ||
+    (task.status === "Completed" && plan > 0 && (logged === 0 || logged > plan || logged >= 8.0));
 
   if (variant === "badges") {
     return (
@@ -45,6 +49,11 @@ export function TaskHoursBadges({ task, variant = "capsule", className }: TaskHo
             ⚠️ Gap Alert
           </Badge>
         )}
+        {isOverrun && (
+          <Badge variant="outline" className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[11px] font-mono font-bold shadow-2xs animate-pulse">
+            🚨 Overrun (&gt;{plan > 0 ? `${plan * 2}h` : "8h"})
+          </Badge>
+        )}
       </div>
     );
   }
@@ -53,7 +62,7 @@ export function TaskHoursBadges({ task, variant = "capsule", className }: TaskHo
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted/30 border border-border/60 text-[11px] font-mono text-muted-foreground shadow-2xs",
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted/40 border border-border/60 text-[11px] font-mono text-muted-foreground shadow-2xs",
         className,
       )}
     >
@@ -82,6 +91,14 @@ export function TaskHoursBadges({ task, variant = "capsule", className }: TaskHo
           className="text-rose-400 ml-0.5 animate-pulse font-bold"
         >
           ⚠️
+        </span>
+      )}
+      {isOverrun && (
+        <span
+          title={`Task exceeded estimated time: Plan ${plan}h, system/logged time ${sysHrs || logged}h`}
+          className="text-amber-400 ml-0.5 font-bold animate-bounce"
+        >
+          🚨
         </span>
       )}
     </div>
