@@ -55,7 +55,7 @@ export interface AtRiskRow {
   carry_forward_count: number;
   blocked_age_days: number | null;
   risk_severity: "low" | "medium" | "high" | "critical" | null;
-  reason: "blocked" | "delayed" | "high_risk" | "repeat_cf";
+  reason: "blocked" | "delayed" | "high_risk" | "repeat_cf" | "overrun";
 }
 
 export interface ManagerAction {
@@ -105,6 +105,7 @@ export interface ManagerCommandPayload {
     delayed: AtRiskRow[];
     high_risk: AtRiskRow[];
     repeat_cf: AtRiskRow[];
+    overrun: AtRiskRow[];
   };
   actions: ManagerAction[];
   projects: ProjectHealthRow[];
@@ -278,6 +279,15 @@ export const getManagerCommand = createServerFn({ method: "GET" })
       return s === "high" || s === "critical";
     }).map((t) => toRow(t, "high_risk"));
     const repeatCfRows = open.filter((t) => t.carry_forward_count >= 3).map((t) => toRow(t, "repeat_cf"));
+    const overrunRows = tasks.filter((t) => {
+      const sysHrs = (t as any).started_at ? (Date.now() - new Date((t as any).started_at).getTime()) / 3600000 : Number((t as any).system_hours ?? 0);
+      const plan = Number(t.planned_hours ?? 0);
+      const logged = Number((t as any).actual_hours ?? 0);
+      return (
+        (t.status === "In Progress" && (sysHrs >= 8.0 || (plan > 0 && sysHrs >= plan * 2.0))) ||
+        (t.status === "Completed" && plan > 0 && (logged === 0 || logged >= plan * 2.0 || logged >= 8.0))
+      );
+    }).map((t) => toRow(t, "overrun"));
 
     // ── Approval queue (mine + my team's) ─────────────────────────────────
     const reqs = (apprReqsRes.data ?? []) as Array<{ id: string; work_item_id: string; chain_id: string; current_step: number; status: string; requested_at: string }>;
@@ -425,6 +435,7 @@ export const getManagerCommand = createServerFn({ method: "GET" })
         delayed: delayedRows.sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")).slice(0, 20),
         high_risk: highRiskRows.slice(0, 20),
         repeat_cf: repeatCfRows.sort((a, b) => b.carry_forward_count - a.carry_forward_count).slice(0, 20),
+        overrun: overrunRows.slice(0, 20),
       },
       actions: actions.slice(0, 15),
       projects: projectRows.slice(0, 20),

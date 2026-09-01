@@ -53,6 +53,7 @@ import {
   ExternalLink,
   Layers,
   Sparkles,
+  Zap,
   FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,6 +65,7 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { ExecutiveMemberInspectionDrawer } from "./executive";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityBadge } from "@/components/PriorityBadge";
+import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import { useAuth } from "@/hooks/use-auth";
 import { tasksService } from "@/services/tasks";
 import { cn } from "@/lib/utils";
@@ -347,6 +349,8 @@ function TeamCapacityPage() {
         skills: realProjectSkills,
         mainProjectName,
         teamName,
+        queuedHours: plannedHours,
+        isLowQueue: plannedHours < 16,
         completedTodayTasks,
         completedTodayHours,
         historyList,
@@ -386,14 +390,16 @@ function TeamCapacityPage() {
         (statusFilter === "completed" && item.completedTodayTasks.length > 0) ||
         (statusFilter === "in_progress" && item.activeTasks.length > 0) ||
         (statusFilter === "to_do" && item.upcomingTasks.length > 0) ||
-        (statusFilter === "overdue" && item.overdueTasks.length > 0);
+        (statusFilter === "overdue" && item.overdueTasks.length > 0) ||
+        (statusFilter === "low_queue" && item.isLowQueue);
 
       const matchAvailability =
         availabilityFilter === "all" ||
         (availabilityFilter === "free" && item.capacityStatus === "free") ||
         (availabilityFilter === "available" && item.capacityStatus === "available") ||
         (availabilityFilter === "partially" && item.capacityStatus === "partially") ||
-        (availabilityFilter === "overloaded" && item.capacityStatus === "overloaded");
+        (availabilityFilter === "overloaded" && item.capacityStatus === "overloaded") ||
+        (availabilityFilter === "low_queue" && item.isLowQueue);
 
       return matchSearch && matchTeam && matchProject && matchStatus && matchAvailability;
     });
@@ -541,6 +547,7 @@ function TeamCapacityPage() {
     const overduePct = totalTasksCount > 0 ? Math.round((overdueCount / totalTasksCount) * 100) : 0;
 
     const totalMembersCount = profiles.length;
+    const lowQueueCount = memberData.filter((m) => m.isLowQueue).length;
 
     return {
       totalTasksCount,
@@ -553,8 +560,9 @@ function TeamCapacityPage() {
       overdueCount,
       overduePct,
       totalMembersCount,
+      lowQueueCount,
     };
-  }, [tasks, profiles, todayStr]);
+  }, [tasks, profiles, memberData, todayStr]);
 
   const toggleExpandHistory = (memberId: string) => {
     setExpandedHistoryMemberIds((prev) => ({
@@ -641,7 +649,7 @@ function TeamCapacityPage() {
       </div>
 
       {/* Top Metric KPI Cards Bar (Clean, Minimal, Neutral) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         {/* Card 1: Total Tasks */}
         <div
           onClick={() => {
@@ -744,7 +752,27 @@ function TeamCapacityPage() {
           <div className="text-[11px] text-muted-foreground">{kpis.overduePct}% past due</div>
         </div>
 
-        {/* Card 6: Total Members */}
+        {/* Card 6: Low Backlog (<16h) */}
+        <div
+          onClick={() => {
+            setAvailabilityFilter(availabilityFilter === "low_queue" ? "all" : "low_queue");
+            setCurrentPage(1);
+          }}
+          className={cn(
+            "bg-card border rounded-xl p-4 space-y-2 cursor-pointer transition-all hover:border-border",
+            availabilityFilter === "low_queue" ? "border-emerald-500/50 ring-1 ring-emerald-500/30 bg-emerald-500/5" : "border-border/70"
+          )}
+          title="Click to filter members with less than 16 hours of queued work (<2 days)"
+        >
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Zap className="h-3.5 w-3.5 text-emerald-400" />
+            <span>Low Queue (&lt;16h)</span>
+          </div>
+          <div className="text-2xl md:text-3xl font-bold text-emerald-400 font-mono tracking-tight">{kpis.lowQueueCount}</div>
+          <div className="text-[11px] text-emerald-400/80 font-medium">High Capacity</div>
+        </div>
+
+        {/* Card 7: Total Members */}
         <div
           onClick={() => {
             setSearch("");
@@ -859,6 +887,7 @@ function TeamCapacityPage() {
               <SelectItem value="available">Available</SelectItem>
               <SelectItem value="partially">Partially Available</SelectItem>
               <SelectItem value="overloaded">Overloaded</SelectItem>
+              <SelectItem value="low_queue">⚡ Low Backlog (&lt; 16h)</SelectItem>
             </SelectContent>
           </Select>
 
@@ -998,9 +1027,14 @@ function TeamCapacityPage() {
                                 </AvatarFallback>
                               )}
                             </Avatar>
-                            <div className="min-w-0 space-y-0.5">
-                              <div className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                                {p.display_name}
+                             <div className="min-w-0 space-y-0.5">
+                              <div className="font-medium text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
+                                <span className="truncate">{p.display_name}</span>
+                                {item.isLowQueue && (
+                                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px] font-mono px-1 py-0 h-4 shrink-0">
+                                    ⚡ &lt;16h Queue
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-[10px] text-muted-foreground truncate">{item.title}</div>
                             </div>
@@ -1349,21 +1383,28 @@ function TeamCapacityPage() {
                               </div>
                             </div>
 
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] font-semibold px-2 py-0.5",
-                                item.capacityStatus === "overloaded"
-                                  ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                                  : item.capacityStatus === "partially"
-                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                                  : item.capacityStatus === "free"
-                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                                  : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                             <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] font-semibold px-2 py-0.5",
+                                  item.capacityStatus === "overloaded"
+                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                                    : item.capacityStatus === "partially"
+                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                    : item.capacityStatus === "free"
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                    : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                                )}
+                              >
+                                {item.capacityStatus.toUpperCase()} ({item.plannedHours}h)
+                              </Badge>
+                              {item.isLowQueue && (
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px] font-mono px-1.5 py-0.5">
+                                  ⚡ &lt;16h Queued
+                                </Badge>
                               )}
-                            >
-                              {item.capacityStatus.toUpperCase()} ({item.plannedHours}h)
-                            </Badge>
+                             </div>
                           </div>
 
                           {/* Current Active Work in this Project */}
@@ -1604,17 +1645,9 @@ function TeamCapacityPage() {
                       {activeTaskModalItem.task.project_name || "General"}
                     </div>
                   </div>
-                  <div className="p-2 rounded bg-muted/30 border border-border space-y-0.5">
-                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">Hours (User / Auto / Plan)</span>
-                    <div className="font-mono text-[11px] font-bold flex items-center gap-1.5 flex-wrap pt-0.5">
-                      <span className="text-emerald-400" title="User Logged">User: {activeTaskModalItem.task.actual_hours || 0}h</span>
-                      <span className="text-muted-foreground">|</span>
-                      <span className="text-amber-400" title="System Auto-Tracked">
-                        Auto: {(activeTaskModalItem.task as any).started_at ? Math.max(0, Math.round(((Date.now() - new Date((activeTaskModalItem.task as any).started_at).getTime()) / 3600000) * 10) / 10) : (activeTaskModalItem.task as any).system_hours || 0}h
-                      </span>
-                      <span className="text-muted-foreground">|</span>
-                      <span className="text-indigo-400" title="Planned Target">Plan: {activeTaskModalItem.task.planned_hours || 0}h</span>
-                    </div>
+                  <div className="p-2 rounded bg-muted/30 border border-border space-y-1">
+                    <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Task Hours</span>
+                    <TaskHoursBadges task={activeTaskModalItem.task} variant="badges" />
                   </div>
                 </div>
               </div>
