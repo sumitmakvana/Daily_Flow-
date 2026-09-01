@@ -4,6 +4,9 @@ import {
   updateLeaveStatusFn,
   updateLeaveDetailsFn,
   deleteLeaveFn,
+  checkAndNotifyTomorrowLeavesFn,
+  checkUnstartedTasksTodayFn,
+  quickMarkLeaveTodayFn,
 } from "./leaves.functions";
 import type { Leave } from "@/lib/types";
 
@@ -50,8 +53,16 @@ export const leavesService = {
   async deleteLeave(id: string, reason?: string, permanent?: boolean): Promise<{ success: boolean }> {
     return await deleteLeaveFn({ data: { id, reason, permanent } });
   },
+
+  async checkTomorrowLeavesNotification(dateStr?: string) {
+    return await checkAndNotifyTomorrowLeavesFn({ data: { dateStr } });
+  },
+
+  async checkUnstartedTasksToday() {
+    return await checkUnstartedTasksTodayFn();
+  },
+
+  async quickMarkLeaveToday(reason?: string) {
+    return await quickMarkLeaveTodayFn({ data: { reason } });
+  },
 };
-
-
-
-
