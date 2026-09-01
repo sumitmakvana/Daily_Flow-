@@ -1347,6 +1347,8 @@ function TeamCapacityPage() {
                       title: mItem.title,
                       capacityStatus: "available",
                       plannedHours: mItem.totalPlannedHours,
+                      queuedHours: mItem.totalPlannedHours,
+                      isLowQueue: mItem.totalPlannedHours < 16,
                       activeTasks: mItem.tasks.filter((t) => t.status === "In Progress"),
                       upcomingTasks: mItem.upcomingTasks,
                       completedTodayTasks: mItem.completedTodayTasks,

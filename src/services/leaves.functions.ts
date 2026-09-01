@@ -476,5 +476,197 @@ export const deleteLeaveFn = createServerFn({ method: "POST" })
     return { success: true, cancelled: true };
   });
 
+export const checkAndNotifyTomorrowLeavesFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d?: { dateStr?: string }) => z.object({ dateStr: z.string().optional() }).optional().parse(d))
+  .handler(async ({ data, context }) => {
+    await ensureLeavesTableAdmin();
+    const pool = getPool();
 
+    // Determine tomorrow date (YYYY-MM-DD)
+    const baseDate = data?.dateStr ? new Date(data.dateStr) : new Date();
+    baseDate.setDate(baseDate.getDate() + 1);
+    const tomorrowStr = baseDate.toISOString().slice(0, 10);
 
+    const leavesRes = await pool.query<{
+      id: string;
+      user_id: string;
+      leave_type: string;
+      user_name: string;
+    }>(
+      `SELECT l.id, l.user_id, l.leave_type, p.display_name as user_name
+       FROM public.leaves l
+       JOIN public.profiles p ON p.id = l.user_id
+       WHERE l.status = 'approved' AND $1::date BETWEEN l.start_date AND l.end_date`,
+      [tomorrowStr]
+    );
+
+    if (leavesRes.rows.length === 0) {
+      return { count: 0, tomorrowStr };
+    }
+
+    // Get admin & manager user_ids to notify
+    const managersRes = await pool.query<{ user_id: string }>(
+      `SELECT DISTINCT user_id FROM public.user_roles WHERE role IN ('admin', 'manager')`
+    );
+
+    const managerIds = managersRes.rows.map((r) => r.user_id);
+
+    let sentCount = 0;
+    for (const leave of leavesRes.rows) {
+      for (const mId of managerIds) {
+        if (mId === leave.user_id) continue;
+        try {
+          await pool.query(
+            `INSERT INTO public.notifications (user_id, type, title, body)
+             VALUES ($1, $2, $3, $4)`,
+            [
+              mId,
+              "leave_advance_alert",
+              `📅 Tomorrow Leave Alert`,
+              `${leave.user_name} is scheduled on ${leave.leave_type.toUpperCase()} leave tomorrow (${tomorrowStr}).`,
+            ]
+          );
+          sentCount++;
+        } catch {
+          // ignore duplicate notifications
+        }
+      }
+    }
+
+    return { count: sentCount, tomorrowStr, leavesFound: leavesRes.rows.length };
+  });
+
+export const checkUnstartedTasksTodayFn = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await ensureLeavesTableAdmin();
+    const pool = getPool();
+    const userId = context.userId;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentHour = new Date().getHours();
+
+    // Only prompt if it's 12:00 PM or later local time
+    if (currentHour < 12) {
+      return { needsLeavePrompt: false, reason: "Before 12 PM" };
+    }
+
+    // 1. Check if user already has an approved or pending leave for today
+    const existingLeave = await pool.query(
+      `SELECT id FROM public.leaves WHERE user_id = $1 AND status != 'cancelled' AND $2::date BETWEEN start_date AND end_date`,
+      [userId, todayStr]
+    );
+
+    if (existingLeave.rows.length > 0) {
+      return { needsLeavePrompt: false, reason: "Leave already logged" };
+    }
+
+    // 2. Check user profile display name
+    const profileRes = await pool.query<{ display_name: string }>(
+      `SELECT display_name FROM public.profiles WHERE id = $1`,
+      [userId]
+    );
+    const userName = profileRes.rows[0]?.display_name || "Team Member";
+
+    // 3. Check if user has active tasks, tasks started today, completed today, or logged hours today
+    const tasksRes = await pool.query<{
+      status: string;
+      actual_hours: number;
+      system_hours: number;
+      started_at: string | null;
+      updated_at: string | null;
+    }>(
+      `SELECT status, 
+              COALESCE(actual_hours, 0)::float as actual_hours,
+              COALESCE(system_hours, 0)::float as system_hours,
+              started_at::text,
+              updated_at::text
+       FROM public.tasks 
+       WHERE assigned_to = $1 
+         AND (status != 'Completed' OR updated_at::date = $2::date)`,
+      [userId, todayStr]
+    );
+
+    if (tasksRes.rows.length === 0) {
+      return { needsLeavePrompt: false, reason: "No assigned tasks" };
+    }
+
+    // Work is considered started if ANY task is "In Progress", timer started, updated today, or hours logged
+    const hasStartedWork = tasksRes.rows.some((t) => {
+      const isUpdatedToday = t.updated_at ? t.updated_at.slice(0, 10) === todayStr : false;
+      return (
+        t.status === "In Progress" ||
+        !!t.started_at ||
+        Number(t.system_hours || 0) > 0 ||
+        Number(t.actual_hours || 0) > 0 ||
+        (t.status === "Completed" && isUpdatedToday) ||
+        (isUpdatedToday && t.status !== "To Do")
+      );
+    });
+
+    if (!hasStartedWork) {
+      return { needsLeavePrompt: true, userName, todayStr };
+    }
+
+    return { needsLeavePrompt: false, reason: "User has active work, running timer, or logged hours today" };
+  });
+
+export const quickMarkLeaveTodayFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d?: { reason?: string }) => z.object({ reason: z.string().optional() }).optional().parse(d))
+  .handler(async ({ data, context }) => {
+    await ensureLeavesTableAdmin();
+    const pool = getPool();
+    const userId = context.userId;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const reasonText = data?.reason || "Auto-marked leave via 12 PM unstarted task prompt";
+
+    // Check if leave exists for today
+    const existing = await pool.query<{ id: string }>(
+      `SELECT id FROM public.leaves WHERE user_id = $1 AND status != 'cancelled' AND $2::date BETWEEN start_date AND end_date`,
+      [userId, todayStr]
+    );
+
+    if (existing.rows.length > 0) {
+      return { success: true, leaveId: existing.rows[0].id, alreadyLogged: true };
+    }
+
+    const inserted = await pool.query<{ id: string }>(
+      `INSERT INTO public.leaves (user_id, leave_type, start_date, end_date, days_count, reason, status)
+       VALUES ($1, 'casual', $2::date, $2::date, 1.0, $3, 'approved')
+       RETURNING id`,
+      [userId, todayStr, reasonText]
+    );
+
+    // Notify managers
+    try {
+      const userRes = await pool.query<{ display_name: string }>(
+        `SELECT display_name FROM public.profiles WHERE id = $1`,
+        [userId]
+      );
+      const userName = userRes.rows[0]?.display_name || "Team Member";
+
+      const managersRes = await pool.query<{ user_id: string }>(
+        `SELECT DISTINCT user_id FROM public.user_roles WHERE role IN ('admin', 'manager')`
+      );
+
+      for (const m of managersRes.rows) {
+        if (m.user_id === userId) continue;
+        await pool.query(
+          `INSERT INTO public.notifications (user_id, type, title, body)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            m.user_id,
+            "leave_status_updated",
+            `🌴 Unplanned Leave Logged Today`,
+            `${userName} confirmed leave today (${todayStr}) via 12 PM prompt. Leave Planner updated.`,
+          ]
+        );
+      }
+    } catch (err) {
+      console.warn("[leaves] quickMarkLeaveToday notification warning:", err);
+    }
+
+    return { success: true, leaveId: inserted.rows[0]?.id, todayStr };
+  });
