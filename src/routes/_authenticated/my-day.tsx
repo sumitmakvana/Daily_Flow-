@@ -636,16 +636,33 @@ function MyDayPage() {
                   text="Nothing on your plate. Enjoy the calm."
                 />
               ) : (
-                <ol className="divide-y divide-border">
-                  {d.priorities.map((item, idx) => (
-                    <PriorityRow
-                      key={item.id}
-                      rank={idx + 1}
-                      item={item}
-                      onTaskClick={handleTaskClick}
-                    />
-                  ))}
-                </ol>
+                <div className="p-3 space-y-2.5">
+                  {d.priorities.map((item, idx) => {
+                    const rawTask = tasks.find((t) => t.id === item.id);
+                    if (rawTask) {
+                      return (
+                        <TaskCard
+                          key={item.id}
+                          task={rawTask}
+                          rank={idx + 1}
+                          assignee={profiles.find((p) => p.id === rawTask.assigned_to)}
+                          profiles={profiles}
+                          userId={user?.id || ""}
+                          canManage={isManager}
+                          onChanged={handleRealtimeChange}
+                        />
+                      );
+                    }
+                    return (
+                      <PriorityRow
+                        key={item.id}
+                        rank={idx + 1}
+                        item={item}
+                        onTaskClick={handleTaskClick}
+                      />
+                    );
+                  })}
+                </div>
               )}
             </CardContent>
           </Card>

@@ -19,13 +19,17 @@ import {
   Folder,
   Loader2,
   FileText,
+  PauseCircle,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
 import { BlockerDialog } from "./BlockerDialog";
+import { OnHoldDialog } from "./OnHoldDialog";
 import type { Task, TaskStatus } from "@/lib/types";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { taskEodService } from "@/services/task-eod";
+import { completeEodStore } from "@/services/complete-eod-store";
+import { TaskHoursBadges } from "./TaskHoursBadges";
 import { formatHoursMins, parseHoursOrMins } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -45,6 +49,7 @@ export function TaskQuickActionModal({
   onOpenFullEdit?: (task: Task) => void;
 }) {
   const [blockOpen, setBlockOpen] = useState(false);
+  const [onHoldOpen, setOnHoldOpen] = useState(false);
   const [hoursInput, setHoursInput] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
@@ -132,7 +137,7 @@ export function TaskQuickActionModal({
               <span className="font-mono text-xs text-primary font-bold">
                 {task.task_code}
               </span>
-              <StatusBadge status={task.status} />
+              <StatusBadge status={task.status} reason={task.hold_reason} />
               <PriorityBadge priority={task.priority} />
             </div>
             <DialogTitle className="text-base font-semibold leading-snug">
@@ -151,12 +156,7 @@ export function TaskQuickActionModal({
                   {task.due_date}
                 </span>
               )}
-              <Badge variant="outline" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/30 text-[10px] font-bold">
-                🎯 Planned: {formatHoursMins(planned)}
-              </Badge>
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] font-bold">
-                ⏱️ Logged: {formatHoursMins(actual)}
-              </Badge>
+              <TaskHoursBadges task={task} variant="badges" />
             </DialogDescription>
           </DialogHeader>
 
@@ -188,9 +188,12 @@ export function TaskQuickActionModal({
               {/* 1. Mark Complete */}
               <Button
                 size="sm"
-                className="h-10 justify-start text-xs gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
+                className="h-10 justify-start text-xs gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium cursor-pointer"
                 disabled={busy || task.status === "Completed"}
-                onClick={() => handleSetStatus("Completed")}
+                onClick={() => {
+                  onOpenChange(false);
+                  completeEodStore.open(task);
+                }}
               >
                 <CheckCircle2 className="h-4 w-4 text-white" />
                 {task.status === "Completed" ? "Completed" : "Mark Complete"}
@@ -220,7 +223,19 @@ export function TaskQuickActionModal({
                 {task.status === "Blocked" ? "Blocked" : "Flag Blocker"}
               </Button>
 
-              {/* 4. Full Edit */}
+              {/* 4. Put On Hold */}
+              <Button
+                variant={task.status === "On Hold" ? "secondary" : "outline"}
+                size="sm"
+                className="h-10 justify-start text-xs gap-2 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                disabled={busy}
+                onClick={() => setOnHoldOpen(true)}
+              >
+                <PauseCircle className="h-4 w-4 text-amber-400" />
+                {task.status === "On Hold" ? "On Hold" : "Put On Hold"}
+              </Button>
+
+              {/* 5. Full Edit */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -238,35 +253,6 @@ export function TaskQuickActionModal({
                 Edit Details
               </Button>
             </div>
-
-            {/* Quick Log Hours */}
-            <div className="p-3 rounded-xl bg-muted/30 border border-border/60 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-primary" /> Log Hours & Minutes
-                </span>
-                <span className="text-[11px] text-muted-foreground font-mono">
-                  Logged: <strong>{formatHoursMins(actual)}</strong> / Planned: <strong>{formatHoursMins(planned)}</strong>
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="text"
-                  value={hoursInput}
-                  onChange={(e) => setHoursInput(e.target.value)}
-                  placeholder="e.g. 1.5, 45m, 1h 30m"
-                  className="h-8 text-xs font-bold text-primary bg-background border-border text-right"
-                />
-                <Button
-                  size="sm"
-                  className="h-8 text-xs shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
-                  disabled={busy || !hoursInput}
-                  onClick={handleSaveHours}
-                >
-                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save Hours"}
-                </Button>
-              </div>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -279,6 +265,18 @@ export function TaskQuickActionModal({
         onConfirm={(reason) => {
           setBlockOpen(false);
           handleSetStatus("Blocked", { blocker_reason: reason });
+        }}
+      />
+
+      {/* On Hold Dialog */}
+      <OnHoldDialog
+        open={onHoldOpen}
+        onOpenChange={setOnHoldOpen}
+        taskCode={task.task_code}
+        taskTitle={task.task_name}
+        onConfirm={(reason) => {
+          setOnHoldOpen(false);
+          handleSetStatus("On Hold", { hold_reason: reason });
         }}
       />
     </>

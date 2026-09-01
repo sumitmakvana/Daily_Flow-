@@ -17,6 +17,7 @@ import {
 import {
   Play,
   Pause,
+  PauseCircle,
   CheckCircle2,
   AlertOctagon,
   MoreHorizontal,
@@ -37,6 +38,7 @@ import {
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
 import { BlockerDialog } from "./BlockerDialog";
+import { OnHoldDialog } from "./OnHoldDialog";
 import { BlockerAge } from "./BlockerAge";
 import { CarryForwardBadge } from "./CarryForwardBadge";
 import { TaskHistorySheet } from "./TaskHistorySheet";
@@ -45,6 +47,7 @@ import { TaskFormDialog } from "./TaskFormDialog";
 import { ImagePreviewModal } from "./ImagePreviewModal";
 import { inlineCompleteStore } from "@/services/inline-complete-store";
 import { attachmentsService } from "@/services/attachments";
+import { TaskHoursBadges } from "./TaskHoursBadges";
 import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue, getDefaultStartDate } from "@/lib/format";
 import type { Profile, Task, TaskStatus, WorkItemType, Attachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -55,6 +58,7 @@ import { toast } from "sonner";
 
 export function TaskCard({
   task,
+  rank,
   assignee,
   userId,
   profiles,
@@ -66,6 +70,7 @@ export function TaskCard({
   onSelectToggle,
 }: {
   task: Task;
+  rank?: number;
   assignee?: Profile;
   userId: string;
   profiles: Profile[];
@@ -78,6 +83,7 @@ export function TaskCard({
   onSelectToggle?: () => void;
 }) {
   const [blockOpen, setBlockOpen] = useState(false);
+  const [onHoldOpen, setOnHoldOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
@@ -95,6 +101,18 @@ export function TaskCard({
   const [inlineHours, setInlineHours] = useState<string>("");
   const [inlineNote, setInlineNote] = useState<string>("");
   const [inlineBusy, setInlineBusy] = useState(false);
+
+  useEffect(() => {
+    if (isCompletingInline) {
+      const sysHrs = (task as any).started_at 
+        ? Math.min(8.0, Math.max(0, (Date.now() - new Date((task as any).started_at).getTime()) / 3600000))
+        : Number((task as any).system_hours ?? 0);
+      const fillVal = sysHrs > 0 ? sysHrs : defaultFill;
+      setInlineHours(formatHoursMins(fillVal));
+    } else {
+      setInlineHours("");
+    }
+  }, [isCompletingInline, defaultFill]);
   const [expandedRemarks, setExpandedRemarks] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -184,6 +202,16 @@ export function TaskCard({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+                  {rank !== undefined && (
+                    <span
+                      className={cn(
+                        "h-5 w-5 grid place-items-center rounded-full text-[10px] font-bold shrink-0",
+                        rank <= 3 ? "bg-primary text-primary-foreground font-mono font-sans" : "bg-muted text-muted-foreground font-mono font-sans"
+                      )}
+                    >
+                      {rank}
+                    </span>
+                  )}
                   <span>{task.task_code}</span>
                 </div>
                 <div className="mt-0.5 font-medium leading-tight truncate">{task.task_name}</div>
@@ -229,7 +257,7 @@ export function TaskCard({
                     <History className="mr-2 h-3.5 w-3.5" /> History & comments
                   </DropdownMenuItem>
                   {canAct && task.status !== "On Hold" && task.status !== "Completed" && (
-                    <DropdownMenuItem onClick={() => setStatus("On Hold")}>
+                    <DropdownMenuItem onClick={() => setOnHoldOpen(true)}>
                       <Pause className="mr-2 h-3.5 w-3.5" /> Put on hold
                     </DropdownMenuItem>
                   )}
@@ -278,7 +306,7 @@ export function TaskCard({
             {/* Badges/Meta row */}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <WorkItemTypeBadge type={workItemTypes.find((t) => t.id === task.type_id)} compact />
-              <StatusBadge status={task.status} />
+              <StatusBadge status={task.status} reason={task.hold_reason} />
               <PriorityBadge priority={task.priority} />
               {task.status === "Blocked" && <BlockerAge blockedAt={task.blocked_at} />}
               <CarryForwardBadge count={task.carry_forward_count ?? 0} />
@@ -295,11 +323,7 @@ export function TaskCard({
                   {formatDate(task.due_date)}
                 </span>
               )}
-              {task.planned_hours ? (
-                <span className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs font-semibold text-indigo-400 bg-indigo-500/10 border-indigo-500/30">
-                  🎯 {formatHoursMins(task.actual_hours ?? 0)} / {formatHoursMins(task.planned_hours)}
-                </span>
-              ) : null}
+              <TaskHoursBadges task={task} />
               {assignee && (
                 <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
                   <UserIcon className="h-3 w-3" /> {assignee.display_name}
@@ -434,6 +458,16 @@ export function TaskCard({
                     <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Complete
                   </Button>
                 )}
+                {task.status !== "On Hold" && task.status !== "Completed" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-11 md:h-8 px-3 text-xs flex-1 md:flex-none min-w-[80px] border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                    onClick={() => setOnHoldOpen(true)}
+                  >
+                    <PauseCircle className="mr-1 h-3.5 w-3.5" /> Hold
+                  </Button>
+                )}
                 {task.status !== "Blocked" && task.status !== "Completed" && (
                   <Button
                     size="sm"
@@ -469,11 +503,7 @@ export function TaskCard({
               <span className="font-semibold text-foreground flex items-center gap-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Log Hours & Complete Task
               </span>
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span>Planned Target: <strong className="text-foreground">{formatHoursMins(planned)}</strong></span>
-                <span>·</span>
-                <span>Total Logged So Far: <strong className="text-foreground">{formatHoursMins(currentActual)}</strong></span>
-              </div>
+              <TaskHoursBadges task={task} variant="badges" />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
@@ -576,6 +606,16 @@ export function TaskCard({
         }}
         userId={userId}
         onSaved={onChanged}
+      />
+
+      <OnHoldDialog
+        open={onHoldOpen}
+        onOpenChange={setOnHoldOpen}
+        taskCode={task.task_code}
+        taskTitle={task.task_name}
+        onConfirm={async (reason) => {
+          await setStatus("On Hold", { hold_reason: reason });
+        }}
       />
 
       <ImagePreviewModal

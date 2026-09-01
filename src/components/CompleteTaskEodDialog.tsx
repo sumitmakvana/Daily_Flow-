@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Clock, Loader2, Image as ImageIcon, Paperclip, X, FileText } from "lucide-react";
+import { TaskHoursBadges } from "./TaskHoursBadges";
 import type { Task } from "@/lib/types";
 import { tasksService } from "@/services/tasks";
 import { taskEodService } from "@/services/task-eod";
@@ -31,10 +32,14 @@ export function CompleteTaskEodDialog({
   userId: string;
   onDone: () => void;
 }) {
+  const sysHrs = (task as any).started_at 
+    ? Math.min(8.0, Math.max(0, Math.round(((Date.now() - new Date((task as any).started_at).getTime()) / 3600000) * 10) / 10))
+    : Number((task as any).system_hours ?? 0);
+
   const planned = Number(task.planned_hours ?? 0);
   const currentActual = Number(task.actual_hours ?? 0);
   const remaining = Math.max(0, planned - currentActual);
-  const defaultFill = remaining > 0 ? remaining : planned > 0 ? planned : 1;
+  const defaultFill = sysHrs > 0 ? sysHrs : (remaining > 0 ? remaining : (planned > 0 ? planned : 1));
 
   const [hours, setHours] = useState<string>(String(defaultFill));
   const [note, setNote] = useState<string>("");
@@ -155,15 +160,10 @@ export function CompleteTaskEodDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Task Info Summary matching TaskCard */}
-          <div className="bg-muted/40 border border-border rounded-lg p-3 space-y-1">
-            <div className="flex items-center justify-between text-xs">
+          <div className="bg-card border border-border/80 rounded-xl p-3 space-y-2 shadow-xs">
+            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
               <span className="font-mono text-primary font-bold">{task.task_code}</span>
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span>Planned: <strong className="text-foreground">{planned}h</strong></span>
-                <span>·</span>
-                <span>Logged: <strong className="text-foreground">{currentActual}h</strong></span>
-              </div>
+              <TaskHoursBadges task={task} variant="badges" />
             </div>
             <div className="font-medium text-xs text-foreground truncate">{task.task_name}</div>
           </div>

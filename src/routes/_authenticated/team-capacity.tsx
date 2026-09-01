@@ -1029,9 +1029,13 @@ function TeamCapacityPage() {
                                 </div>
                               ))}
                               {item.activeTasks.length > 2 && (
-                                <div className="text-[10px] text-muted-foreground font-mono pl-1">
-                                  +{item.activeTasks.length - 2} more active
-                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setInspectMemberId(p.id)}
+                                  className="text-[11px] font-semibold text-primary hover:text-primary/80 hover:underline cursor-pointer flex items-center gap-1 mt-1 transition-colors pl-1"
+                                >
+                                  +{item.activeTasks.length - 2} more active (click to view all)
+                                </button>
                               )}
                             </div>
                           ) : (
@@ -1379,7 +1383,7 @@ function TeamCapacityPage() {
                                   >
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="font-semibold text-xs text-foreground truncate">{t.task_name}</span>
-                                      <StatusBadge status={t.status as TaskStatus} />
+                                      <StatusBadge status={t.status as TaskStatus} reason={t.hold_reason} />
                                     </div>
                                     <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
                                       <span>{t.project_name || "General"}</span>
@@ -1398,7 +1402,7 @@ function TeamCapacityPage() {
                                   >
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="font-semibold text-xs text-foreground truncate">{t.task_name}</span>
-                                      <StatusBadge status={t.status as TaskStatus} />
+                                      <StatusBadge status={t.status as TaskStatus} reason={t.hold_reason} />
                                     </div>
                                     <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
                                       <span>{t.project_name || "General"}</span>
@@ -1540,7 +1544,7 @@ function TeamCapacityPage() {
             <>
               <DialogHeader className="space-y-1.5 border-b border-border pb-3">
                 <div className="flex items-center justify-between gap-2">
-                  <StatusBadge status={activeTaskModalItem.task.status as TaskStatus} />
+                  <StatusBadge status={activeTaskModalItem.task.status as TaskStatus} reason={activeTaskModalItem.task.hold_reason} />
                   {activeTaskModalItem.task.task_code && (
                     <span className="font-mono text-xs text-muted-foreground font-semibold">
                       {activeTaskModalItem.task.task_code}
@@ -1601,9 +1605,15 @@ function TeamCapacityPage() {
                     </div>
                   </div>
                   <div className="p-2 rounded bg-muted/30 border border-border space-y-0.5">
-                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">Hours Logged / Planned</span>
-                    <div className="font-mono text-emerald-400 font-bold">
-                      {activeTaskModalItem.task.actual_hours || 0} hrs / {activeTaskModalItem.task.planned_hours || 1} hrs
+                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">Hours (User / Auto / Plan)</span>
+                    <div className="font-mono text-[11px] font-bold flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-emerald-400" title="User Logged">User: {activeTaskModalItem.task.actual_hours || 0}h</span>
+                      <span className="text-muted-foreground">|</span>
+                      <span className="text-amber-400" title="System Auto-Tracked">
+                        Auto: {(activeTaskModalItem.task as any).started_at ? Math.max(0, Math.round(((Date.now() - new Date((activeTaskModalItem.task as any).started_at).getTime()) / 3600000) * 10) / 10) : (activeTaskModalItem.task as any).system_hours || 0}h
+                      </span>
+                      <span className="text-muted-foreground">|</span>
+                      <span className="text-indigo-400" title="Planned Target">Plan: {activeTaskModalItem.task.planned_hours || 0}h</span>
                     </div>
                   </div>
                 </div>

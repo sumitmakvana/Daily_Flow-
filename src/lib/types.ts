@@ -88,7 +88,10 @@ export interface Task {
   remarks: string | null;
   planned_hours: number | null;
   actual_hours: number | null;
+  started_at?: string | null;
+  system_hours?: number | null;
   blocker_reason: string | null;
+  hold_reason?: string | null;
   blocked_at: string | null;
   sprint_week: string | null;
   created_by: string | null;

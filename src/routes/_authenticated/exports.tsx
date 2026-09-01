@@ -580,9 +580,10 @@ function ExportsPage() {
               <thead>
                 <tr className="bg-muted/40 border-b border-border text-muted-foreground font-medium text-[11px] uppercase tracking-wider">
                   <th className="py-2.5 px-3 w-1/4">Team Member</th>
-                  <th className="py-2.5 px-1 w-8"></th>
+                  <th className="py-2.5 px-1 w-4"></th>
                   <th className="py-2.5 px-3 w-1/4">Project</th>
-                  <th className="py-2.5 px-3 text-right w-24">Hours</th>
+                  <th className="py-2.5 px-3 text-right w-28 text-emerald-400">User Logged</th>
+                  <th className="py-2.5 px-3 text-right w-28 text-amber-400">Auto Tracked</th>
                   <th className="py-2.5 px-3 text-right w-44">Total Hours (working day in month)</th>
                   <th className="py-2.5 px-3 text-right w-28">% Project</th>
                 </tr>
@@ -590,14 +591,14 @@ function ExportsPage() {
               <tbody className="divide-y divide-border/40 font-medium">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={7} className="py-12 text-center text-xs text-muted-foreground">
                       <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
                       Generating capacity report...
                     </td>
                   </tr>
                 ) : !reportData?.rows.length ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={7} className="py-12 text-center text-xs text-muted-foreground">
                       No team member capacity records found for the selected filters.
                     </td>
                   </tr>
@@ -606,7 +607,7 @@ function ExportsPage() {
                     if (row.isSeparatorRow) {
                       return (
                         <tr key={`sep-${idx}`} className="bg-muted/30 h-3 border-y border-border/30">
-                          <td colSpan={6}></td>
+                          <td colSpan={7}></td>
                         </tr>
                       );
                     }
@@ -646,8 +647,11 @@ function ExportsPage() {
                             <span className="font-medium text-foreground">{row.projectName}</span>
                           )}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono font-medium">
-                          {row.hours}
+                        <td className="py-2 px-3 text-right font-mono font-medium text-emerald-400">
+                          {row.hours}h
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-medium text-amber-400">
+                          {row.autoHours ?? 0}h
                         </td>
                         <td className="py-2 px-3 text-right font-mono text-muted-foreground">
                           {row.totalWorkingHours}

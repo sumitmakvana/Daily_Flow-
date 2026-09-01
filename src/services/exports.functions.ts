@@ -184,6 +184,7 @@ export interface CapacityReportRow {
   teamMember: string;
   projectName: string;
   hours: number;
+  autoHours?: number;
   totalWorkingHours: number;
   pctProject: string;
   isTotalRow?: boolean;
@@ -325,10 +326,11 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
         eodProjectWhere = ` AND (t.project_id = $4::uuid OR pr.id = $4::uuid OR t.project_name = $4 OR pr.name = $4)`;
       }
 
-      const eodRes = await client.query<{ user_id: string; project_name: string; hours: string }>(
+      const eodRes = await client.query<{ user_id: string; project_name: string; hours: string; auto_hours: string }>(
         `SELECT e.user_id,
                 COALESCE(NULLIF(t.project_name, ''), NULLIF(pr.name, ''), 'Unassigned') AS project_name,
-                SUM(e.actual_hours)::text AS hours
+                SUM(e.actual_hours)::text AS hours,
+                SUM(COALESCE(t.system_hours, 0))::text AS auto_hours
            FROM public.task_eod_submissions e
            JOIN public.tasks t ON t.id = e.task_id
            LEFT JOIN public.projects pr ON pr.id = t.project_id
@@ -356,10 +358,11 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
         tasksProjectWhere = ` AND (t.project_id = $4::uuid OR pr.id = $4::uuid OR t.project_name = $4 OR pr.name = $4)`;
       }
 
-      const tasksRes = await client.query<{ user_id: string; project_name: string; hours: string }>(
+      const tasksRes = await client.query<{ user_id: string; project_name: string; hours: string; auto_hours: string }>(
         `SELECT t.assigned_to AS user_id,
                 COALESCE(NULLIF(t.project_name, ''), NULLIF(pr.name, ''), 'Unassigned') AS project_name,
-                SUM(COALESCE(t.actual_hours, t.planned_hours, 0))::text AS hours
+                SUM(COALESCE(t.actual_hours, t.planned_hours, 0))::text AS hours,
+                SUM(COALESCE(t.system_hours, 0))::text AS auto_hours
            FROM public.tasks t
            LEFT JOIN public.projects pr ON pr.id = t.project_id
           WHERE t.assigned_to = ANY($3::uuid[])
@@ -409,23 +412,29 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
 
       // Organize hours by user
       const userProjectsMap: Record<string, Record<string, number>> = {};
+      const userAutoProjectsMap: Record<string, Record<string, number>> = {};
       profiles.forEach((p) => {
         userProjectsMap[p.id] = {};
+        userAutoProjectsMap[p.id] = {};
       });
 
       // Aggregate EOD hours
       eodRes.rows.forEach((r) => {
         const hrs = parseFloat(r.hours) || 0;
-        if (hrs > 0 && userProjectsMap[r.user_id]) {
-          userProjectsMap[r.user_id][r.project_name] = (userProjectsMap[r.user_id][r.project_name] || 0) + hrs;
+        const autoHrs = parseFloat(r.auto_hours || "0") || 0;
+        if (userProjectsMap[r.user_id]) {
+          if (hrs > 0) userProjectsMap[r.user_id][r.project_name] = (userProjectsMap[r.user_id][r.project_name] || 0) + hrs;
+          if (autoHrs > 0) userAutoProjectsMap[r.user_id][r.project_name] = (userAutoProjectsMap[r.user_id][r.project_name] || 0) + autoHrs;
         }
       });
 
       // Aggregate Direct task hours
       tasksRes.rows.forEach((r) => {
         const hrs = parseFloat(r.hours) || 0;
-        if (hrs > 0 && userProjectsMap[r.user_id]) {
-          userProjectsMap[r.user_id][r.project_name] = (userProjectsMap[r.user_id][r.project_name] || 0) + hrs;
+        const autoHrs = parseFloat(r.auto_hours || "0") || 0;
+        if (userProjectsMap[r.user_id]) {
+          if (hrs > 0) userProjectsMap[r.user_id][r.project_name] = (userProjectsMap[r.user_id][r.project_name] || 0) + hrs;
+          if (autoHrs > 0) userAutoProjectsMap[r.user_id][r.project_name] = (userAutoProjectsMap[r.user_id][r.project_name] || 0) + autoHrs;
         }
       });
 
@@ -456,6 +465,7 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
 
       profiles.forEach((p, pIdx) => {
         const projectHours = userProjectsMap[p.id] || {};
+        const autoProjectHours = userAutoProjectsMap[p.id] || {};
         let totalLoggedAndLeave = 0;
 
         Object.entries(projectHours).forEach(([projName, hrs]) => {
@@ -479,11 +489,13 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
         // Add rows for each project
         projectEntries.forEach(([projName, hrs]) => {
           const displayHrs = Math.round(hrs * 10) / 10;
+          const displayAutoHrs = Math.round((autoProjectHours[projName] || 0) * 10) / 10;
           const pctNum = totalWorkingHours > 0 ? Math.round((hrs / totalWorkingHours) * 100) : 0;
           reportRows.push({
             teamMember: p.display_name,
             projectName: projName,
             hours: displayHrs,
+            autoHours: displayAutoHrs,
             totalWorkingHours,
             pctProject: `${pctNum}%`,
           });
