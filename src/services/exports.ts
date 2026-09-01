@@ -33,7 +33,8 @@ export function exportMemberCapacityToExcel(
       "Team Member",
       "",
       "Project",
-      "Hours",
+      "User Logged Hours",
+      "Auto-Tracked Hours",
       "Total Hours (working day in month)",
       "% Project",
     ],
@@ -48,6 +49,7 @@ export function exportMemberCapacityToExcel(
         "",
         r.projectName,
         r.hours,
+        r.autoHours ?? 0,
         r.totalWorkingHours,
         r.pctProject,
       ]);
@@ -59,7 +61,8 @@ export function exportMemberCapacityToExcel(
     { wch: 22 }, // Team Member
     { wch: 4 },  // Spacing
     { wch: 25 }, // Project
-    { wch: 12 }, // Hours
+    { wch: 18 }, // User Logged Hours
+    { wch: 18 }, // Auto-Tracked Hours
     { wch: 35 }, // Total Hours
     { wch: 15 }, // % Project
   ];
@@ -111,7 +114,8 @@ export function exportCapacityReportToCSV(
       "Team Member",
       "",
       "Project",
-      "Hours",
+      "User Logged Hours",
+      "Auto-Tracked Hours",
       "Total Hours (working day in month)",
       "% Project",
     ],
@@ -126,6 +130,7 @@ export function exportCapacityReportToCSV(
         "",
         r.projectName,
         r.hours,
+        r.autoHours ?? 0,
         r.totalWorkingHours,
         r.pctProject,
       ]);

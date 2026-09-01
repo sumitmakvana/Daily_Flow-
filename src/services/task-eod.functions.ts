@@ -155,6 +155,12 @@ export const upsertTaskEodFn = createServerFn({ method: "POST" })
               SET status = $1::public.task_status,
                   completed_at = CASE WHEN $2::boolean THEN COALESCE(completed_at, now()) ELSE NULL END,
                   blocked_at = CASE WHEN $3::boolean THEN COALESCE(blocked_at, now()) ELSE NULL END,
+                  started_at = CASE WHEN $1::text = 'In Progress' THEN COALESCE(started_at, now()) ELSE started_at END,
+                  system_hours = CASE 
+                                   WHEN $2::boolean AND started_at IS NOT NULL 
+                                   THEN LEAST(8.0, ROUND(EXTRACT(EPOCH FROM (COALESCE(completed_at, now()) - started_at)) / 3600.0, 2))
+                                   ELSE system_hours 
+                                 END,
                   actual_hours = $4,
                   updated_at = now(),
                   updated_by = $5

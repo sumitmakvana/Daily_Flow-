@@ -25,6 +25,7 @@ import {
   Check,
 } from "lucide-react";
 import type { Task, Profile, TaskStatus } from "@/lib/types";
+import { TaskHoursBadges } from "./TaskHoursBadges";
 import { formatHoursMins } from "@/lib/format";
 import { formatDate } from "@/lib/format";
 import { formatToDateStr } from "@/lib/task-date-utils";
@@ -103,7 +104,7 @@ export function TaskDetailModal({
                 {copiedCode ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3 opacity-60" />}
               </button>
 
-              <StatusBadge status={task.status} />
+              <StatusBadge status={task.status} reason={task.hold_reason} />
               <PriorityBadge priority={task.priority} />
             </div>
 
@@ -142,19 +143,11 @@ export function TaskDetailModal({
               </div>
             </div>
 
-            <div className="text-right shrink-0">
-              <div className="text-[10px] uppercase font-bold text-muted-foreground">Logged Hours</div>
-              <div className="text-xs font-mono font-bold text-emerald-400">
-                {formatHoursMins(task.actual_hours ?? 0)} / {formatHoursMins(task.planned_hours ?? 0)}
-              </div>
-            </div>
+            <TaskHoursBadges task={task} variant="badges" />
           </div>
         ) : (
-          <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/30 border border-border text-xs">
-            <span className="text-muted-foreground">Hours Allocation:</span>
-            <span className="font-mono font-semibold text-foreground">
-              {formatHoursMins(task.actual_hours ?? 0)} logged / {formatHoursMins(task.planned_hours ?? 0)} planned
-            </span>
+          <div className="p-2 rounded-xl bg-muted/20 border border-border/60">
+            <TaskHoursBadges task={task} variant="badges" />
           </div>
         )}
 

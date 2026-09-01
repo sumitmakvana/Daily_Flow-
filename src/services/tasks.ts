@@ -108,7 +108,7 @@ export const tasksService = {
     task: Task,
     newStatus: TaskStatus,
     userId: string,
-    extras: { blocker_reason?: string } = {},
+    extras: { blocker_reason?: string; hold_reason?: string; actual_hours?: number } = {},
   ): Promise<Task> {
     if (import.meta.env.MODE === "test") {
       (globalThis as any).__test_user_id = userId;
@@ -126,6 +126,12 @@ export const tasksService = {
       patch.blocked_at = new Date().toISOString();
     } else if (task.status === "Blocked") {
       patch.blocked_at = null;
+    }
+    if (newStatus === "On Hold") {
+      patch.hold_reason = extras.hold_reason ?? task.hold_reason ?? "On Hold";
+    }
+    if (extras.actual_hours !== undefined) {
+      patch.actual_hours = extras.actual_hours;
     }
     const updated = await this.update(task, patch, userId);
     if (newStatus === "Blocked" && task.reviewer) {

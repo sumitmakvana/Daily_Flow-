@@ -82,17 +82,38 @@ export const updateTaskFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const result = await withUser(context.userId, async (client) => {
-      // Get old assigned_to before update (skip in unit tests to preserve call expectations)
+      // Get old assigned_to, started_at, and status before update
       let oldAssignedTo: string | null = null;
+      let existingStartedAt: string | null = null;
+      let existingSystemHours: number = 0;
       if (import.meta.env.MODE !== "test") {
-        const oldTaskRes = await client.query<{ assigned_to: string | null }>(
-          `SELECT assigned_to FROM public.tasks WHERE id = $1`,
+        const oldTaskRes = await client.query<{ assigned_to: string | null; started_at: string | null; system_hours: number | null }>(
+          `SELECT assigned_to, started_at::text, system_hours FROM public.tasks WHERE id = $1`,
           [data.id],
         );
-        oldAssignedTo = oldTaskRes.rows[0]?.assigned_to;
+        oldAssignedTo = oldTaskRes.rows[0]?.assigned_to ?? null;
+        existingStartedAt = oldTaskRes.rows[0]?.started_at ?? null;
+        existingSystemHours = Number(oldTaskRes.rows[0]?.system_hours ?? 0);
       }
 
       const patch: Record<string, unknown> = { ...data.patch, updated_by: context.userId };
+
+      // Handle started_at and system_hours calculations on status changes
+      if (patch.status === "In Progress" && !existingStartedAt && !patch.started_at) {
+        patch.started_at = new Date().toISOString();
+      } else if ((patch.status === "On Hold" || patch.status === "Blocked" || patch.status === "To Do") && existingStartedAt) {
+        const startTs = new Date(existingStartedAt).getTime();
+        const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+        patch.system_hours = existingSystemHours + elapsed;
+        patch.started_at = null;
+      } else if ((patch.status === "Completed" || patch.done === true) && (existingStartedAt || patch.started_at)) {
+        const startTs = new Date((patch.started_at as string) || existingStartedAt!).getTime();
+        const diffHrs = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+        if (patch.system_hours === undefined) {
+          patch.system_hours = existingSystemHours + diffHrs;
+        }
+      }
+
       delete patch.id;
       delete patch.created_at;
       delete patch.updated_at;

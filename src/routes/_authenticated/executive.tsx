@@ -82,6 +82,7 @@ import {
 import type { Task, Profile, Project, EodCheckin } from "@/lib/types";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDate, formatHoursMins } from "@/lib/format";
@@ -796,23 +797,30 @@ function ExecutiveRealDashboard({
     return list;
   }, [filteredProfiles, filteredTasks, showOnlyActiveMembers, range]);
 
-  // 6. Planned vs Actual Hours BarChart Data
+  // 6. Planned vs Actual vs Auto Hours BarChart Data
   const planVsActualData = useMemo(() => {
     const targetProfiles = filteredProfiles;
     const list = targetProfiles.map((p) => {
       const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
       const planned = pTasks.reduce((s, t) => s + Number(t.planned_hours ?? 0), 0);
       const actual = pTasks.reduce((s, t) => s + Number(t.actual_hours ?? 0), 0);
+      const auto = pTasks.reduce((s, t) => {
+        const sys = (t as any).started_at 
+          ? Math.min(8.0, Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10))
+          : Number((t as any).system_hours ?? 0);
+        return s + sys;
+      }, 0);
       return {
         id: p.id,
         name: p.display_name.includes("@") ? p.display_name.split("@")[0] : p.display_name.split(" ")[0],
         fullName: p.display_name,
         planned,
         actual,
+        auto,
       };
     });
     if (showOnlyActiveMembers) {
-      return list.filter((m) => m.planned > 0 || m.actual > 0);
+      return list.filter((m) => m.planned > 0 || m.actual > 0 || m.auto > 0);
     }
     return list;
   }, [filteredProfiles, filteredTasks, showOnlyActiveMembers]);
@@ -1236,16 +1244,19 @@ function ExecutiveRealDashboard({
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-bold text-foreground tracking-tight flex items-center gap-1.5">
-                  <BarChart2 className="h-3.5 w-3.5 text-primary" /> Planned vs Actual Hours
+                  <BarChart2 className="h-3.5 w-3.5 text-primary" /> Hours Breakdown per Member
                 </h4>
-                <p className="text-xs text-muted-foreground">Logged vs planned hours per member</p>
+                <p className="text-xs text-muted-foreground">User logged vs auto-tracked vs planned hours</p>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="flex items-center gap-1 text-indigo-400 font-medium">
                   <span className="h-2 w-2 rounded-sm bg-[#6366f1]" /> Plan
                 </span>
                 <span className="flex items-center gap-1 text-emerald-400 font-medium">
-                  <span className="h-2 w-2 rounded-sm bg-[#10b981]" /> Act
+                  <span className="h-2 w-2 rounded-sm bg-[#10b981]" /> User
+                </span>
+                <span className="flex items-center gap-1 text-amber-400 font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-[#f59e0b]" /> Auto
                 </span>
               </div>
             </div>
@@ -1276,9 +1287,10 @@ function ExecutiveRealDashboard({
                   />
                   <Bar
                     dataKey="planned"
+                    name="Plan"
                     fill="#6366f1"
                     radius={[2, 2, 0, 0]}
-                    barSize={14}
+                    barSize={10}
                     className="cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={(entry: any) => {
                       if (entry && entry.id) onSelectMember(entry.id);
@@ -1286,9 +1298,21 @@ function ExecutiveRealDashboard({
                   />
                   <Bar
                     dataKey="actual"
+                    name="User Act"
                     fill="#10b981"
                     radius={[2, 2, 0, 0]}
-                    barSize={14}
+                    barSize={10}
+                    className="cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={(entry: any) => {
+                      if (entry && entry.id) onSelectMember(entry.id);
+                    }}
+                  />
+                  <Bar
+                    dataKey="auto"
+                    name="Auto Tracked"
+                    fill="#f59e0b"
+                    radius={[2, 2, 0, 0]}
+                    barSize={10}
                     className="cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={(entry: any) => {
                       if (entry && entry.id) onSelectMember(entry.id);
@@ -1673,9 +1697,15 @@ export function MemberDetailSheet({
     const overdue = overdueTasks.length;
     const plannedHours = memberTasks.reduce((s, t) => s + (t.planned_hours ?? 0), 0);
     const actualHours = memberTasks.reduce((s, t) => s + (t.actual_hours ?? 0), 0);
+    const systemHours = memberTasks.reduce((s, t) => {
+      const sys = (t as any).started_at 
+        ? Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10)
+        : Number((t as any).system_hours ?? 0);
+      return s + sys;
+    }, 0);
     const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    return { total, completed, inProgress, blocked, overdue, plannedHours, actualHours, completionPct };
+    return { total, completed, inProgress, blocked, overdue, plannedHours, actualHours, systemHours, completionPct };
   }, [memberTasks, completedTasks, inProgressTasks, blockedTasks, overdueTasks]);
 
   const memberProjects = useMemo(() => {
@@ -1731,8 +1761,8 @@ export function MemberDetailSheet({
 
         {/* SCROLLABLE BODY */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-          {/* 2. COMPACT KPI METRICS */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          {/* 2. STATS KPI GRID */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-4 sm:p-5 border-b border-border bg-muted/20 shrink-0">
             <div
               onClick={() => setStatusFilterTab("all")}
               className={cn(
@@ -1758,9 +1788,13 @@ export function MemberDetailSheet({
             </div>
 
             <div className="bg-muted/40 border border-border/80 p-3 rounded-xl space-y-1">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Work Hours</div>
-              <div className="text-lg font-bold text-foreground font-mono">
-                {formatHoursMins(stats.actualHours)} <span className="text-xs font-normal text-muted-foreground">/ {formatHoursMins(stats.plannedHours)}</span>
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Work Hours (User / Auto / Plan)</div>
+              <div className="text-xs font-bold text-foreground font-mono flex items-center gap-1.5 flex-wrap pt-0.5">
+                <span className="text-emerald-400" title="User Logged">User: {formatHoursMins(stats.actualHours)}</span>
+                <span className="text-muted-foreground">|</span>
+                <span className="text-amber-400" title="System Auto-Tracked">Auto: {formatHoursMins(stats.systemHours)}</span>
+                <span className="text-muted-foreground">|</span>
+                <span className="text-indigo-400" title="Planned Target">Plan: {formatHoursMins(stats.plannedHours)}</span>
               </div>
             </div>
 
@@ -1990,9 +2024,7 @@ export function MemberDetailSheet({
                               {formatDate(t.due_date)}
                             </span>
                           )}
-                          <span className="font-mono text-foreground font-medium">
-                            Hours: <strong>{formatHoursMins(t.actual_hours ?? 0)}</strong> / {formatHoursMins(t.planned_hours ?? 0)}
-                          </span>
+                          <TaskHoursBadges task={t} />
                         </div>
                       </div>
                     </div>
@@ -3129,10 +3161,23 @@ function StatusDetailSheet({
                   ) : (
                     <span className="text-muted-foreground italic">Unassigned</span>
                   )}
-                  <div className="text-right font-mono text-[11px]">
-                    <div className="font-bold text-foreground">{t.actual_hours ?? 0}h / {t.planned_hours ?? 0}h</div>
-                    <div className="text-[10px] text-muted-foreground">Logged / Plan</div>
-                  </div>
+                  {(() => {
+                    const sysHrs = (t as any).started_at 
+                      ? Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10)
+                      : Number((t as any).system_hours ?? 0);
+                    return (
+                      <div className="text-right font-mono text-[11px]">
+                        <div className="font-bold flex items-center gap-1 justify-end">
+                          <span className="text-emerald-400">User: {t.actual_hours ?? 0}h</span>
+                          <span className="text-slate-600">|</span>
+                          <span className="text-amber-400">Auto: {sysHrs}h</span>
+                          <span className="text-slate-600">|</span>
+                          <span className="text-indigo-400">Plan: {t.planned_hours ?? 0}h</span>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">User / Auto / Plan</div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );
