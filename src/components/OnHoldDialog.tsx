@@ -23,11 +23,11 @@ interface OnHoldDialogProps {
 }
 
 const PRESET_REASONS = [
-  { id: "lunch", label: "Lunch Break", icon: Utensils, text: "Lunch Break" },
-  { id: "break", label: "Short Break", icon: Coffee, text: "Short Break / Tea" },
-  { id: "meeting", label: "Meeting / Call", icon: Users, text: "Internal / Client Meeting" },
-  { id: "waiting", label: "Waiting for Feedback", icon: Clock, text: "Waiting for Client / Feedback" },
-  { id: "eod", label: "End of Shift", icon: Moon, text: "End of Working Shift" },
+  { id: "waiting", label: "Waiting for Client", icon: Clock, text: "Waiting for Client / Feedback" },
+  { id: "dependency", label: "Dependency Blocked", icon: PauseCircle, text: "Waiting for Dependency / Team Block" },
+  { id: "priority", label: "Priority Shifted", icon: Sparkles, text: "Shifted Priority to Higher Task" },
+  { id: "resources", label: "Missing Access/Info", icon: Users, text: "Missing Access, Data or Material" },
+  { id: "deferred", label: "End of Shift / Deferred", icon: Moon, text: "Deferred to Next Shift / Sprint" },
 ];
 
 export function OnHoldDialog({
@@ -38,7 +38,7 @@ export function OnHoldDialog({
   onConfirm,
   loading = false,
 }: OnHoldDialogProps) {
-  const [selectedPreset, setSelectedPreset] = useState<string>("lunch");
+  const [selectedPreset, setSelectedPreset] = useState<string>("waiting");
   const [customText, setCustomText] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -73,7 +73,7 @@ export function OnHoldDialog({
             </div>
             <div>
               <DialogTitle className="text-base font-bold tracking-tight text-foreground flex items-center gap-2">
-                Pause Task & Put On Hold
+                Put Task On Hold
               </DialogTitle>
               {taskCode && (
                 <span className="font-mono text-xs text-primary font-semibold">
@@ -83,14 +83,14 @@ export function OnHoldDialog({
             </div>
           </div>
           <DialogDescription className="text-xs text-muted-foreground pt-1">
-            Select a quick reason for pausing this task. Your system timer will safely pause and save elapsed time.
+            Specify an operational reason for putting this task On Hold. Status will change to On Hold and timer will safely stop.
           </DialogDescription>
         </DialogHeader>
 
         {/* Quick Presets */}
         <div className="space-y-2">
           <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-            <Sparkles className="h-3 w-3 text-amber-400" /> Choose Quick Reason
+            <Sparkles className="h-3 w-3 text-amber-400" /> Choose Hold Reason
           </label>
 
           <div className="grid grid-cols-2 gap-2">
@@ -132,14 +132,14 @@ export function OnHoldDialog({
           </div>
         </div>
 
-        {/* Custom Text input if other selected or optional notes */}
+        {/* Custom Text input if other selected */}
         {selectedPreset === "other" && (
           <div className="space-y-1.5 animate-in fade-in duration-150">
             <label className="text-[11px] font-medium text-muted-foreground">Specify Reason</label>
             <Textarea
               value={customText}
               onChange={(e) => setCustomText(e.target.value)}
-              placeholder="e.g. Lunch break, Client meeting, Tea break..."
+              placeholder="e.g. Waiting for client response, Awaiting backend release..."
               rows={2}
               className="text-xs bg-input/40 border-border text-foreground focus-visible:ring-amber-500/40 resize-none"
             />
@@ -165,7 +165,7 @@ export function OnHoldDialog({
             className="h-8 text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-slate-950 transition-colors shadow-sm cursor-pointer"
           >
             <PauseCircle className="h-3.5 w-3.5 mr-1.5" />
-            {isSubmitting || loading ? "Pausing..." : "Confirm & Put On Hold"}
+            {isSubmitting || loading ? "Updating..." : "Confirm & Put On Hold"}
           </Button>
         </DialogFooter>
       </DialogContent>

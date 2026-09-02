@@ -104,9 +104,11 @@ export function TaskCard({
 
   useEffect(() => {
     if (isCompletingInline) {
-      const sysHrs = (task as any).started_at 
+      const baseSys = Number((task as any).system_hours ?? 0);
+      const runningSys = (task as any).started_at 
         ? Math.min(8.0, Math.max(0, (Date.now() - new Date((task as any).started_at).getTime()) / 3600000))
-        : Number((task as any).system_hours ?? 0);
+        : 0;
+      const sysHrs = baseSys + runningSys;
       const fillVal = sysHrs > 0 ? sysHrs : defaultFill;
       setInlineHours(formatHoursMins(fillVal));
     } else {
@@ -256,9 +258,41 @@ export function TaskCard({
                   <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
                     <History className="mr-2 h-3.5 w-3.5" /> History & comments
                   </DropdownMenuItem>
+                  {canAct && task.status === "In Progress" && task.started_at && (
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        if (!userId) return;
+                        try {
+                          await tasksService.pauseTimer(task, userId);
+                          toast.success("Timer paused");
+                          onChanged?.();
+                        } catch (err: any) {
+                          toast.error(err?.message || "Failed to pause timer");
+                        }
+                      }}
+                    >
+                      <Pause className="mr-2 h-3.5 w-3.5" /> Pause timer
+                    </DropdownMenuItem>
+                  )}
+                  {canAct && task.status === "In Progress" && !task.started_at && (
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        if (!userId) return;
+                        try {
+                          await tasksService.resumeTimer(task, userId);
+                          toast.success("Timer resumed");
+                          onChanged?.();
+                        } catch (err: any) {
+                          toast.error(err?.message || "Failed to resume timer");
+                        }
+                      }}
+                    >
+                      <Play className="mr-2 h-3.5 w-3.5" /> Resume timer
+                    </DropdownMenuItem>
+                  )}
                   {canAct && task.status !== "On Hold" && task.status !== "Completed" && (
                     <DropdownMenuItem onClick={() => setOnHoldOpen(true)}>
-                      <Pause className="mr-2 h-3.5 w-3.5" /> Put on hold
+                      <PauseCircle className="mr-2 h-3.5 w-3.5" /> Put on hold
                     </DropdownMenuItem>
                   )}
                   {canAct && (
@@ -456,6 +490,50 @@ export function TaskCard({
                     }}
                   >
                     <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Complete
+                  </Button>
+                )}
+                {task.status === "In Progress" && task.started_at && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none border-amber-500/30 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      if (!userId) return;
+                      try {
+                        await tasksService.pauseTimer(task, userId);
+                        toast.success("Timer paused");
+                        onChanged?.();
+                      } catch (err: any) {
+                        toast.error(err?.message || "Failed to pause timer");
+                      }
+                    }}
+                    title="Pause running timer"
+                  >
+                    <Pause className="mr-1 h-3.5 w-3.5" /> Pause Timer
+                  </Button>
+                )}
+                {task.status === "In Progress" && !task.started_at && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      if (!userId) return;
+                      try {
+                        await tasksService.resumeTimer(task, userId);
+                        toast.success("Timer resumed");
+                        onChanged?.();
+                      } catch (err: any) {
+                        toast.error(err?.message || "Failed to resume timer");
+                      }
+                    }}
+                    title="Resume running timer"
+                  >
+                    <Play className="mr-1 h-3.5 w-3.5" /> Resume Timer
                   </Button>
                 )}
                 {task.status !== "On Hold" && task.status !== "Completed" && (

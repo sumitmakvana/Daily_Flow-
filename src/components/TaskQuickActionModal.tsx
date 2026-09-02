@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   CheckCircle2,
   Play,
+  Pause,
   AlertOctagon,
   Clock,
   Pencil,
@@ -223,15 +224,67 @@ export function TaskQuickActionModal({
                 {task.status === "Blocked" ? "Blocked" : "Flag Blocker"}
               </Button>
 
-              {/* 4. Put On Hold */}
+              {/* 4. Pause / Resume Timer (Direct 1-Click Action) */}
+              {task.status === "In Progress" && task.started_at && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 justify-start text-xs gap-2 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer font-semibold"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (!userId) return;
+                    try {
+                      setBusy(true);
+                      await tasksService.pauseTimer(task, userId);
+                      toast.success("Timer paused");
+                      onChanged?.();
+                      onOpenChange(false);
+                    } catch (err: any) {
+                      toast.error(err?.message || "Failed to pause timer");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <Pause className="h-4 w-4 text-amber-400" />
+                  Pause Timer
+                </Button>
+              )}
+              {task.status === "In Progress" && !task.started_at && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 justify-start text-xs gap-2 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer font-semibold"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (!userId) return;
+                    try {
+                      setBusy(true);
+                      await tasksService.resumeTimer(task, userId);
+                      toast.success("Timer resumed");
+                      onChanged?.();
+                      onOpenChange(false);
+                    } catch (err: any) {
+                      toast.error(err?.message || "Failed to resume timer");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <Play className="h-4 w-4 text-emerald-400" />
+                  Resume Timer
+                </Button>
+              )}
+
+              {/* 5. Put On Hold (Status Action) */}
               <Button
                 variant={task.status === "On Hold" ? "secondary" : "outline"}
                 size="sm"
-                className="h-10 justify-start text-xs gap-2 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                className="h-10 justify-start text-xs gap-2 border-border/70 text-muted-foreground hover:text-foreground hover:bg-accent/40 cursor-pointer"
                 disabled={busy}
                 onClick={() => setOnHoldOpen(true)}
               >
-                <PauseCircle className="h-4 w-4 text-amber-400" />
+                <PauseCircle className="h-4 w-4 text-amber-400/80" />
                 {task.status === "On Hold" ? "On Hold" : "Put On Hold"}
               </Button>
 

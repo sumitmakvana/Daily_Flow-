@@ -98,10 +98,10 @@ export const updateTaskFn = createServerFn({ method: "POST" })
 
       const patch: Record<string, unknown> = { ...data.patch, updated_by: context.userId };
 
-      // Handle started_at and system_hours calculations on status changes
-      if (patch.status === "In Progress" && !existingStartedAt && !patch.started_at) {
+      // Handle started_at and system_hours calculations on status changes or explicit timer pauses
+      if (patch.status === "In Progress" && !existingStartedAt && patch.started_at !== null && !patch.started_at) {
         patch.started_at = new Date().toISOString();
-      } else if ((patch.status === "On Hold" || patch.status === "Blocked" || patch.status === "To Do") && existingStartedAt) {
+      } else if ((patch.status === "On Hold" || patch.status === "Blocked" || patch.status === "To Do" || patch.started_at === null) && existingStartedAt) {
         const startTs = new Date(existingStartedAt).getTime();
         const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
         patch.system_hours = existingSystemHours + elapsed;
