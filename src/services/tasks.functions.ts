@@ -106,12 +106,15 @@ export const updateTaskFn = createServerFn({ method: "POST" })
         const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
         patch.system_hours = existingSystemHours + elapsed;
         patch.started_at = null;
-      } else if ((patch.status === "Completed" || patch.done === true) && (existingStartedAt || patch.started_at)) {
-        const startTs = new Date((patch.started_at as string) || existingStartedAt!).getTime();
-        const diffHrs = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
-        if (patch.system_hours === undefined) {
-          patch.system_hours = existingSystemHours + diffHrs;
+      } else if ((patch.status === "Completed" || patch.done === true)) {
+        if (existingStartedAt || patch.started_at) {
+          const startTs = new Date((patch.started_at as string) || existingStartedAt!).getTime();
+          const diffHrs = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+          if (patch.system_hours === undefined) {
+            patch.system_hours = existingSystemHours + diffHrs;
+          }
         }
+        patch.started_at = null;
       }
 
       delete patch.id;
