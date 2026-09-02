@@ -38,6 +38,36 @@ async function ensureLeavesTableAdmin() {
   }
 }
 
+export async function autoPauseTasksForUserOnLeave(pool: any, userId: string, leaveType?: string) {
+  try {
+    const leaveReason = leaveType ? `On Leave (${leaveType.toUpperCase()})` : "On Leave";
+    // Find active tasks for this user (status = 'In Progress' or started_at IS NOT NULL)
+    const activeRes = await pool.query(
+      `SELECT id, started_at::text, system_hours FROM public.tasks 
+       WHERE assigned_to = $1 AND (status = 'In Progress' OR started_at IS NOT NULL)`,
+      [userId]
+    );
+
+    for (const t of activeRes.rows) {
+      let sysHours = Number(t.system_hours || 0);
+      if (t.started_at) {
+        const startTs = new Date(t.started_at).getTime();
+        const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+        sysHours += elapsed;
+      }
+
+      await pool.query(
+        `UPDATE public.tasks 
+         SET status = 'On Hold', hold_reason = $1, started_at = NULL, system_hours = $2, updated_at = now()
+         WHERE id = $3`,
+        [leaveReason, sysHours, t.id]
+      );
+    }
+  } catch (err) {
+    console.warn("[leaves] autoPauseTasksForUserOnLeave error:", err);
+  }
+}
+
 export const fetchLeavesFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .validator((d?: { startDate?: string; endDate?: string; status?: string; userId?: string }) =>
@@ -178,6 +208,12 @@ export const createLeaveFn = createServerFn({ method: "POST" })
 
     const created = insertRes.rows[0];
 
+    // If leave is approved and covers today, automatically pause active timers & tasks!
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (initialStatus === "approved" && data.startDate <= todayStr && data.endDate >= todayStr) {
+      await autoPauseTasksForUserOnLeave(pool, targetUserId, data.leaveType);
+    }
+
     // Notifications
     try {
       const userProfile = await pool.query<{ display_name: string; manager_id: string | null }>(
@@ -269,6 +305,12 @@ export const updateLeaveStatusFn = createServerFn({ method: "POST" })
 
     const updated = res.rows[0];
     if (updated) {
+      if (data.status === "approved") {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (updated.start_date <= todayStr && updated.end_date >= todayStr) {
+          await autoPauseTasksForUserOnLeave(pool, updated.user_id, updated.leave_type);
+        }
+      }
       // Notify employee of status change
       try {
         await pool.query(
@@ -638,6 +680,9 @@ export const quickMarkLeaveTodayFn = createServerFn({ method: "POST" })
        RETURNING id`,
       [userId, todayStr, reasonText]
     );
+
+    // Auto-pause active tasks & timers for this user
+    await autoPauseTasksForUserOnLeave(pool, userId, "casual");
 
     // Notify managers
     try {

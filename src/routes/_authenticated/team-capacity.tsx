@@ -55,7 +55,9 @@ import {
   Sparkles,
   Zap,
   FileSpreadsheet,
+  Palmtree,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import type { Profile, Task, Project, TaskStatus } from "@/lib/types";
 import { formatHoursMins } from "@/lib/format";
@@ -68,6 +70,7 @@ import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import { useAuth } from "@/hooks/use-auth";
 import { tasksService } from "@/services/tasks";
+import { leavesService } from "@/services/leaves";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -97,6 +100,8 @@ function TeamCapacityPage() {
   const [availabilityFilter, setAvailabilityFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"table" | "card">("table");
   const [selectedAssignMemberId, setSelectedAssignMemberId] = useState<string | null>(null);
+  const [selectedPresetProjectName, setSelectedPresetProjectName] = useState<string | null>(null);
+  const [showActiveOnly, setShowActiveOnly] = useState<boolean>(true);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [inspectMemberId, setInspectMemberId] = useState<string | null>(null);
@@ -108,6 +113,7 @@ function TeamCapacityPage() {
   const [activeTaskModalItem, setActiveTaskModalItem] = useState<{ task: Task; member: Profile } | null>(null);
   const [upcomingTasksModalItem, setUpcomingTasksModalItem] = useState<{ member: Profile; tasks: Task[] } | null>(null);
   const [completedTodayModalItem, setCompletedTodayModalItem] = useState<{ member: Profile; tasks: Task[]; totalHours: number } | null>(null);
+  const [inspectProjectModalItem, setInspectProjectModalItem] = useState<any | null>(null);
 
   // Completed History expandable rows state
   const [expandedHistoryMemberIds, setExpandedHistoryMemberIds] = useState<Record<string, boolean>>({});
@@ -184,6 +190,16 @@ function TeamCapacityPage() {
     staleTime: 30000,
   });
 
+  // 5. Fetch active leaves for today (Real DB)
+  const { data: activeLeavesToday = [] } = useQuery({
+    queryKey: ["capacity-active-leaves", todayStr],
+    queryFn: async () => {
+      const leaves = await leavesService.getLeaves({ startDate: todayStr, endDate: todayStr, status: "__all" });
+      return leaves || [];
+    },
+    staleTime: 10000,
+  });
+
   // Extract ALL unique project names
   const allProjectsList = useMemo(() => {
     const map = new Map<string, string>();
@@ -222,6 +238,12 @@ function TeamCapacityPage() {
         return due < todayStr;
       });
 
+      // Active leave status for today (DB leaves or task hold reason)
+      const leaveRecord = activeLeavesToday.find((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled");
+      const leaveTask = memberTasks.find((t) => (t.hold_reason && t.hold_reason.toLowerCase().includes("leave")) || (t.status as string)?.toLowerCase().includes("leave"));
+      const activeLeave = leaveRecord || (leaveTask ? { leave_type: leaveTask.hold_reason || "Casual" } : null);
+      const isOnLeave = !!activeLeave;
+
       // Planned Hours for Capacity
       const plannedHours = memberTasks.reduce(
         (s, t) => (t.status !== "Completed" ? s + Number(t.planned_hours ?? 0) : s),
@@ -231,9 +253,11 @@ function TeamCapacityPage() {
       const maxDailyHours = 8;
       const capacityPct = Math.min(150, Math.round((plannedHours / maxDailyHours) * 100));
 
-      let capacityStatus: "free" | "available" | "partially" | "overloaded" = "available";
+      let capacityStatus: "free" | "available" | "partially" | "overloaded" | "leave" = "available";
 
-      if (plannedHours === 0) {
+      if (isOnLeave) {
+        capacityStatus = "leave";
+      } else if (plannedHours === 0) {
         capacityStatus = "free";
       } else if (plannedHours > 8 || blockedTasks.length > 0) {
         capacityStatus = "overloaded";
@@ -352,6 +376,8 @@ function TeamCapacityPage() {
         teamName,
         queuedHours: plannedHours,
         isLowQueue: plannedHours < 16,
+        activeLeave,
+        isOnLeave,
         completedTodayTasks,
         completedTodayHours,
         historyList,
@@ -412,6 +438,7 @@ function TeamCapacityPage() {
       string,
       {
         projectName: string;
+        clientName: string;
         membersMap: Map<
           string,
           {
@@ -419,7 +446,7 @@ function TeamCapacityPage() {
             title: string;
             teamName: string;
             tasks: Task[];
-            activeTask: Task | null;
+            activeTasks: Task[];
             upcomingTasks: Task[];
             completedTodayTasks: Task[];
             totalPlannedHours: number;
@@ -431,28 +458,37 @@ function TeamCapacityPage() {
 
     filteredMembers.forEach((item) => {
       const p = item.profile;
-      if (item.memberTasks.length === 0) {
+      const memberTasks = item.memberTasks;
+
+      // Filter tasks by active status if showActiveOnly is true
+      const tasksToProcess = showActiveOnly
+        ? memberTasks.filter((t) => t.status !== "Completed")
+        : memberTasks;
+
+      if (tasksToProcess.length === 0 && !showActiveOnly) {
         const key = "unassigned / general";
         if (!groupMap.has(key)) {
-          groupMap.set(key, { projectName: "Unassigned / General", membersMap: new Map() });
+          groupMap.set(key, { projectName: "Unassigned / General", clientName: "General Workspace", membersMap: new Map() });
         }
         groupMap.get(key)!.membersMap.set(p.id, {
           profile: p,
           title: item.title,
           teamName: item.teamName,
           tasks: [],
-          activeTask: null,
+          activeTasks: [],
           upcomingTasks: [],
           completedTodayTasks: [],
           totalPlannedHours: 0,
           totalActualHours: 0,
         });
       } else {
-        item.memberTasks.forEach((t) => {
+        tasksToProcess.forEach((t) => {
           const rawPName = t.project_name && t.project_name.trim() ? t.project_name.trim() : "Unassigned / General";
           const key = rawPName.toLowerCase();
+          const projClient = t.client || projects.find((pr) => pr.name?.toLowerCase() === key)?.client || "Internal Client";
+
           if (!groupMap.has(key)) {
-            groupMap.set(key, { projectName: rawPName, membersMap: new Map() });
+            groupMap.set(key, { projectName: rawPName, clientName: projClient, membersMap: new Map() });
           }
           const group = groupMap.get(key)!;
           if (!group.membersMap.has(p.id)) {
@@ -461,7 +497,7 @@ function TeamCapacityPage() {
               title: item.title,
               teamName: item.teamName,
               tasks: [],
-              activeTask: null,
+              activeTasks: [],
               upcomingTasks: [],
               completedTodayTasks: [],
               totalPlannedHours: 0,
@@ -478,29 +514,31 @@ function TeamCapacityPage() {
 
     const result = Array.from(groupMap.values()).map((g) => {
       const membersList = Array.from(g.membersMap.values()).map((m) => {
-        const activeTask = m.tasks.find((t) => t.status === "In Progress") || m.tasks[0] || null;
+        const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.profile.id);
+        const isOnLeave = !!activeLeave;
+        const activeTasks = isOnLeave ? [] : m.tasks.filter((t) => t.status === "In Progress");
         const upcomingTasks = m.tasks.filter((t) => t.status === "To Do" || (t.status as string) === "Pending");
         const completedTodayTasks = m.tasks.filter((t) => isTaskCompletedToday(t, todayStr));
         return {
           ...m,
-          activeTask,
+          activeLeave,
+          isOnLeave,
+          activeTasks,
           upcomingTasks,
           completedTodayTasks,
         };
       });
 
       const totalProjectTasks = membersList.reduce((sum, m) => sum + m.tasks.length, 0);
-      const activeTasksCount = membersList.reduce(
-        (sum, m) => sum + m.tasks.filter((t) => t.status === "In Progress").length,
-        0,
-      );
+      const activeWorkingMembersCount = membersList.filter((m) => m.activeTasks.length > 0 && !m.isOnLeave).length;
       const totalPlannedHours = membersList.reduce((sum, m) => sum + m.totalPlannedHours, 0);
 
       return {
         projectName: g.projectName,
+        clientName: g.clientName,
         members: membersList,
         totalProjectTasks,
-        activeTasksCount,
+        activeTasksCount: activeWorkingMembersCount,
         totalPlannedHours,
       };
     });
@@ -514,7 +552,7 @@ function TeamCapacityPage() {
       if (b.projectName === "Unassigned / General") return -1;
       return a.projectName.localeCompare(b.projectName);
     });
-  }, [filteredMembers, projectFilter, todayStr]);
+  }, [filteredMembers, projectFilter, showActiveOnly, projects, todayStr]);
 
   // Pagination calculation
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
@@ -572,8 +610,9 @@ function TeamCapacityPage() {
     }));
   };
 
-  const handleAssignTask = (memberId: string) => {
-    setSelectedAssignMemberId(memberId);
+  const handleAssignTask = (memberId?: string | null, projectName?: string | null) => {
+    setSelectedAssignMemberId(memberId ?? null);
+    setSelectedPresetProjectName(projectName ?? null);
     setEditingTask(null);
     setTaskDialogOpen(true);
   };
@@ -796,23 +835,125 @@ function TeamCapacityPage() {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-card border border-border/70 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-        {/* Search input */}
-        <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search members, projects, tasks..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="h-8 pl-8 text-xs bg-input/40 border-border text-foreground placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-primary rounded-md"
-          />
+      <div className="bg-card border border-border/70 rounded-xl p-3 space-y-2.5 shadow-2xs">
+        {/* Row 1: Search + View Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {/* Search Input */}
+          <div className="relative flex-1 min-w-[220px] max-w-md">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search members, projects, tasks..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="h-8 pl-8 text-xs bg-input/40 border-border text-foreground placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-primary rounded-md"
+            />
+          </div>
+
+          {/* Right: Info Popover, Active Work Switch, and View Mode Toggle */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0 border-border bg-card text-muted-foreground hover:text-foreground shrink-0"
+                  title="Capacity Logic Info"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="w-80 p-3.5 bg-popover border-border text-popover-foreground shadow-2xl text-xs space-y-2.5 z-[9999]"
+              >
+                <div className="font-bold text-foreground border-b border-border pb-1.5 flex items-center justify-between">
+                  <span>Availability Rules & Capacity</span>
+                  <Badge variant="outline" className="text-[9px] border-border text-muted-foreground font-mono">
+                    8h Daily Base
+                  </Badge>
+                </div>
+                <div className="space-y-2 text-[11px]">
+                  <div className="flex items-start gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 mt-1 shrink-0" />
+                    <div>
+                      <span className="font-bold text-foreground">Free / Available (&lt;5.5h):</span>
+                      <span className="text-muted-foreground block text-[10px]">Low workload with clear capacity.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="h-2 w-2 rounded-full bg-amber-500 mt-1 shrink-0" />
+                    <div>
+                      <span className="font-bold text-foreground">Partially Available (5.5h – 8h):</span>
+                      <span className="text-muted-foreground block text-[10px]">Near max daily hours.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="h-2 w-2 rounded-full bg-rose-500 mt-1 shrink-0" />
+                    <div>
+                      <span className="font-bold text-foreground">Overloaded (&gt;8h / Blocked):</span>
+                      <span className="text-muted-foreground block text-[10px]">Overcapacity or active blocker.</span>
+                    </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Active Work Only Switch Toggle */}
+            <div className="flex items-center gap-2 h-8 px-2.5 bg-input/20 border border-border/70 rounded-md shrink-0">
+              <Switch
+                id="active-work-switch"
+                checked={showActiveOnly}
+                onCheckedChange={(checked) => {
+                  setShowActiveOnly(checked);
+                  setCurrentPage(1);
+                }}
+                className="scale-90"
+              />
+              <label
+                htmlFor="active-work-switch"
+                className="text-xs font-semibold text-foreground cursor-pointer select-none whitespace-nowrap"
+              >
+                Show Active Work Only
+              </label>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-1 bg-muted/40 border border-border p-1 rounded-md h-8">
+              <Button
+                size="sm"
+                variant={viewMode === "table" ? "secondary" : "ghost"}
+                onClick={() => setViewMode("table")}
+                className={cn(
+                  "h-6 text-xs px-2.5 gap-1.5 font-medium rounded-xs transition-colors",
+                  viewMode === "table"
+                    ? "bg-accent text-foreground font-semibold border border-border/80 shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Table className="h-3.5 w-3.5" /> Table
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === "card" ? "secondary" : "ghost"}
+                onClick={() => setViewMode("card")}
+                className={cn(
+                  "h-6 text-xs px-2.5 gap-1.5 font-medium rounded-xs transition-colors",
+                  viewMode === "card"
+                    ? "bg-accent text-foreground font-semibold border border-border/80 shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Grid className="h-3.5 w-3.5" /> Cards
+              </Button>
+            </div>
+          </div>
         </div>
 
-        {/* Select Dropdowns */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Row 2: Select Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/40">
           <Select
             value={teamFilter}
             onValueChange={(val) => {
@@ -820,7 +961,7 @@ function TeamCapacityPage() {
               setCurrentPage(1);
             }}
           >
-            <SelectTrigger className="h-8 w-32 text-xs bg-input/40 border-border text-foreground rounded-md">
+            <SelectTrigger className="h-8 w-32 text-xs bg-input/40 border-border text-foreground rounded-md shrink-0">
               <SelectValue placeholder="All Teams" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
@@ -840,7 +981,7 @@ function TeamCapacityPage() {
               setCurrentPage(1);
             }}
           >
-            <SelectTrigger className="h-8 w-36 text-xs bg-input/40 border-border text-foreground rounded-md">
+            <SelectTrigger className="h-8 w-36 text-xs bg-input/40 border-border text-foreground rounded-md shrink-0">
               <SelectValue placeholder="All Projects" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999] max-h-60 overflow-y-auto">
@@ -860,7 +1001,7 @@ function TeamCapacityPage() {
               setCurrentPage(1);
             }}
           >
-            <SelectTrigger className="h-8 w-32 text-xs bg-input/40 border-border text-foreground rounded-md">
+            <SelectTrigger className="h-8 w-32 text-xs bg-input/40 border-border text-foreground rounded-md shrink-0">
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
@@ -879,7 +1020,7 @@ function TeamCapacityPage() {
               setCurrentPage(1);
             }}
           >
-            <SelectTrigger className="h-8 w-36 text-xs bg-input/40 border-border text-foreground rounded-md">
+            <SelectTrigger className="h-8 w-36 text-xs bg-input/40 border-border text-foreground rounded-md shrink-0">
               <SelectValue placeholder="All Availability" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border text-xs text-popover-foreground z-[9999]">
@@ -897,105 +1038,28 @@ function TeamCapacityPage() {
               variant="outline"
               size="sm"
               onClick={resetFilters}
-              className="h-8 px-2.5 text-xs border-border bg-card text-muted-foreground hover:text-foreground"
+              className="h-8 px-2.5 text-xs border-border bg-card text-muted-foreground hover:text-foreground shrink-0"
               title="Reset all filters"
             >
               <Filter className="h-3.5 w-3.5 mr-1" /> Clear
             </Button>
           )}
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 border-border bg-card text-muted-foreground hover:text-foreground shrink-0"
-                title="Capacity Logic Info"
-              >
-                <Info className="h-3.5 w-3.5" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              className="w-80 p-3.5 bg-popover border-border text-popover-foreground shadow-2xl text-xs space-y-2.5 z-[9999]"
-            >
-              <div className="font-bold text-foreground border-b border-border pb-1.5 flex items-center justify-between">
-                <span>Availability Rules & Capacity</span>
-                <Badge variant="outline" className="text-[9px] border-border text-muted-foreground font-mono">
-                  8h Daily Base
-                </Badge>
-              </div>
-              <div className="space-y-2 text-[11px]">
-                <div className="flex items-start gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 mt-1 shrink-0" />
-                  <div>
-                    <span className="font-bold text-foreground">Free / Available (&lt;5.5h):</span>
-                    <span className="text-muted-foreground block text-[10px]">Low workload with clear capacity.</span>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="h-2 w-2 rounded-full bg-amber-500 mt-1 shrink-0" />
-                  <div>
-                    <span className="font-bold text-foreground">Partially Available (5.5h – 8h):</span>
-                    <span className="text-muted-foreground block text-[10px]">Near max daily hours.</span>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="h-2 w-2 rounded-full bg-rose-500 mt-1 shrink-0" />
-                  <div>
-                    <span className="font-bold text-foreground">Overloaded (&gt;8h / Blocked):</span>
-                    <span className="text-muted-foreground block text-[10px]">Overcapacity or active blocker.</span>
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {/* View Mode Toggle */}
-          <div className="flex items-center gap-1 bg-muted/40 border border-border p-1 rounded-md">
-            <Button
-              size="sm"
-              variant={viewMode === "table" ? "default" : "ghost"}
-              onClick={() => setViewMode("table")}
-              className={cn(
-                "h-6 text-xs px-2.5 gap-1.5 font-medium rounded-xs",
-                viewMode === "table"
-                  ? "bg-primary text-primary-foreground font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Table className="h-3 w-3" /> Table
-            </Button>
-            <Button
-              size="sm"
-              variant={viewMode === "card" ? "default" : "ghost"}
-              onClick={() => setViewMode("card")}
-              className={cn(
-                "h-6 text-xs px-2.5 gap-1.5 font-medium rounded-xs",
-                viewMode === "card"
-                  ? "bg-primary text-primary-foreground font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Grid className="h-3 w-3" /> Cards
-            </Button>
-          </div>
         </div>
       </div>
 
       {/* MAIN TABLE VIEW */}
       {viewMode === "table" && (
-        <div className="bg-card border border-border/70 rounded-xl overflow-x-auto shadow-xs">
-          <table className="w-full text-left text-xs border-collapse min-w-[900px]">
+        <div className="bg-card border border-border/70 rounded-xl overflow-hidden shadow-2xs">
+          <table className="w-full text-left text-xs border-collapse table-fixed">
             <thead>
-              <tr className="border-b border-border/70 text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">
-                <th className="py-3 pl-3.5 pr-2 w-[18%] min-w-[150px] font-semibold">Member</th>
-                <th className="py-3 px-2 w-[26%] min-w-[180px] font-semibold">Current Work</th>
-                <th className="py-3 px-2 w-[13%] min-w-[110px] font-semibold">Upcoming Work</th>
-                <th className="py-3 px-2 w-[13%] min-w-[120px] font-semibold">Capacity</th>
-                <th className="py-3 px-2 w-[10%] min-w-[85px] font-semibold">Done Today</th>
-                <th className="py-3 px-2 w-[10%] min-w-[85px] font-semibold">History</th>
-                <th className="py-3 pl-2 pr-3.5 w-[10%] min-w-[95px] font-semibold">Projects</th>
+              <tr className="border-b border-border/80 bg-muted/30 text-muted-foreground text-[10px] font-bold uppercase tracking-wider h-10">
+                <th className="py-3 px-3 align-middle w-[18%]">Member</th>
+                <th className="py-3 px-3 align-middle w-[28%]">Current Work</th>
+                <th className="py-3 px-3 align-middle w-[12%]">Upcoming Work</th>
+                <th className="py-3 px-3 align-middle w-[13%]">Capacity</th>
+                <th className="py-3 px-3 align-middle w-[10%]">Done Today</th>
+                <th className="py-3 px-2 align-middle w-[7%]">History</th>
+                <th className="py-3 px-3 align-middle w-[12%]">Projects</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40 font-medium">
@@ -1015,10 +1079,10 @@ function TeamCapacityPage() {
                       >
                         {/* 1. Member Info */}
                         <td
-                          className="py-3 pl-3.5 pr-2 cursor-pointer"
+                          className="py-3 px-2.5 align-middle cursor-pointer"
                           onClick={() => setInspectMemberId(p.id)}
                         >
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-2 min-w-0">
                             <Avatar className="h-8 w-8 border border-border shrink-0">
                               {p.avatar_url ? (
                                 <AvatarImage src={p.avatar_url} alt={p.display_name} />
@@ -1028,14 +1092,18 @@ function TeamCapacityPage() {
                                 </AvatarFallback>
                               )}
                             </Avatar>
-                             <div className="min-w-0 space-y-0.5">
-                              <div className="font-medium text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
-                                <span className="truncate">{p.display_name}</span>
-                                {item.isLowQueue && (
-                                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px] font-mono px-1 py-0 h-4 shrink-0">
-                                    ⚡ &lt;16h Queue
+                            <div className="min-w-0 space-y-0.5 flex-1">
+                              <div className="font-semibold text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
+                                <span className="truncate max-w-[110px]">{p.display_name}</span>
+                                {item.isOnLeave ? (
+                                  <Badge variant="outline" className="bg-muted/40 text-amber-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
+                                    <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
                                   </Badge>
-                                )}
+                                ) : item.isLowQueue ? (
+                                  <Badge variant="outline" className="bg-muted/40 text-emerald-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
+                                    <Zap className="h-3 w-3 text-emerald-400/80" /> &lt;16h Queue
+                                  </Badge>
+                                ) : null}
                               </div>
                               <div className="text-[10px] text-muted-foreground truncate">{item.title}</div>
                             </div>
@@ -1043,18 +1111,27 @@ function TeamCapacityPage() {
                         </td>
 
                         {/* 2. Current Work */}
-                        <td className="py-3 px-2">
-                          {item.activeTasks.length > 0 ? (
+                        <td className="py-3 px-3 align-middle">
+                          {item.isOnLeave ? (
+                            <div className="p-2 rounded-lg bg-muted/30 border border-border/50 text-xs space-y-0.5">
+                              <div className="font-semibold text-muted-foreground flex items-center gap-1 text-[11px]">
+                                <Palmtree className="h-3 w-3 text-amber-400/80" /> On Leave ({item.activeLeave?.leave_type?.toUpperCase() || "CASUAL"})
+                              </div>
+                              <div className="text-[10px] text-muted-foreground/80 italic truncate">
+                                Timer & active tasks paused
+                              </div>
+                            </div>
+                          ) : item.activeTasks.length > 0 ? (
                             <div className="space-y-1">
                               {item.activeTasks.slice(0, 2).map((t) => (
                                 <div
                                   key={t.id}
                                   onClick={() => setActiveTaskModalItem({ task: t, member: p })}
-                                  className="flex items-center justify-between gap-2 p-1.5 rounded-md bg-muted/40 hover:bg-accent/50 border border-border/50 cursor-pointer transition-colors group/item"
+                                  className="flex items-center justify-between gap-2 p-1.5 rounded-md bg-muted/40 hover:bg-accent/50 border border-border/50 cursor-pointer transition-colors group/item min-w-0"
                                 >
-                                  <div className="min-w-0 flex items-center gap-1.5">
+                                  <div className="min-w-0 flex items-center gap-1.5 flex-1">
                                     <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
-                                    <span className="truncate text-foreground font-semibold group-hover/item:text-primary transition-colors">
+                                    <span className="truncate text-foreground font-semibold group-hover/item:text-primary transition-colors text-[11px]">
                                       {t.task_name}
                                     </span>
                                   </div>
@@ -1065,38 +1142,38 @@ function TeamCapacityPage() {
                                 <button
                                   type="button"
                                   onClick={() => setInspectMemberId(p.id)}
-                                  className="text-[11px] font-semibold text-primary hover:text-primary/80 hover:underline cursor-pointer flex items-center gap-1 mt-1 transition-colors pl-1"
+                                  className="text-[10px] font-semibold text-primary hover:text-primary/80 hover:underline cursor-pointer flex items-center gap-1 mt-0.5 transition-colors pl-1"
                                 >
-                                  +{item.activeTasks.length - 2} more active (click to view all)
+                                  +{item.activeTasks.length - 2} more active
                                 </button>
                               )}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground/60 italic text-[11px]">No active work</span>
+                            <span className="text-muted-foreground/50 italic text-[11px]">No active work</span>
                           )}
                         </td>
 
                         {/* 3. Upcoming Work */}
-                        <td className="py-3 px-2">
+                        <td className="py-3 px-3 align-middle">
                           {item.upcomingTasks.length > 0 ? (
                             <div
                               onClick={() => setUpcomingTasksModalItem({ member: p, tasks: item.upcomingTasks })}
-                              className="p-1.5 rounded-md bg-muted/30 hover:bg-accent/40 border border-border/40 cursor-pointer transition-colors flex items-center justify-between"
+                              className="p-1.5 rounded-md bg-muted/30 hover:bg-accent/40 border border-border/40 cursor-pointer transition-colors flex items-center justify-between text-xs"
                             >
                               <span className="font-medium text-foreground">
                                 {item.upcomingTasks.length} queued
                               </span>
-                              <span className="font-mono text-[10px] text-muted-foreground">
-                                {item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0)}h total
+                              <span className="font-mono text-[10px] text-muted-foreground ml-1 shrink-0">
+                                {item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0)}h
                               </span>
                             </div>
                           ) : (
-                            <span className="text-muted-foreground/60 italic text-[11px]">Queue clear</span>
+                            <span className="text-muted-foreground/50 italic text-[11px]">Queue clear</span>
                           )}
                         </td>
 
                         {/* 4. Capacity */}
-                        <td className="py-3 px-2">
+                        <td className="py-3 px-3 align-middle">
                           <div className="space-y-1">
                             <div className="flex items-center justify-between text-[11px]">
                               <span className="font-mono text-foreground font-semibold">
@@ -1105,7 +1182,9 @@ function TeamCapacityPage() {
                               <span
                                 className={cn(
                                   "font-mono text-[10px] font-semibold",
-                                  item.capacityStatus === "overloaded"
+                                  item.isOnLeave
+                                    ? "text-amber-400 font-bold"
+                                    : item.capacityStatus === "overloaded"
                                     ? "text-rose-400/90"
                                     : item.capacityStatus === "partially"
                                     ? "text-amber-400/90"
@@ -1114,14 +1193,16 @@ function TeamCapacityPage() {
                                     : "text-blue-400/90"
                                 )}
                               >
-                                {item.capacityPct}%
+                                {item.isOnLeave ? "LEAVE" : `${item.capacityPct}%`}
                               </span>
                             </div>
                             <div className="w-full bg-muted/60 rounded-full h-1 overflow-hidden">
                               <div
                                 className={cn(
                                   "h-full rounded-full transition-all duration-300",
-                                  item.capacityStatus === "overloaded"
+                                  item.isOnLeave
+                                    ? "bg-amber-500"
+                                    : item.capacityStatus === "overloaded"
                                     ? "bg-rose-500/80"
                                     : item.capacityStatus === "partially"
                                     ? "bg-amber-500/80"
@@ -1129,14 +1210,14 @@ function TeamCapacityPage() {
                                     ? "bg-emerald-500/80"
                                     : "bg-blue-500/80"
                                 )}
-                                style={{ width: `${Math.min(100, item.capacityPct)}%` }}
+                                style={{ width: item.isOnLeave ? "100%" : `${Math.min(100, item.capacityPct)}%` }}
                               />
                             </div>
                           </div>
                         </td>
 
                         {/* 5. Done Today */}
-                        <td className="py-3 px-2">
+                        <td className="py-3 px-3 align-middle">
                           <div
                             onClick={() => {
                               if (item.completedTodayTasks.length > 0) {
@@ -1171,38 +1252,38 @@ function TeamCapacityPage() {
                                   : "text-muted-foreground/60"
                               )}
                             >
-                              {item.completedTodayTasks.length} tasks completed
+                              {item.completedTodayTasks.length} done
                             </div>
                           </div>
                         </td>
 
                         {/* 6. History */}
-                        <td className="py-3 px-2">
+                        <td className="py-3 px-3 align-middle">
                           <button
                             type="button"
                             onClick={() => toggleExpandHistory(p.id)}
-                            className="text-[11px] font-semibold px-2 py-1 rounded bg-muted/40 hover:bg-accent text-foreground border border-border/50 flex items-center gap-1"
+                            className="text-[10px] font-medium px-2 py-1 rounded bg-muted/40 hover:bg-accent text-foreground border border-border/50 flex items-center gap-1 transition-colors"
                           >
-                            <Calendar className="h-3 w-3 text-muted-foreground" />
-                            <span>{item.historyList.length} days</span>
-                            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span>{item.historyList.length}d</span>
+                            {isExpanded ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
                           </button>
                         </td>
 
                         {/* 7. Projects */}
-                        <td className="py-3 pl-2 pr-3.5">
-                          <div className="flex flex-wrap gap-1">
+                        <td className="py-3 px-3 align-middle">
+                          <div className="flex flex-wrap items-center gap-1">
                             {item.skills.slice(0, 2).map((sk, idx) => (
                               <Badge
                                 key={idx}
                                 variant="secondary"
-                                className="text-[9px] px-1.5 py-0.2 bg-muted/50 text-muted-foreground border border-border/50 truncate max-w-[90px]"
+                                className="text-[9px] px-1.5 py-0.2 bg-muted/50 text-muted-foreground border border-border/50 truncate max-w-[100px]"
                               >
                                 {sk}
                               </Badge>
                             ))}
                             {item.skills.length > 2 && (
-                              <span className="text-[9px] text-muted-foreground font-mono">
+                              <span className="text-[9px] text-muted-foreground font-mono self-center shrink-0">
                                 +{item.skills.length - 2}
                               </span>
                             )}
@@ -1322,313 +1403,311 @@ function TeamCapacityPage() {
         </div>
       )}
 
-      {/* CARD GRID VIEW MODE (GROUPED BY PROJECT) */}
+      {/* CARD GRID VIEW MODE (COMPACT ODOO-STYLE PROJECT CARDS) */}
       {viewMode === "card" && (
-        <div className="space-y-6">
+        <div>
           {projectGroupedData.length > 0 ? (
-            projectGroupedData.map((group) => (
-              <div
-                key={group.projectName}
-                className="bg-card border border-border/80 rounded-xl p-4 space-y-3.5 shadow-xs"
-              >
-                {/* Project Header Banner */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                      <Briefcase className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <h3 className="text-sm font-bold text-foreground tracking-tight flex items-center gap-2">
-                        {group.projectName}
-                      </h3>
-                      <p className="text-[11px] text-muted-foreground">
-                        Project Workload & Member Work Details
-                      </p>
-                    </div>
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {projectGroupedData.map((group) => {
+                // Sort members so working members (In Progress) ALWAYS appear at the top!
+                const sortedMembers = [...group.members].sort((a, b) => {
+                  const aActive = a.activeTasks.length > 0 ? 1 : 0;
+                  const bActive = b.activeTasks.length > 0 ? 1 : 0;
+                  return bActive - aActive;
+                });
 
-                  {/* Project Summary Metrics Badges */}
-                  <div className="flex items-center gap-2 flex-wrap text-xs">
-                    <Badge variant="outline" className="bg-muted/40 border-border text-foreground font-mono text-[11px] px-2 py-0.5">
-                      <Users className="h-3 w-3 mr-1 text-muted-foreground" />
-                      {group.members.length} {group.members.length === 1 ? "Member" : "Members"}
-                    </Badge>
-                    <Badge variant="outline" className="bg-blue-500/10 border-blue-500/30 text-blue-400 font-mono text-[11px] px-2 py-0.5">
-                      <ListTodo className="h-3 w-3 mr-1" />
-                      {group.totalProjectTasks} Tasks ({group.activeTasksCount} In Progress)
-                    </Badge>
-                    {group.totalPlannedHours > 0 && (
-                      <Badge variant="outline" className="bg-amber-500/10 border-amber-500/30 text-amber-400 font-mono text-[11px] px-2 py-0.5">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {group.totalPlannedHours}h Allocated
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                {/* Member Cards Grid for this Project */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {group.members.map((mItem) => {
-                    const p = mItem.profile;
-                    const item = memberData.find((md) => md.profile.id === p.id) || {
-                      profile: p,
-                      title: mItem.title,
-                      capacityStatus: "available",
-                      plannedHours: mItem.totalPlannedHours,
-                      queuedHours: mItem.totalPlannedHours,
-                      isLowQueue: mItem.totalPlannedHours < 16,
-                      activeTasks: mItem.tasks.filter((t) => t.status === "In Progress"),
-                      upcomingTasks: mItem.upcomingTasks,
-                      completedTodayTasks: mItem.completedTodayTasks,
-                      completedTodayHours: 0,
-                      historyList: [],
-                      completedTasks: [],
-                      skills: [],
-                    };
-                    const isExpanded = !!expandedHistoryMemberIds[p.id];
-                    const projectTasks = mItem.tasks;
-                    const projectActiveTasks = projectTasks.filter((t) => t.status === "In Progress");
-
-                    return (
-                      <Card
-                        key={p.id}
-                        className="bg-card border-border/70 shadow-xs hover:border-border transition-all flex flex-col justify-between"
-                      >
-                        <CardContent className="p-4 space-y-3.5">
-                          {/* Card Header */}
-                          <div className="flex items-start justify-between gap-2 border-b border-border/70 pb-3">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <Avatar className="h-9 w-9 border border-border shrink-0">
-                                {p.avatar_url ? (
-                                  <AvatarImage src={p.avatar_url} alt={p.display_name} />
-                                ) : (
-                                  <AvatarFallback className="bg-muted text-foreground text-[10px] font-bold">
-                                    {p.display_name.slice(0, 2).toUpperCase()}
-                                  </AvatarFallback>
-                                )}
-                              </Avatar>
-                              <div className="min-w-0">
-                                <div className="font-semibold text-sm text-foreground truncate">{p.display_name}</div>
-                                <div className="text-xs text-muted-foreground truncate">{mItem.title}</div>
-                              </div>
-                            </div>
-
-                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[10px] font-semibold px-2 py-0.5",
-                                  item.capacityStatus === "overloaded"
-                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                                    : item.capacityStatus === "partially"
-                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                                    : item.capacityStatus === "free"
-                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                                    : "bg-blue-500/10 text-blue-400 border-blue-500/30"
-                                )}
-                              >
-                                {item.capacityStatus.toUpperCase()} ({item.plannedHours}h)
+                return (
+                  <Card
+                    key={group.projectName}
+                    className="bg-card border border-border/80 hover:border-border transition-all shadow-xs rounded-xl overflow-hidden flex flex-col justify-between"
+                  >
+                    {/* Project Card Header */}
+                    <div className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 font-bold text-base text-foreground truncate">
+                            <Briefcase className="h-4 w-4 text-primary shrink-0" />
+                            <span className="truncate" title={group.projectName}>{group.projectName}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="truncate font-medium">{group.clientName || "Internal Client"}</span>
+                            {group.activeTasksCount > 0 ? (
+                              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-2 py-0.5 font-bold font-mono">
+                                ● {group.activeTasksCount} Active Now
                               </Badge>
-                              {item.isLowQueue && (
-                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px] font-mono px-1.5 py-0.5">
-                                  ⚡ &lt;16h Queued
-                                </Badge>
-                              )}
-                             </div>
-                          </div>
-
-                          {/* Current Active Work in this Project */}
-                          <div className="space-y-1.5">
-                            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                              <span>Work in {group.projectName}</span>
-                              <span className="font-mono text-foreground">{projectTasks.length} Tasks</span>
-                            </div>
-
-                            {projectActiveTasks.length > 0 ? (
-                              <div className="space-y-1.5">
-                                {projectActiveTasks.map((t) => (
-                                  <div
-                                    key={t.id}
-                                    onClick={() => setActiveTaskModalItem({ task: t, member: p })}
-                                    className="p-2.5 rounded-lg bg-muted/30 border border-border/60 hover:border-primary/40 cursor-pointer transition-all space-y-1"
-                                  >
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="font-semibold text-xs text-foreground truncate">{t.task_name}</span>
-                                      <StatusBadge status={t.status as TaskStatus} reason={t.hold_reason} />
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
-                                      <span>{t.project_name || "General"}</span>
-                                      <span>{t.planned_hours || 0} hrs planned</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : projectTasks.length > 0 ? (
-                              <div className="space-y-1.5">
-                                {projectTasks.slice(0, 2).map((t) => (
-                                  <div
-                                    key={t.id}
-                                    onClick={() => setActiveTaskModalItem({ task: t, member: p })}
-                                    className="p-2.5 rounded-lg bg-muted/30 border border-border/60 hover:border-primary/40 cursor-pointer transition-all space-y-1"
-                                  >
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="font-semibold text-xs text-foreground truncate">{t.task_name}</span>
-                                      <StatusBadge status={t.status as TaskStatus} reason={t.hold_reason} />
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
-                                      <span>{t.project_name || "General"}</span>
-                                      <span>{t.planned_hours || 0} hrs planned</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
                             ) : (
-                              <div className="p-3 rounded-lg bg-muted/20 border border-dashed border-border text-center text-xs text-muted-foreground italic">
-                                No active task in this project
-                              </div>
+                              <Badge variant="outline" className="bg-muted/20 text-muted-foreground border-border/40 text-[10px] px-2 py-0.5 font-mono">
+                                Idle
+                              </Badge>
                             )}
                           </div>
+                        </div>
 
-                          {/* Completed Today Bar in Card */}
-                          <div
-                            onClick={() => {
-                              if (item.completedTodayTasks.length > 0) {
-                                setCompletedTodayModalItem({
-                                  member: p,
-                                  tasks: item.completedTodayTasks,
-                                  totalHours: item.completedTodayHours,
-                                });
-                              }
-                            }}
-                            className={cn(
-                              "p-2.5 bg-muted/40 border border-border/70 rounded-lg flex items-center justify-between gap-2 text-xs transition-all",
-                              item.completedTodayTasks.length > 0
-                                ? "hover:bg-emerald-500/10 hover:border-emerald-500/30 cursor-pointer group/donetoday"
-                                : ""
-                            )}
-                            title={
-                              item.completedTodayTasks.length > 0
-                                ? "Click to view tasks completed today"
-                                : "No tasks completed today"
-                            }
-                          >
-                            <div className="flex items-center gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                              <div>
-                                <div className="font-semibold text-foreground flex items-center gap-1.5">
-                                  <span>Completed Today</span>
-                                  {item.completedTodayTasks.length > 0 && (
-                                    <span className="text-[10px] font-mono text-emerald-400 font-normal underline">
-                                      (View {item.completedTodayTasks.length})
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[10px] text-muted-foreground font-mono">
-                                  {item.completedTodayHours} hrs ({(item.completedTodayTasks || []).length} tasks)
-                                </div>
-                              </div>
-                            </div>
-
+                        {/* Quick Menu Popover */}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground shrink-0">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-52 p-1.5 bg-popover border-border text-xs z-[9999]">
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleExpandHistory(p.id);
-                              }}
-                              className="text-xs font-semibold px-2.5 py-1 rounded bg-card hover:bg-accent text-foreground border border-border flex items-center gap-1 shrink-0"
+                              onClick={() => handleAssignTask(null, group.projectName)}
+                              className="w-full text-left px-2.5 py-2 hover:bg-accent rounded-md font-semibold text-foreground flex items-center gap-2 transition-colors"
                             >
-                              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span>{(item.historyList || []).length} Days</span>
-                              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                              <Plus className="h-4 w-4 text-primary" /> Assign Task Here
                             </button>
-                          </div>
+                            <button
+                              type="button"
+                              onClick={() => setInspectProjectModalItem(group)}
+                              className="w-full text-left px-2.5 py-2 hover:bg-accent rounded-md font-semibold text-foreground flex items-center gap-2 transition-colors"
+                            >
+                              <Eye className="h-4 w-4 text-muted-foreground" /> View Full Details
+                            </button>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
 
-                          {/* Expandable History in Card */}
-                          {isExpanded && (
-                            <div className="p-3 bg-muted/20 border border-border rounded-lg space-y-2">
-                              <div className="text-xs font-bold text-foreground flex items-center justify-between">
-                                <span>Completed Tasks History</span>
-                                <span className="text-[10px] text-muted-foreground font-mono">
-                                  {(item.completedTasks || []).length} Total
-                                </span>
+                      {/* Metrics & Avatars Bar */}
+                      <div className="flex items-center justify-between border-y border-border/50 py-2.5 text-xs">
+                        <div className="flex items-center gap-2 text-muted-foreground font-mono text-xs">
+                          <span className="font-bold text-foreground">{group.totalProjectTasks} Tasks</span>
+                          <span>•</span>
+                          <span className="text-primary font-bold">{group.totalPlannedHours}h Planned</span>
+                        </div>
+
+                        {/* Member Avatars Stack */}
+                        <div className="flex items-center -space-x-2 overflow-hidden">
+                          {group.members.slice(0, 5).map((m) => {
+                            const p = m.profile;
+                            const isWorking = m.activeTasks.length > 0;
+
+                            return (
+                              <div key={p.id} className="relative group/avatar" title={`${p.display_name} (${isWorking ? "Working on active task" : "Available"})`}>
+                                <Avatar className="h-7 w-7 border-2 border-background shrink-0">
+                                  {p.avatar_url ? (
+                                    <AvatarImage src={p.avatar_url} alt={p.display_name} />
+                                  ) : (
+                                    <AvatarFallback className="bg-muted text-foreground text-[9px] font-bold">
+                                      {p.display_name.slice(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  )}
+                                </Avatar>
+                                <span className={cn("absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-1 ring-background", isWorking ? "bg-primary" : "bg-muted-foreground/40")} />
                               </div>
-                              {item.historyList && item.historyList.length > 0 ? (
-                                item.historyList.map((hist) => (
-                                  <div
-                                    key={hist.dateStr}
-                                    className="text-xs space-y-1 border-b border-border pb-1.5 last:border-0 last:pb-0"
-                                  >
-                                    <div className="flex items-center justify-between text-foreground font-semibold text-[11px]">
-                                      <span>
-                                        {hist.formattedDate} ({hist.relativeLabel || "Past"})
-                                      </span>
-                                      <span className="font-mono text-foreground">{hist.totalHours} hrs</span>
-                                    </div>
-                                    {hist.tasks.map((t) => (
-                                      <div
-                                        key={t.id}
-                                        onClick={() => setInspectTaskItem({ task: t, profile: p })}
-                                        className="text-[11px] text-muted-foreground hover:text-foreground flex items-center justify-between pl-2 cursor-pointer transition-colors"
-                                      >
-                                        <span className="truncate">• {t.task_name}</span>
-                                        <span className="font-mono text-[10px] text-muted-foreground">
-                                          {t.actual_hours || t.planned_hours || 0}h
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="text-xs text-muted-foreground/60 italic">No past history recorded</div>
-                              )}
+                            );
+                          })}
+                          {group.members.length > 5 && (
+                            <div className="h-7 w-7 rounded-full bg-muted border-2 border-background flex items-center justify-center text-[10px] font-bold text-muted-foreground font-mono">
+                              +{group.members.length - 5}
                             </div>
                           )}
+                        </div>
+                      </div>
 
-                          {/* Actions Footer */}
-                          <div className="pt-2 border-t border-border flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {(item.skills || []).map((skill, idx) => (
-                                <Badge
-                                  key={idx}
-                                  variant="secondary"
-                                  className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground border border-border"
+                      {/* Active Members & Work Status List inside Card */}
+                      <div className="space-y-2.5">
+                        <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                          <span>Team Workload ({group.members.length})</span>
+                          {group.activeTasksCount > 0 ? (
+                            <span className="text-primary font-mono text-xs font-bold">● {group.activeTasksCount} Working Now</span>
+                          ) : (
+                            <span className="text-emerald-400 font-mono text-xs">⚡ All Available</span>
+                          )}
+                        </div>
+
+                        {sortedMembers.length > 0 ? (
+                          <div className="space-y-2.5 max-h-80 overflow-y-auto pr-0.5">
+                            {sortedMembers.map((m) => {
+                              const p = m.profile;
+                              const liveTask = m.activeTasks[0]; // ONLY In Progress task!
+                              const queuedTask = m.upcomingTasks[0];
+                              const memberInfo = memberData.find((md) => md.profile.id === p.id);
+                              const activeLeave = memberInfo?.activeLeave || activeLeavesToday.find((l: any) => l.user_id === p.id);
+                              const isOnLeave = !!activeLeave || memberInfo?.isOnLeave;
+                              const isWorkingNow = !!liveTask && !isOnLeave;
+                              const isFree = memberInfo?.capacityStatus === "free" && !isWorkingNow && !isOnLeave;
+
+                              return (
+                                <div
+                                  key={p.id}
+                                  className={cn(
+                                    "p-3 rounded-xl border text-xs transition-all space-y-2",
+                                    isOnLeave
+                                      ? "bg-muted/30 border-border/50 border-l-2 border-l-amber-500/60 shadow-2xs"
+                                      : isWorkingNow
+                                      ? "bg-card border-border/80 border-l-4 border-l-primary shadow-xs"
+                                      : isFree
+                                      ? "bg-emerald-500/5 border-emerald-500/20"
+                                      : "bg-muted/20 border-border/40"
+                                  )}
                                 >
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setInspectMemberId(p.id)}
-                                className="h-7 text-xs border-border text-foreground bg-card hover:bg-accent"
-                              >
-                                Inspect
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleAssignTask(p.id)}
-                                className="h-7 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
-                              >
-                                Assign Task
-                              </Button>
-                            </div>
+                                  {/* Header: Avatar, Name, Live Status Pill */}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <Avatar className="h-7 w-7 border border-border shrink-0">
+                                        {p.avatar_url ? (
+                                          <AvatarImage src={p.avatar_url} alt={p.display_name} />
+                                        ) : (
+                                          <AvatarFallback className="bg-muted text-foreground text-[10px] font-bold">
+                                            {p.display_name.slice(0, 2).toUpperCase()}
+                                          </AvatarFallback>
+                                        )}
+                                      </Avatar>
+                                      <div className="min-w-0">
+                                        <div className="font-bold text-foreground truncate text-xs flex items-center gap-1.5">
+                                          <span className="truncate">{p.display_name}</span>
+                                          {isOnLeave && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-muted/40 text-amber-300/90 border border-border/60 shrink-0">
+                                              <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
+                                            </span>
+                                          )}
+                                          {isWorkingNow && (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-primary/15 text-primary border border-primary/30 shrink-0">
+                                              ● WORKING NOW
+                                            </span>
+                                          )}
+                                          {isFree && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0">
+                                              ⚡ FREE
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-2 py-0.5 font-mono shrink-0 border-border bg-muted/30 text-muted-foreground"
+                                    >
+                                      {memberInfo?.plannedHours || 0}h queued
+                                    </Badge>
+                                  </div>
+
+                                  {/* Task Details - Explicitly label Task Status */}
+                                  {isOnLeave ? (
+                                    <div className="p-2.5 rounded-lg bg-card border border-border/60 space-y-1 shadow-2xs">
+                                      <div className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                                        <span className="font-semibold text-muted-foreground flex items-center gap-1">
+                                          <Palmtree className="h-3 w-3 text-amber-400/80" /> Leave ({activeLeave?.leave_type?.toUpperCase() || "CASUAL"})
+                                        </span>
+                                        <span className="font-mono text-[10px] text-muted-foreground/80">Timer Paused</span>
+                                      </div>
+                                      <div className="font-medium text-foreground text-xs truncate flex items-center gap-1.5">
+                                        <span className="truncate text-muted-foreground italic">
+                                          {liveTask ? `Task Paused: ${liveTask.task_name}` : queuedTask ? `Task Paused: ${queuedTask.task_name}` : "Member currently on leave"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : isWorkingNow ? (
+                                    <div
+                                      onClick={() => setActiveTaskModalItem({ task: liveTask, member: p })}
+                                      className="p-2.5 rounded-lg bg-muted/30 border border-primary/30 hover:border-primary/60 cursor-pointer transition-colors space-y-1 shadow-2xs"
+                                    >
+                                      <div className="text-[10px] uppercase font-bold text-primary flex items-center justify-between">
+                                        <span className="font-bold">Current Task:</span>
+                                        <span className="font-mono text-[10px] text-muted-foreground">{liveTask.planned_hours || 0}h planned</span>
+                                      </div>
+                                      <div className="font-semibold text-foreground text-xs truncate flex items-center gap-1.5">
+                                        <Play className="h-3.5 w-3.5 text-primary fill-primary shrink-0" />
+                                        <span className="truncate">{liveTask.task_name}</span>
+                                      </div>
+                                    </div>
+                                  ) : queuedTask ? (
+                                    <div
+                                      onClick={() => setActiveTaskModalItem({ task: queuedTask, member: p })}
+                                      className="p-2 rounded-lg bg-muted/20 border border-border/40 hover:border-border cursor-pointer transition-colors space-y-0.5"
+                                    >
+                                      <div className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
+                                        <span>Queued (To Do):</span>
+                                        <span className="font-mono text-[10px] text-muted-foreground">{queuedTask.planned_hours || 0}h</span>
+                                      </div>
+                                      <div className="font-medium text-muted-foreground text-xs truncate flex items-center gap-1.5">
+                                        <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                        <span className="truncate">{queuedTask.task_name}</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="p-2 rounded-lg bg-emerald-500/5 border border-dashed border-emerald-500/30 flex items-center justify-between text-xs">
+                                      <span className="text-emerald-400 font-medium text-[11px]">⚡ Available for new task</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAssignTask(p.id, group.projectName)}
+                                        className="text-[11px] font-bold text-primary hover:underline"
+                                      >
+                                        + Assign Now
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* Footer: Completed Today & History Trigger */}
+                                  <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[11px]">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCompletedTodayModalItem({
+                                          member: p,
+                                          tasks: memberInfo?.completedTodayTasks || [],
+                                          totalHours: memberInfo?.completedTodayHours || 0,
+                                        });
+                                      }}
+                                      className="flex items-center gap-1 text-muted-foreground hover:text-foreground font-mono transition-colors"
+                                      title="Click to view Completed Today & History breakdown"
+                                    >
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                                      <span>{memberInfo?.completedTodayHours || 0}h done today</span>
+                                      {memberInfo?.historyList && memberInfo.historyList.length > 0 && (
+                                        <span className="text-muted-foreground/60">({memberInfo.historyList.length}d history)</span>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
-            ))
+                        ) : (
+                          <div className="p-4 text-center text-xs text-muted-foreground/60 italic bg-muted/20 rounded-lg border border-dashed border-border">
+                            No members currently working on this project
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card Footer Quick Actions */}
+                    <div className="p-3 bg-muted/20 border-t border-border flex items-center justify-between gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAssignTask(null, group.projectName)}
+                        className="h-8 text-xs font-semibold gap-1 text-foreground border-border hover:bg-accent w-full"
+                      >
+                        <Plus className="h-3.5 w-3.5 text-primary" /> Assign Task
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setInspectProjectModalItem(group)}
+                        className="h-8 text-xs font-semibold text-muted-foreground hover:text-foreground shrink-0 gap-1"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-muted-foreground" /> Details
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
           ) : (
             <div className="p-12 text-center bg-card border border-border rounded-xl space-y-3">
               <Briefcase className="h-8 w-8 text-muted-foreground mx-auto" />
-              <div className="text-sm font-semibold text-foreground">No Project Tasks Found</div>
-              <div className="text-xs text-muted-foreground max-w-sm mx-auto">
-                Try clearing your search query or filters to view all project categorized cards.
-              </div>
+              <div className="text-sm font-semibold text-foreground">No Project Workload Found</div>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                No active projects or members match your current filters. Try turning off "Active Work Only" or clearing search.
+              </p>
+              <Button size="sm" variant="outline" onClick={resetFilters} className="text-xs font-semibold">
+                Reset Filters
+              </Button>
             </div>
           )}
         </div>
@@ -1877,101 +1956,269 @@ function TeamCapacityPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Completed Today Tasks Dialog */}
+      {/* Completed Today & History Tasks Dialog */}
       <Dialog
         open={!!completedTodayModalItem}
         onOpenChange={(open) => {
           if (!open) setCompletedTodayModalItem(null);
         }}
       >
-        <DialogContent className="max-w-md bg-card border-border shadow-2xl rounded-xl p-5 text-foreground z-[999]">
-          {completedTodayModalItem && (
-            <>
-              <DialogHeader className="space-y-2 border-b border-border pb-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <Avatar className="h-8 w-8 border border-border">
-                      {completedTodayModalItem.member.avatar_url ? (
-                        <AvatarImage
-                          src={completedTodayModalItem.member.avatar_url}
-                          alt={completedTodayModalItem.member.display_name}
-                        />
-                      ) : (
-                        <AvatarFallback className="text-foreground text-xs font-semibold bg-emerald-500/20 text-emerald-300">
-                          {completedTodayModalItem.member.display_name.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div>
-                      <span className="font-bold text-sm text-foreground">
-                        {completedTodayModalItem.member.display_name}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground block">
-                        Completed Today ({todayStr})
+        <DialogContent className="max-w-lg bg-card border-border shadow-2xl rounded-xl p-5 text-foreground z-[999] max-h-[85vh] flex flex-col justify-between">
+          {completedTodayModalItem && (() => {
+            const mInfo = memberData.find((md) => md.profile.id === completedTodayModalItem.member.id);
+            const totalHistCount = mInfo?.completedTasks.length || completedTodayModalItem.tasks.length;
+
+            return (
+              <>
+                <DialogHeader className="space-y-2 border-b border-border pb-3 shrink-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar className="h-8 w-8 border border-border">
+                        {completedTodayModalItem.member.avatar_url ? (
+                          <AvatarImage
+                            src={completedTodayModalItem.member.avatar_url}
+                            alt={completedTodayModalItem.member.display_name}
+                          />
+                        ) : (
+                          <AvatarFallback className="text-foreground text-xs font-semibold bg-muted">
+                            {completedTodayModalItem.member.display_name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <div>
+                        <span className="font-bold text-sm text-foreground">
+                          {completedTodayModalItem.member.display_name}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground block">
+                          Work Activity & Completed Tasks History
+                        </span>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="border-border text-muted-foreground bg-muted/30 font-mono text-xs">
+                      <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-400" />
+                      {completedTodayModalItem.totalHours} hrs done today
+                    </Badge>
+                  </div>
+                </DialogHeader>
+
+                {/* Main Content Area */}
+                <div className="space-y-4 overflow-y-auto pr-1 py-3 flex-1 text-xs">
+                  {/* 1. Completed Today Banner */}
+                  <div className="p-3 bg-muted/30 border border-border/70 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between font-semibold text-foreground">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        <span>Completed Today</span>
+                      </div>
+                      <span className="font-mono text-muted-foreground text-[11px]">
+                        {completedTodayModalItem.totalHours} hrs ({completedTodayModalItem.tasks.length} tasks)
                       </span>
                     </div>
+
+                    {completedTodayModalItem.tasks.length > 0 ? (
+                      <div className="space-y-1.5 pt-1">
+                        {completedTodayModalItem.tasks.map((task) => (
+                          <div
+                            key={task.id}
+                            onClick={() => {
+                              setCompletedTodayModalItem(null);
+                              setInspectTaskItem({ task, profile: completedTodayModalItem.member });
+                            }}
+                            className="p-2 rounded bg-card border border-border/50 hover:border-primary/40 cursor-pointer flex items-center justify-between gap-2 transition-colors"
+                          >
+                            <span className="truncate text-foreground font-medium">• {task.task_name}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                              {task.actual_hours || task.planned_hours || 0}h
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-muted-foreground/70 italic">No tasks completed today.</div>
+                    )}
                   </div>
-                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 font-mono text-xs">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    {completedTodayModalItem.totalHours} hrs ({completedTodayModalItem.tasks.length} tasks)
-                  </Badge>
+
+                  {/* 2. Completed Tasks History Section (Matching Image #1) */}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between text-xs font-bold text-foreground border-b border-border/60 pb-1.5">
+                      <span>Completed Tasks History</span>
+                      <span className="font-mono text-[11px] text-muted-foreground">{totalHistCount} Total</span>
+                    </div>
+
+                    {mInfo?.historyList && mInfo.historyList.length > 0 ? (
+                      <div className="space-y-3">
+                        {mInfo.historyList.map((hist) => (
+                          <div key={hist.dateStr} className="space-y-1 bg-muted/20 border border-border/40 p-2.5 rounded-lg">
+                            <div className="flex items-center justify-between font-bold text-foreground text-xs">
+                              <span>
+                                {hist.formattedDate} {hist.relativeLabel ? `(${hist.relativeLabel})` : ""}
+                              </span>
+                              <span className="font-mono text-[11px] text-foreground">{hist.totalHours} hrs</span>
+                            </div>
+
+                            <div className="space-y-1 pl-1 pt-1">
+                              {hist.tasks.map((t) => (
+                                <div
+                                  key={t.id}
+                                  onClick={() => {
+                                    setCompletedTodayModalItem(null);
+                                    setInspectTaskItem({ task: t, profile: completedTodayModalItem.member });
+                                  }}
+                                  className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                                >
+                                  <span className="truncate">• {t.task_name}</span>
+                                  <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                    {t.actual_hours || t.planned_hours || 0}h
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-4 text-center text-xs text-muted-foreground/70 italic bg-muted/10 rounded-lg">
+                        No previous task history recorded.
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <DialogTitle className="text-base font-bold text-foreground pt-1">
-                  Today's Completed Tasks
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  Tasks completed today by {completedTodayModalItem.member.display_name}
-                </DialogDescription>
+                <DialogFooter className="border-t border-border pt-3 shrink-0 flex items-center justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCompletedTodayModalItem(null)}
+                    className="h-8 text-xs border-border bg-card text-foreground hover:bg-accent"
+                  >
+                    Close
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Full Project Details & Workload Dialog */}
+      <Dialog
+        open={!!inspectProjectModalItem}
+        onOpenChange={(open) => {
+          if (!open) setInspectProjectModalItem(null);
+        }}
+      >
+        <DialogContent className="max-w-xl bg-card border-border shadow-2xl rounded-xl p-5 text-foreground z-[999] max-h-[85vh] flex flex-col justify-between">
+          {inspectProjectModalItem && (
+            <>
+              <DialogHeader className="space-y-2 border-b border-border pb-3 shrink-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shrink-0">
+                      <Briefcase className="h-5 w-5 text-blue-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <DialogTitle className="text-base font-bold text-foreground truncate">
+                        {inspectProjectModalItem.projectName}
+                      </DialogTitle>
+                      <DialogDescription className="text-xs text-muted-foreground truncate">
+                        Client: {inspectProjectModalItem.clientName || "Internal"}
+                      </DialogDescription>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 font-mono text-xs shrink-0">
+                    ● {inspectProjectModalItem.activeTasksCount} Active Work
+                  </Badge>
+                </div>
               </DialogHeader>
 
-              {/* Tasks List */}
-              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 py-2">
-                {completedTodayModalItem.tasks.length > 0 ? (
-                  completedTodayModalItem.tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      onClick={() => {
-                        setCompletedTodayModalItem(null);
-                        setInspectTaskItem({ task, profile: completedTodayModalItem.member });
-                      }}
-                      className="p-3 rounded-lg bg-muted/30 border border-border/60 hover:border-emerald-500/40 transition-all space-y-1.5 text-xs group cursor-pointer"
-                      title="Click to view all task details"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">
-                            {task.task_code || "TSK"}
-                          </span>
-                          <span className="font-semibold text-foreground truncate group-hover:text-emerald-400 transition-colors">
-                            {task.task_name}
-                          </span>
-                        </div>
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] shrink-0 font-mono">
-                          Completed
-                        </Badge>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t border-border/50 pt-1.5 mt-1">
-                        <span className="text-[10px] text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-                          {task.project_name || "General"}
-                        </span>
-                        <TaskHoursBadges task={task} variant="badges" className="text-[10px]" />
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="py-8 text-center text-xs text-muted-foreground italic">
-                    No tasks completed today.
+              {/* Project Stats & Members Breakdown */}
+              <div className="space-y-4 overflow-y-auto pr-1 py-3 flex-1 text-xs">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2.5 rounded-lg bg-muted/30 border border-border text-center space-y-0.5">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground block">Total Tasks</span>
+                    <span className="text-sm font-bold text-foreground font-mono">{inspectProjectModalItem.totalProjectTasks}</span>
                   </div>
-                )}
+                  <div className="p-2.5 rounded-lg bg-muted/30 border border-border text-center space-y-0.5">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground block">Planned Hours</span>
+                    <span className="text-sm font-bold text-blue-400 font-mono">{inspectProjectModalItem.totalPlannedHours}h</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-muted/30 border border-border text-center space-y-0.5">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground block">Team Members</span>
+                    <span className="text-sm font-bold text-foreground font-mono">{inspectProjectModalItem.members.length}</span>
+                  </div>
+                </div>
+
+                {/* Team Workload List */}
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-foreground block">Assigned Team Members & Live Work</span>
+                  <div className="space-y-2">
+                    {inspectProjectModalItem.members.map((m: any) => {
+                      const p = m.profile;
+                      const liveT = m.activeTasks[0];
+                      const upcomingT = m.upcomingTasks[0];
+
+                      return (
+                        <div key={p.id} className="p-3 rounded-lg bg-muted/20 border border-border/60 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6 border border-border">
+                                {p.avatar_url ? (
+                                  <AvatarImage src={p.avatar_url} />
+                                ) : (
+                                  <AvatarFallback className="bg-muted text-[9px] font-bold">
+                                    {p.display_name.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                )}
+                              </Avatar>
+                              <span className="font-semibold text-foreground text-xs">{p.display_name}</span>
+                            </div>
+                            {liveT ? (
+                              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[9px] font-bold">
+                                ● WORKING NOW
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[9px] text-muted-foreground border-border">
+                                Idle / Queued
+                              </Badge>
+                            )}
+                          </div>
+
+                          {liveT ? (
+                            <div className="text-[11px] text-foreground pl-8 font-medium flex items-center justify-between">
+                              <span className="truncate">• Current Task: {liveT.task_name}</span>
+                              <span className="font-mono text-[10px] text-muted-foreground">{liveT.planned_hours || 0}h</span>
+                            </div>
+                          ) : upcomingT ? (
+                            <div className="text-[11px] text-muted-foreground pl-8 flex items-center justify-between">
+                              <span className="truncate">• Next: {upcomingT.task_name}</span>
+                              <span className="font-mono text-[10px] text-muted-foreground">{upcomingT.planned_hours || 0}h</span>
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-emerald-400 pl-8 italic">No active task assigned</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
-              <DialogFooter className="border-t border-border pt-3 flex items-center justify-end">
+              <DialogFooter className="border-t border-border pt-3 shrink-0 flex items-center justify-between gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const pName = inspectProjectModalItem.projectName;
+                    setInspectProjectModalItem(null);
+                    handleAssignTask(null, pName);
+                  }}
+                  className="h-8 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Assign Task to {inspectProjectModalItem.projectName}
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setCompletedTodayModalItem(null)}
+                  onClick={() => setInspectProjectModalItem(null)}
                   className="h-8 text-xs border-border bg-card text-foreground hover:bg-accent"
                 >
                   Close
@@ -1986,18 +2233,32 @@ function TeamCapacityPage() {
       {user && (
         <TaskFormDialog
           open={taskDialogOpen}
-          onOpenChange={setTaskDialogOpen}
+          onOpenChange={(open) => {
+            setTaskDialogOpen(open);
+            if (!open) {
+              setEditingTask(null);
+              setSelectedAssignMemberId(null);
+              setSelectedPresetProjectName(null);
+            }
+          }}
           userId={user.id}
           initial={
             editingTask
               ? editingTask
-              : selectedAssignMemberId
-              ? ({ assigned_to: selectedAssignMemberId, priority: "Medium", status: "To Do" } as Partial<Task> as any)
+              : selectedAssignMemberId || selectedPresetProjectName
+              ? ({
+                  assigned_to: selectedAssignMemberId,
+                  project_name: selectedPresetProjectName || undefined,
+                  priority: "Medium",
+                  status: "To Do",
+                } as Partial<Task> as any)
               : null
           }
           onSaved={() => {
             setTaskDialogOpen(false);
             setEditingTask(null);
+            setSelectedAssignMemberId(null);
+            setSelectedPresetProjectName(null);
             queryClient.invalidateQueries({ queryKey: ["capacity-tasks"] });
           }}
         />
