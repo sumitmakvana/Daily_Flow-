@@ -117,6 +117,7 @@ export const tasksService = {
     if (newStatus === "Completed") {
       patch.done = true;
       patch.completed_at = new Date().toISOString();
+      patch.started_at = null;
     } else {
       patch.done = false;
       patch.completed_at = null;

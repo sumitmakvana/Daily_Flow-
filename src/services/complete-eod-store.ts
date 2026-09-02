@@ -34,7 +34,10 @@ export const completeEodStore = {
 export function useCompleteEodStore() {
   const [state, setState] = useState<CompleteEodState>(completeEodStore.get());
   useEffect(() => {
-    return completeEodStore.subscribe(() => setState(completeEodStore.get()));
+    const unsubscribe = completeEodStore.subscribe(() => setState(completeEodStore.get()));
+    return () => {
+      unsubscribe();
+    };
   }, []);
   return state;
 }
