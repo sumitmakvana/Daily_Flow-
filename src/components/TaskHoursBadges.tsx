@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { formatHoursMins } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -17,10 +18,18 @@ interface TaskHoursBadgesProps {
 }
 
 export function TaskHoursBadges({ task, className }: TaskHoursBadgesProps) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!task.started_at || task.status !== "In Progress") return;
+    const timer = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, [task.started_at, task.status]);
+
   const plan = task.planned_hours ?? 0;
   const logged = task.actual_hours ?? 0;
   const baseSys = Number(task.system_hours ?? 0);
-  const runningSys = task.started_at
+  const runningSys = (task.started_at && task.status === "In Progress")
     ? Math.min(8.0, Math.max(0, (Date.now() - new Date(task.started_at).getTime()) / 3600000))
     : 0;
   const sysHrs = baseSys + runningSys;

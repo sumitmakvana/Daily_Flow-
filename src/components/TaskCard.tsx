@@ -52,6 +52,8 @@ import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue, getDefaultSta
 import type { Profile, Task, TaskStatus, WorkItemType, Attachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
+import { activeTimerStore } from "@/services/active-timer-store";
+import { useQueryClient } from "@tanstack/react-query";
 import { taskEodService } from "@/services/task-eod";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
@@ -131,6 +133,7 @@ export function TaskCard({
   const isOwner = task.assigned_to === userId;
   const canAct = true;
   const needsSplit = !!task.project_name?.includes("|");
+  const queryClient = useQueryClient();
 
   const handleError = (e: unknown) => {
     if (e instanceof TaskConflictError) {
@@ -141,13 +144,23 @@ export function TaskCard({
     }
   };
 
-  const setStatus = async (s: TaskStatus, extras = {}) => {
+  const directSetStatus = async (s: TaskStatus, extras = {}) => {
     try {
       await tasksService.setStatus(task, s, userId, extras);
       toast.success(`${task.task_code} → ${s}`);
       onChanged();
     } catch (e) {
       handleError(e);
+    }
+  };
+
+  const setStatus = async (s: TaskStatus, extras = {}) => {
+    if (s === "In Progress") {
+      const myDayData: any = queryClient.getQueryData(["my-day"]);
+      const userTasks: Task[] = (myDayData?.priorities ?? myDayData?.tasks ?? []) as Task[];
+      await activeTimerStore.requestStartTask(task, userTasks, userId, () => directSetStatus(s, extras));
+    } else {
+      await directSetStatus(s, extras);
     }
   };
 
@@ -279,9 +292,13 @@ export function TaskCard({
                       onClick={async () => {
                         if (!userId) return;
                         try {
-                          await tasksService.resumeTimer(task, userId);
-                          toast.success("Timer resumed");
-                          onChanged?.();
+                          const myDayData: any = queryClient.getQueryData(["my-day"]);
+                          const userTasks: Task[] = (myDayData?.priorities ?? myDayData?.tasks ?? []) as Task[];
+                          await activeTimerStore.requestStartTask(task, userTasks, userId, async () => {
+                            await tasksService.resumeTimer(task, userId);
+                            toast.success("Timer resumed");
+                            onChanged?.();
+                          });
                         } catch (err: any) {
                           toast.error(err?.message || "Failed to resume timer");
                         }

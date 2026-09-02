@@ -39,6 +39,8 @@ export interface MyDayItem {
   is_reviewer: boolean;
   score: number;
   reasons: string[];
+  started_at?: string | null;
+  system_hours?: number | null;
 }
 
 export interface MyDayPayload {
@@ -97,7 +99,7 @@ export const getMyDay = createServerFn({ method: "GET" })
       // Open tasks assigned to me OR where I am the reviewer
       supabase
         .from("tasks")
-        .select("id,task_code,task_name,project_name,status,priority,due_date,planned_hours,carry_forward_count,assigned_to,reviewer,last_carry_forward_at,completed_at")
+        .select("id,task_code,task_name,project_name,status,priority,due_date,planned_hours,carry_forward_count,assigned_to,reviewer,last_carry_forward_at,completed_at,started_at,system_hours")
         .or(`assigned_to.eq.${userId},reviewer.eq.${userId}`)
         .order("due_date", { ascending: true, nullsFirst: false })
         .limit(400),
@@ -122,6 +124,7 @@ export const getMyDay = createServerFn({ method: "GET" })
       planned_hours: number | null; carry_forward_count: number;
       assigned_to: string | null; reviewer: string | null;
       last_carry_forward_at: string | null; completed_at: string | null;
+      started_at: string | null; system_hours: number | null;
     }>;
     const capacity = Number(settingsRes.data?.daily_capacity_hours ?? 8);
 
@@ -244,6 +247,8 @@ export const getMyDay = createServerFn({ method: "GET" })
         is_reviewer: isReviewer && !isMine,
         score,
         reasons,
+        started_at: t.started_at,
+        system_hours: t.system_hours,
       });
     }
 

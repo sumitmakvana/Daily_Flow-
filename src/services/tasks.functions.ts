@@ -112,6 +112,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
         if (patch.system_hours === undefined) {
           patch.system_hours = existingSystemHours + diffHrs;
         }
+        patch.started_at = null;
       }
 
       delete patch.id;

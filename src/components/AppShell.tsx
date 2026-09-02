@@ -47,6 +47,8 @@ import { NotificationsModal } from "@/components/NotificationsModal";
 import { useBrowserNotifications } from "@/hooks/use-browser-notifications";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
+import { TaskSwitchPromptModal } from "@/components/TaskSwitchPromptModal";
+import { ActiveTasksFloatingBar } from "@/components/ActiveTasksFloatingBar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -818,12 +820,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <NotificationsModal open={notifModalOpen} onOpenChange={setNotifModalOpen} />
       <GlobalCompleteTaskEodDialog />
       {user && (
-        <TaskFormDialog
-          open={addTaskOpen}
-          onOpenChange={setAddTaskOpen}
-          userId={user.id}
-          onSaved={() => queryClient.invalidateQueries()}
-        />
+        <>
+          <TaskFormDialog
+            open={addTaskOpen}
+            onOpenChange={setAddTaskOpen}
+            userId={user.id}
+            onSaved={() => queryClient.invalidateQueries()}
+          />
+          <TaskSwitchPromptModal
+            userId={user.id}
+            onTaskChanged={() => queryClient.invalidateQueries()}
+          />
+          <ActiveTasksFloatingBar userId={user.id} />
+        </>
       )}
     </div>
   );

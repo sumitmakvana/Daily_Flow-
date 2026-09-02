@@ -34,6 +34,9 @@ import { TaskHoursBadges } from "./TaskHoursBadges";
 import { formatHoursMins, parseHoursOrMins } from "@/lib/format";
 import { toast } from "sonner";
 
+import { activeTimerStore } from "@/services/active-timer-store";
+import { useQueryClient } from "@tanstack/react-query";
+
 export function TaskQuickActionModal({
   task,
   open,
@@ -49,6 +52,7 @@ export function TaskQuickActionModal({
   onChanged: () => void;
   onOpenFullEdit?: (task: Task) => void;
 }) {
+  const queryClient = useQueryClient();
   const [blockOpen, setBlockOpen] = useState(false);
   const [onHoldOpen, setOnHoldOpen] = useState(false);
   const [hoursInput, setHoursInput] = useState<string>("");
@@ -89,15 +93,23 @@ export function TaskQuickActionModal({
     try {
       const hoursToSave = parseHoursOrMins(hoursInput) || planned;
       
-      // Update task status and actual_hours
-      await tasksService.setStatus(task, status, userId, { 
-        ...extras,
-        ...(hoursToSave > 0 ? { actual_hours: hoursToSave } : {}) 
-      });
+      const doSetStatus = async () => {
+        await tasksService.setStatus(task, status, userId, { 
+          ...extras,
+          ...(hoursToSave > 0 ? { actual_hours: hoursToSave } : {}) 
+        });
 
-      // Register EOD submission if status is Completed & hours > 0
-      if (status === "Completed" && hoursToSave > 0) {
-        await taskEodService.submit(task.id, "done", hoursToSave, null);
+        if (status === "Completed" && hoursToSave > 0) {
+          await taskEodService.submit(task.id, "done", hoursToSave, null);
+        }
+      };
+
+      if (status === "In Progress") {
+        const myDayData: any = queryClient.getQueryData(["my-day"]);
+        const userTasks: Task[] = (myDayData?.priorities ?? myDayData?.tasks ?? []) as Task[];
+        await activeTimerStore.requestStartTask(task, userTasks, userId, doSetStatus);
+      } else {
+        await doSetStatus();
       }
 
       toast.success(`${task.task_code} updated to ${status}`);
@@ -260,10 +272,14 @@ export function TaskQuickActionModal({
                     if (!userId) return;
                     try {
                       setBusy(true);
-                      await tasksService.resumeTimer(task, userId);
-                      toast.success("Timer resumed");
-                      onChanged?.();
-                      onOpenChange(false);
+                      const myDayData: any = queryClient.getQueryData(["my-day"]);
+                      const userTasks: Task[] = (myDayData?.priorities ?? myDayData?.tasks ?? []) as Task[];
+                      await activeTimerStore.requestStartTask(task, userTasks, userId, async () => {
+                        await tasksService.resumeTimer(task, userId);
+                        toast.success("Timer resumed");
+                        onChanged?.();
+                        onOpenChange(false);
+                      });
                     } catch (err: any) {
                       toast.error(err?.message || "Failed to resume timer");
                     } finally {
