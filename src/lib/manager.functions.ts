@@ -280,7 +280,9 @@ export const getManagerCommand = createServerFn({ method: "GET" })
     }).map((t) => toRow(t, "high_risk"));
     const repeatCfRows = open.filter((t) => t.carry_forward_count >= 3).map((t) => toRow(t, "repeat_cf"));
     const overrunRows = tasks.filter((t) => {
-      const sysHrs = (t as any).started_at ? (Date.now() - new Date((t as any).started_at).getTime()) / 3600000 : Number((t as any).system_hours ?? 0);
+      const baseSys = Number((t as any).system_hours ?? 0);
+      const runningSys = (t as any).started_at ? (Date.now() - new Date((t as any).started_at).getTime()) / 3600000 : 0;
+      const sysHrs = baseSys + runningSys;
       const plan = Number(t.planned_hours ?? 0);
       const logged = Number((t as any).actual_hours ?? 0);
       return (

@@ -32,9 +32,11 @@ export function CompleteTaskEodDialog({
   userId: string;
   onDone: () => void;
 }) {
-  const sysHrs = (task as any).started_at 
+  const baseSys = Number((task as any).system_hours ?? 0);
+  const runningSys = (task as any).started_at 
     ? Math.min(8.0, Math.max(0, Math.round(((Date.now() - new Date((task as any).started_at).getTime()) / 3600000) * 10) / 10))
-    : Number((task as any).system_hours ?? 0);
+    : 0;
+  const sysHrs = baseSys + runningSys;
 
   const planned = Number(task.planned_hours ?? 0);
   const currentActual = Number(task.actual_hours ?? 0);

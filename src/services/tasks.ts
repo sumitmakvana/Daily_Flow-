@@ -145,6 +145,20 @@ export const tasksService = {
     return updated;
   },
 
+  async pauseTimer(task: Task, userId: string): Promise<Task> {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = userId;
+    }
+    return this.update(task, { started_at: null } as Partial<Task>, userId);
+  },
+
+  async resumeTimer(task: Task, userId: string): Promise<Task> {
+    if (import.meta.env.MODE === "test") {
+      (globalThis as any).__test_user_id = userId;
+    }
+    return this.update(task, { status: "In Progress", started_at: new Date().toISOString() } as Partial<Task>, userId);
+  },
+
   async transfer(task: Task, newAssignee: string, userId: string) {
     if (import.meta.env.MODE === "test") {
       (globalThis as any).__test_user_id = userId;

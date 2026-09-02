@@ -107,6 +107,7 @@ function TeamCapacityPage() {
   // Mini Modals state
   const [activeTaskModalItem, setActiveTaskModalItem] = useState<{ task: Task; member: Profile } | null>(null);
   const [upcomingTasksModalItem, setUpcomingTasksModalItem] = useState<{ member: Profile; tasks: Task[] } | null>(null);
+  const [completedTodayModalItem, setCompletedTodayModalItem] = useState<{ member: Profile; tasks: Task[]; totalHours: number } | null>(null);
 
   // Completed History expandable rows state
   const [expandedHistoryMemberIds, setExpandedHistoryMemberIds] = useState<Record<string, boolean>>({});
@@ -1057,9 +1058,7 @@ function TeamCapacityPage() {
                                       {t.task_name}
                                     </span>
                                   </div>
-                                  <span className="font-mono text-[10px] text-muted-foreground shrink-0 bg-background px-1 py-0.5 rounded border border-border">
-                                    {t.planned_hours || 0}h
-                                  </span>
+                                  <TaskHoursBadges task={t} variant="badges" className="shrink-0 text-[10px]" />
                                 </div>
                               ))}
                               {item.activeTasks.length > 2 && (
@@ -1105,30 +1104,30 @@ function TeamCapacityPage() {
                               </span>
                               <span
                                 className={cn(
-                                  "font-mono font-bold text-[10px]",
+                                  "font-mono text-[10px] font-semibold",
                                   item.capacityStatus === "overloaded"
-                                    ? "text-rose-400"
+                                    ? "text-rose-400/90"
                                     : item.capacityStatus === "partially"
-                                    ? "text-amber-400"
+                                    ? "text-amber-400/90"
                                     : item.capacityStatus === "free"
-                                    ? "text-emerald-400"
-                                    : "text-blue-400"
+                                    ? "text-emerald-400/90"
+                                    : "text-blue-400/90"
                                 )}
                               >
                                 {item.capacityPct}%
                               </span>
                             </div>
-                            <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                            <div className="w-full bg-muted/60 rounded-full h-1 overflow-hidden">
                               <div
                                 className={cn(
                                   "h-full rounded-full transition-all duration-300",
                                   item.capacityStatus === "overloaded"
-                                    ? "bg-rose-500"
+                                    ? "bg-rose-500/80"
                                     : item.capacityStatus === "partially"
-                                    ? "bg-amber-500"
+                                    ? "bg-amber-500/80"
                                     : item.capacityStatus === "free"
-                                    ? "bg-emerald-500"
-                                    : "bg-blue-500"
+                                    ? "bg-emerald-500/80"
+                                    : "bg-blue-500/80"
                                 )}
                                 style={{ width: `${Math.min(100, item.capacityPct)}%` }}
                               />
@@ -1138,12 +1137,41 @@ function TeamCapacityPage() {
 
                         {/* 5. Done Today */}
                         <td className="py-3 px-2">
-                          <div className="space-y-0.5">
-                            <div className="font-mono text-foreground font-semibold">
-                              {item.completedTodayHours} hrs
+                          <div
+                            onClick={() => {
+                              if (item.completedTodayTasks.length > 0) {
+                                setCompletedTodayModalItem({
+                                  member: p,
+                                  tasks: item.completedTodayTasks,
+                                  totalHours: item.completedTodayHours,
+                                });
+                              }
+                            }}
+                            className={cn(
+                              "space-y-0.5 p-1 rounded-md transition-colors",
+                              item.completedTodayTasks.length > 0
+                                ? "hover:bg-accent/40 cursor-pointer group/donetoday"
+                                : "opacity-50"
+                            )}
+                            title={
+                              item.completedTodayTasks.length > 0
+                                ? "Click to view tasks completed today"
+                                : "No tasks completed today"
+                            }
+                          >
+                            <div className="font-mono text-foreground font-medium flex items-center gap-1 text-[11px]">
+                              <CheckCircle2 className="h-3 w-3 text-muted-foreground group-hover/donetoday:text-emerald-400 shrink-0 transition-colors" />
+                              <span>{item.completedTodayHours} hrs</span>
                             </div>
-                            <div className="text-[10px] text-muted-foreground font-mono">
-                              {item.completedTodayTasks.length} tasks
+                            <div
+                              className={cn(
+                                "text-[10px] font-mono",
+                                item.completedTodayTasks.length > 0
+                                  ? "text-muted-foreground group-hover/donetoday:text-foreground group-hover/donetoday:underline transition-colors"
+                                  : "text-muted-foreground/60"
+                              )}
+                            >
+                              {item.completedTodayTasks.length} tasks completed
                             </div>
                           </div>
                         </td>
@@ -1462,11 +1490,39 @@ function TeamCapacityPage() {
                           </div>
 
                           {/* Completed Today Bar in Card */}
-                          <div className="p-2.5 bg-muted/40 border border-border/70 rounded-lg flex items-center justify-between gap-2 text-xs">
+                          <div
+                            onClick={() => {
+                              if (item.completedTodayTasks.length > 0) {
+                                setCompletedTodayModalItem({
+                                  member: p,
+                                  tasks: item.completedTodayTasks,
+                                  totalHours: item.completedTodayHours,
+                                });
+                              }
+                            }}
+                            className={cn(
+                              "p-2.5 bg-muted/40 border border-border/70 rounded-lg flex items-center justify-between gap-2 text-xs transition-all",
+                              item.completedTodayTasks.length > 0
+                                ? "hover:bg-emerald-500/10 hover:border-emerald-500/30 cursor-pointer group/donetoday"
+                                : ""
+                            )}
+                            title={
+                              item.completedTodayTasks.length > 0
+                                ? "Click to view tasks completed today"
+                                : "No tasks completed today"
+                            }
+                          >
                             <div className="flex items-center gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                               <div>
-                                <div className="font-semibold text-foreground">Completed Today</div>
+                                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                  <span>Completed Today</span>
+                                  {item.completedTodayTasks.length > 0 && (
+                                    <span className="text-[10px] font-mono text-emerald-400 font-normal underline">
+                                      (View {item.completedTodayTasks.length})
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-[10px] text-muted-foreground font-mono">
                                   {item.completedTodayHours} hrs ({(item.completedTodayTasks || []).length} tasks)
                                 </div>
@@ -1475,8 +1531,11 @@ function TeamCapacityPage() {
 
                             <button
                               type="button"
-                              onClick={() => toggleExpandHistory(p.id)}
-                              className="text-xs font-semibold px-2.5 py-1 rounded bg-card hover:bg-accent text-foreground border border-border flex items-center gap-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleExpandHistory(p.id);
+                              }}
+                              className="text-xs font-semibold px-2.5 py-1 rounded bg-card hover:bg-accent text-foreground border border-border flex items-center gap-1 shrink-0"
                             >
                               <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                               <span>{(item.historyList || []).length} Days</span>
@@ -1808,6 +1867,111 @@ function TeamCapacityPage() {
                   size="sm"
                   variant="outline"
                   onClick={() => setUpcomingTasksModalItem(null)}
+                  className="h-8 text-xs border-border bg-card text-foreground hover:bg-accent"
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Completed Today Tasks Dialog */}
+      <Dialog
+        open={!!completedTodayModalItem}
+        onOpenChange={(open) => {
+          if (!open) setCompletedTodayModalItem(null);
+        }}
+      >
+        <DialogContent className="max-w-md bg-card border-border shadow-2xl rounded-xl p-5 text-foreground z-[999]">
+          {completedTodayModalItem && (
+            <>
+              <DialogHeader className="space-y-2 border-b border-border pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <Avatar className="h-8 w-8 border border-border">
+                      {completedTodayModalItem.member.avatar_url ? (
+                        <AvatarImage
+                          src={completedTodayModalItem.member.avatar_url}
+                          alt={completedTodayModalItem.member.display_name}
+                        />
+                      ) : (
+                        <AvatarFallback className="text-foreground text-xs font-semibold bg-emerald-500/20 text-emerald-300">
+                          {completedTodayModalItem.member.display_name.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    <div>
+                      <span className="font-bold text-sm text-foreground">
+                        {completedTodayModalItem.member.display_name}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground block">
+                        Completed Today ({todayStr})
+                      </span>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 font-mono text-xs">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    {completedTodayModalItem.totalHours} hrs ({completedTodayModalItem.tasks.length} tasks)
+                  </Badge>
+                </div>
+
+                <DialogTitle className="text-base font-bold text-foreground pt-1">
+                  Today's Completed Tasks
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Tasks completed today by {completedTodayModalItem.member.display_name}
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Tasks List */}
+              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 py-2">
+                {completedTodayModalItem.tasks.length > 0 ? (
+                  completedTodayModalItem.tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      onClick={() => {
+                        setCompletedTodayModalItem(null);
+                        setInspectTaskItem({ task, profile: completedTodayModalItem.member });
+                      }}
+                      className="p-3 rounded-lg bg-muted/30 border border-border/60 hover:border-emerald-500/40 transition-all space-y-1.5 text-xs group cursor-pointer"
+                      title="Click to view all task details"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">
+                            {task.task_code || "TSK"}
+                          </span>
+                          <span className="font-semibold text-foreground truncate group-hover:text-emerald-400 transition-colors">
+                            {task.task_name}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] shrink-0 font-mono">
+                          Completed
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t border-border/50 pt-1.5 mt-1">
+                        <span className="text-[10px] text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                          {task.project_name || "General"}
+                        </span>
+                        <TaskHoursBadges task={task} variant="badges" className="text-[10px]" />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-xs text-muted-foreground italic">
+                    No tasks completed today.
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="border-t border-border pt-3 flex items-center justify-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCompletedTodayModalItem(null)}
                   className="h-8 text-xs border-border bg-card text-foreground hover:bg-accent"
                 >
                   Close

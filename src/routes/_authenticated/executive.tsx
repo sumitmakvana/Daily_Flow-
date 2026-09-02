@@ -805,10 +805,11 @@ function ExecutiveRealDashboard({
       const planned = pTasks.reduce((s, t) => s + Number(t.planned_hours ?? 0), 0);
       const actual = pTasks.reduce((s, t) => s + Number(t.actual_hours ?? 0), 0);
       const auto = pTasks.reduce((s, t) => {
-        const sys = (t as any).started_at 
+        const baseSys = Number((t as any).system_hours ?? 0);
+        const runningSys = (t as any).started_at 
           ? Math.min(8.0, Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10))
-          : Number((t as any).system_hours ?? 0);
-        return s + sys;
+          : 0;
+        return s + baseSys + runningSys;
       }, 0);
       return {
         id: p.id,
@@ -1698,10 +1699,11 @@ export function MemberDetailSheet({
     const plannedHours = memberTasks.reduce((s, t) => s + (t.planned_hours ?? 0), 0);
     const actualHours = memberTasks.reduce((s, t) => s + (t.actual_hours ?? 0), 0);
     const systemHours = memberTasks.reduce((s, t) => {
-      const sys = (t as any).started_at 
+      const baseSys = Number((t as any).system_hours ?? 0);
+      const runningSys = (t as any).started_at 
         ? Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10)
-        : Number((t as any).system_hours ?? 0);
-      return s + sys;
+        : 0;
+      return s + baseSys + runningSys;
     }, 0);
     const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
@@ -3162,9 +3164,11 @@ function StatusDetailSheet({
                     <span className="text-muted-foreground italic">Unassigned</span>
                   )}
                   {(() => {
-                    const sysHrs = (t as any).started_at 
+                    const baseSys = Number((t as any).system_hours ?? 0);
+                    const runningSys = (t as any).started_at 
                       ? Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10)
-                      : Number((t as any).system_hours ?? 0);
+                      : 0;
+                    const sysHrs = baseSys + runningSys;
                     return (
                       <div className="text-right font-mono text-[11px]">
                         <div className="font-bold flex items-center gap-1 justify-end">
