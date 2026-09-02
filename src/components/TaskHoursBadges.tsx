@@ -25,7 +25,10 @@ export function TaskHoursBadges({ task, className }: TaskHoursBadgesProps) {
     : 0;
   const sysHrs = baseSys + runningSys;
 
-  const hasGap = sysHrs > 0 && Math.abs(sysHrs - logged) >= 1.0;
+  const hasGap =
+    (task.status === "Completed" && logged === 0 && sysHrs >= 1.0) ||
+    (logged > 0 && sysHrs > 0 && Math.abs(sysHrs - logged) >= 1.5) ||
+    (plan > 0 && sysHrs > plan + 1.5 && logged === 0);
   const isOverrun =
     (task.status === "In Progress" && (sysHrs >= 8.0 || (plan > 0 && sysHrs > plan))) ||
     (task.status === "Completed" && plan > 0 && (logged === 0 || logged > plan || logged >= 8.0));
@@ -64,7 +67,7 @@ export function TaskHoursBadges({ task, className }: TaskHoursBadgesProps) {
       )}
       {hasGap && (
         <span
-          title={`Gap > 1h between timer (${sysHrs}h) and logged (${logged}h)`}
+          title={`Gap > 1h between timer (${formatHoursMins(sysHrs)}) and logged hours (${formatHoursMins(logged)})`}
           className="text-rose-400 ml-0.5 font-bold text-[9px]"
         >
           ⚠️ Gap
