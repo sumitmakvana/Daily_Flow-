@@ -38,6 +38,7 @@ class Builder {
   // chainable filters/sort — captured for assertions
   eq(c: string, v: unknown) { this.filters.push({ method: "eq", args: [c, v] }); return this; }
   neq(c: string, v: unknown) { this.filters.push({ method: "neq", args: [c, v] }); return this; }
+  or(expr: string) { this.filters.push({ method: "or", args: [expr] }); return this; }
   is(c: string, v: unknown) { this.filters.push({ method: "is", args: [c, v] }); return this; }
   not(c: string, op: string, v: unknown) { this.filters.push({ method: "not", args: [c, op, v] }); return this; }
   lt(c: string, v: unknown) { this.filters.push({ method: "lt", args: [c, v] }); return this; }

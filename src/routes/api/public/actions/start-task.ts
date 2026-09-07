@@ -109,9 +109,33 @@ export const Route = createFileRoute("/api/public/actions/start-task")({
 
           const oldStatus = task.status;
           if (oldStatus !== "In Progress") {
+            // Auto-pause any existing active tasks for this user
+            const activeOtherRes = await pool.query(
+              `SELECT id, started_at::text, system_hours, status FROM public.tasks 
+               WHERE assigned_to = $1 
+                 AND (status = 'In Progress' OR started_at IS NOT NULL) 
+                 AND status != 'Completed'
+                 AND id != $2`,
+              [userId, taskId],
+            );
+            for (const otherTask of activeOtherRes.rows) {
+              let newSysHours = Number(otherTask.system_hours ?? 0);
+              if (otherTask.started_at) {
+                const startTs = new Date(otherTask.started_at).getTime();
+                const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+                newSysHours += elapsed;
+              }
+              await pool.query(
+                `UPDATE public.tasks 
+                 SET status = 'To Do', started_at = NULL, system_hours = $1, version = version + 1, updated_at = NOW(), updated_by = $2 
+                 WHERE id = $3`,
+                [newSysHours, userId, otherTask.id],
+              );
+            }
+
             await pool.query(
               `UPDATE public.tasks 
-               SET status = 'In Progress', version = version + 1, updated_at = NOW(), updated_by = $2 
+               SET status = 'In Progress', started_at = NOW(), version = version + 1, updated_at = NOW(), updated_by = $2 
                WHERE id = $1`,
               [taskId, userId],
             );
