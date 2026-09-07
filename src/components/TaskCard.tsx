@@ -224,11 +224,20 @@ export function TaskCard({
 
   return (
     <>
-      <Card className={cn(
-        "p-3 bg-card hover:bg-accent/30 transition-colors flex flex-col gap-3 items-stretch",
-        overdue && "border-priority-high/40",
-        needsSplit && "border-amber-500/80 bg-amber-500/[0.06] ring-1 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
-      )}>
+      <Card
+        className={cn(
+          "p-3 bg-card hover:bg-accent/30 transition-colors flex flex-col gap-3 items-stretch cursor-pointer",
+          overdue && "border-priority-high/40",
+          needsSplit && "border-amber-500/80 bg-amber-500/[0.06] ring-1 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+        )}
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest('button, input, a, [role="button"], [role="menuitem"], label')) {
+            return;
+          }
+          setHistoryOpen(true);
+        }}
+      >
         <div className="flex gap-3 items-start">
           {onSelectToggle && (
             <div className="pt-1.5 shrink-0 flex items-center justify-center">
@@ -245,7 +254,7 @@ export function TaskCard({
           <div className="min-w-0 flex-1">
             {/* Header Row: Code & Title & Dropdown */}
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setHistoryOpen(true)}>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
                   {rank !== undefined && (
                     <span
@@ -259,7 +268,18 @@ export function TaskCard({
                   )}
                   <span>{task.task_code}</span>
                 </div>
-                <div className="mt-0.5 font-medium leading-tight truncate">{task.task_name}</div>
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="mt-0.5 font-semibold text-foreground leading-tight truncate hover:text-primary transition-colors">
+                        {task.task_name}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="start" className="max-w-md bg-slate-900 text-slate-100 border border-slate-700 font-medium text-xs py-1.5 px-2.5 shadow-xl z-50">
+                      {task.task_name}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 {!compact && (task.client || task.project_name) && (
                   <div className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-1">
                     <span>

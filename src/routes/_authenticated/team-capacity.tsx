@@ -43,6 +43,7 @@ import {
   Filter,
   Eye,
   Calendar,
+  History as HistoryIcon,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -89,6 +90,82 @@ export const Route = createFileRoute("/_authenticated/team-capacity")({
   },
   component: TeamCapacityPage,
 });
+
+function MemberProjectsBadge({
+  projectsBreakdown,
+}: {
+  projectsBreakdown?: Array<{
+    projectName: string;
+    tasks: Task[];
+    activeTask?: Task;
+    queuedTask?: Task;
+    completedTodayCount: number;
+    totalPlannedHours: number;
+  }>;
+}) {
+  if (!projectsBreakdown || projectsBreakdown.length <= 1) return null;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-muted/60 text-foreground border border-border/80 hover:bg-accent hover:border-border shrink-0 transition-colors cursor-pointer"
+          title="Click to view cross-project workload"
+        >
+          <Layers className="h-2.5 w-2.5 text-foreground shrink-0" />
+          <span>{projectsBreakdown.length} Projects</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-2.5 bg-popover border-border text-xs z-[9999] shadow-xl space-y-2">
+        <div className="flex items-center justify-between border-b border-border/40 pb-1.5">
+          <span className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+            <Layers className="h-3.5 w-3.5 text-foreground" />
+            Cross-Project Workload
+          </span>
+          <span className="font-mono text-[10px] text-muted-foreground">{projectsBreakdown.length} Projects</span>
+        </div>
+        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
+          {projectsBreakdown.map((proj) => (
+            <div key={proj.projectName} className="p-2 rounded bg-muted/20 border border-border/40 space-y-1 text-xs">
+              <div className="flex items-center justify-between gap-2 font-medium">
+                <span className="text-foreground font-semibold truncate flex items-center gap-1">
+                  <Briefcase className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate">{proj.projectName}</span>
+                </span>
+                {proj.activeTask ? (
+                  <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                    Active
+                  </span>
+                ) : proj.totalPlannedHours > 0 ? (
+                  <span className="text-[9px] font-mono text-muted-foreground shrink-0">{proj.totalPlannedHours}h queued</span>
+                ) : (
+                  <span className="text-[9px] font-mono text-muted-foreground/60 shrink-0">Idle</span>
+                )}
+              </div>
+              {proj.activeTask ? (
+                <div className="text-[11px] text-foreground font-medium truncate flex items-center gap-1.5 pl-0.5">
+                  <Play className="h-3 w-3 text-blue-400 fill-blue-400 shrink-0" />
+                  <span className="truncate" title={proj.activeTask.task_name}>{proj.activeTask.task_name}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground ml-auto shrink-0">{proj.activeTask.planned_hours || 0}h</span>
+                </div>
+              ) : proj.queuedTask ? (
+                <div className="text-[11px] text-muted-foreground font-medium truncate flex items-center gap-1.5 pl-0.5">
+                  <Clock className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                  <span className="truncate" title={proj.queuedTask.task_name}>{proj.queuedTask.task_name}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground/70 ml-auto shrink-0">{proj.queuedTask.planned_hours || 0}h</span>
+                </div>
+              ) : (
+                <div className="text-[10px] text-muted-foreground/60 italic pl-0.5">No active or queued tasks</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function TeamCapacityPage() {
   const { user } = useAuth();
@@ -256,10 +333,11 @@ function TeamCapacityPage() {
       const isWfh = !!wfhRecord;
 
       // Planned Hours for Capacity
-      const plannedHours = memberTasks.reduce(
+      const rawPlannedHours = memberTasks.reduce(
         (s, t) => (t.status !== "Completed" ? s + Number(t.planned_hours ?? 0) : s),
         0,
       );
+      const plannedHours = Math.round(rawPlannedHours * 10) / 10;
 
       const maxDailyHours = 8;
       const capacityPct = Math.min(150, Math.round((plannedHours / maxDailyHours) * 100));
@@ -280,10 +358,11 @@ function TeamCapacityPage() {
 
       // --- Completed Today ---
       const completedTodayTasks = memberTasks.filter((t) => isTaskCompletedToday(t, todayStr));
-      const completedTodayHours = completedTodayTasks.reduce(
+      const rawCompletedTodayHours = completedTodayTasks.reduce(
         (sum, t) => sum + Number(t.actual_hours || t.planned_hours || 0),
         0,
       );
+      const completedTodayHours = Math.round(rawCompletedTodayHours * 10) / 10;
 
       // --- Completed History ---
       const pastCompletedTasks = completedTasks.filter((t) => {
@@ -340,7 +419,7 @@ function TeamCapacityPage() {
 
         const entry = historyDateMap.get(compDate)!;
         entry.tasks.push(t);
-        entry.totalHours += Number(t.actual_hours || t.planned_hours || 0);
+        entry.totalHours = Math.round((entry.totalHours + Number(t.actual_hours || t.planned_hours || 0)) * 10) / 10;
       });
 
       const historyList = Array.from(historyDateMap.values()).sort((a, b) =>
@@ -348,7 +427,7 @@ function TeamCapacityPage() {
       );
 
       const yesterdayEntry = historyList.find((h) => h.dateStr === yesterdayStr || h.relativeLabel === "Yesterday");
-      const completedYesterdayHours = yesterdayEntry ? yesterdayEntry.totalHours : 0;
+      const completedYesterdayHours = yesterdayEntry ? Math.round(yesterdayEntry.totalHours * 10) / 10 : 0;
       const completedYesterdayCount = yesterdayEntry ? yesterdayEntry.tasks.length : 0;
 
       const dbRole = p.role || "member";
@@ -367,6 +446,50 @@ function TeamCapacityPage() {
         new Set(memberTasks.map((t) => t.project_name).filter(Boolean)),
       ) as string[];
 
+      const projectMap = new Map<
+        string,
+        {
+          projectName: string;
+          tasks: Task[];
+          activeTask?: Task;
+          queuedTask?: Task;
+          completedTodayCount: number;
+          totalPlannedHours: number;
+        }
+      >();
+
+      memberTasks.forEach((t) => {
+        const pName = t.project_name?.trim() || "General Workspace";
+        if (!projectMap.has(pName)) {
+          projectMap.set(pName, {
+            projectName: pName,
+            tasks: [],
+            completedTodayCount: 0,
+            totalPlannedHours: 0,
+          });
+        }
+        const item = projectMap.get(pName)!;
+        item.tasks.push(t);
+        if (t.status === "In Progress" && !item.activeTask) {
+          item.activeTask = t;
+        }
+        if ((t.status === "To Do" || (t.status as string) === "Pending") && !item.queuedTask) {
+          item.queuedTask = t;
+        }
+        if (isTaskCompletedToday(t, todayStr)) {
+          item.completedTodayCount++;
+        }
+        if (t.status !== "Completed") {
+          item.totalPlannedHours = Math.round((item.totalPlannedHours + Number(t.planned_hours || 0)) * 10) / 10;
+        }
+      });
+
+      const projectsBreakdown = Array.from(projectMap.values()).sort((a, b) => {
+        const aActive = a.activeTask ? 1 : 0;
+        const bActive = b.activeTask ? 1 : 0;
+        return bActive - aActive;
+      });
+
       const mainProjectName = realProjectSkills[0] || "General Workspace";
 
       return {
@@ -383,6 +506,7 @@ function TeamCapacityPage() {
         capacityStatus,
         title,
         skills: realProjectSkills,
+        projectsBreakdown,
         mainProjectName,
         teamName,
         queuedHours: plannedHours,
@@ -1068,13 +1192,12 @@ function TeamCapacityPage() {
           <table className="w-full text-left text-xs border-collapse table-fixed">
             <thead>
               <tr className="border-b border-border/80 bg-muted/30 text-muted-foreground text-[10px] font-bold uppercase tracking-wider h-10">
-                <th className="py-3 px-3 align-middle w-[18%]">Member</th>
-                <th className="py-3 px-3 align-middle w-[28%]">Current Work</th>
+                <th className="py-3 px-3 align-middle w-[24%]">Member</th>
+                <th className="py-3 px-3 align-middle w-[26%]">Current Work</th>
                 <th className="py-3 px-3 align-middle w-[12%]">Upcoming Work</th>
                 <th className="py-3 px-3 align-middle w-[13%]">Capacity</th>
-                <th className="py-3 px-3 align-middle w-[10%]">Done Today</th>
-                <th className="py-3 px-2 align-middle w-[7%]">History</th>
-                <th className="py-3 px-3 align-middle w-[12%]">Projects</th>
+                <th className="py-3 px-3 align-middle w-[15%]">Done & History</th>
+                <th className="py-3 px-3 align-middle w-[10%]">Projects</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40 font-medium">
@@ -1097,7 +1220,7 @@ function TeamCapacityPage() {
                           className="py-3 px-2.5 align-middle cursor-pointer"
                           onClick={() => setInspectMemberId(p.id)}
                         >
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             <Avatar className="h-8 w-8 border border-border shrink-0">
                               {p.avatar_url ? (
                                 <AvatarImage src={p.avatar_url} alt={p.display_name} />
@@ -1108,8 +1231,10 @@ function TeamCapacityPage() {
                               )}
                             </Avatar>
                             <div className="min-w-0 space-y-0.5 flex-1">
-                              <div className="font-semibold text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
-                                <span className="truncate max-w-[110px]">{p.display_name}</span>
+                              <div className="font-semibold text-foreground flex flex-wrap items-center gap-1.5 min-w-0">
+                                <span className="truncate font-bold text-foreground text-xs hover:text-primary transition-colors" title={p.display_name}>
+                                  {p.display_name}
+                                </span>
                                 {item.isOnLeave ? (
                                   <Badge variant="outline" className="bg-muted/40 text-amber-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
                                     <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
@@ -1123,6 +1248,9 @@ function TeamCapacityPage() {
                                     <Zap className="h-3 w-3 text-emerald-400/80" /> &lt;16h Queue
                                   </Badge>
                                 ) : null}
+                                {item.projectsBreakdown && item.projectsBreakdown.length > 1 && (
+                                  <MemberProjectsBadge projectsBreakdown={item.projectsBreakdown} />
+                                )}
                               </div>
                               <div className="text-[10px] text-muted-foreground truncate">{item.title}</div>
                             </div>
@@ -1141,22 +1269,28 @@ function TeamCapacityPage() {
                               </div>
                             </div>
                           ) : item.activeTasks.length > 0 ? (
-                            <div className="space-y-1">
-                              {item.activeTasks.slice(0, 2).map((t) => (
-                                <div
-                                  key={t.id}
-                                  onClick={() => setActiveTaskModalItem({ task: t, member: p })}
-                                  className="flex items-center justify-between gap-2 p-1.5 rounded-md bg-muted/40 hover:bg-accent/50 border border-border/50 cursor-pointer transition-colors group/item min-w-0"
-                                >
-                                  <div className="min-w-0 flex items-center gap-1.5 flex-1">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
-                                    <span className="truncate text-foreground font-semibold group-hover/item:text-primary transition-colors text-[11px]">
-                                      {t.task_name}
-                                    </span>
+                            <div className="space-y-1.5">
+                              {item.activeTasks.slice(0, 2).map((t) => {
+                                const displayName = t.task_name?.trim() || (t.task_code ? `Task #${t.task_code}` : "Untitled Task");
+                                return (
+                                  <div
+                                    key={t.id}
+                                    onClick={() => setActiveTaskModalItem({ task: t, member: p })}
+                                    className="p-1.5 rounded-md bg-muted/40 hover:bg-accent/50 border border-border/50 cursor-pointer transition-colors group/item min-w-0 space-y-1"
+                                  >
+                                    <div className="min-w-0 flex items-center gap-1.5">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+                                      <span
+                                        className="truncate text-foreground font-semibold group-hover/item:text-primary transition-colors text-[11px]"
+                                        title={displayName}
+                                      >
+                                        {displayName}
+                                      </span>
+                                    </div>
+                                    <TaskHoursBadges task={t} variant="badges" className="shrink-0 text-[10px] max-w-full" />
                                   </div>
-                                  <TaskHoursBadges task={t} variant="badges" className="shrink-0 text-[10px]" />
-                                </div>
-                              ))}
+                                );
+                              })}
                               {item.activeTasks.length > 2 && (
                                 <button
                                   type="button"
@@ -1183,7 +1317,7 @@ function TeamCapacityPage() {
                                 {item.upcomingTasks.length} queued
                               </span>
                               <span className="font-mono text-[10px] text-muted-foreground ml-1 shrink-0">
-                                {item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0)}h
+                                {Math.round(item.upcomingTasks.reduce((s, t) => s + Number(t.planned_hours || 0), 0) * 10) / 10}h
                               </span>
                             </div>
                           ) : (
@@ -1196,7 +1330,7 @@ function TeamCapacityPage() {
                           <div className="space-y-1">
                             <div className="flex items-center justify-between text-[11px]">
                               <span className="font-mono text-foreground font-semibold">
-                                {item.plannedHours}h / 8h
+                                {Math.round(Number(item.plannedHours || 0) * 10) / 10}h / 8h
                               </span>
                               <span
                                 className={cn(
@@ -1235,61 +1369,41 @@ function TeamCapacityPage() {
                           </div>
                         </td>
 
-                        {/* 5. Done Today */}
+                        {/* 5. Done & History (Combined Single Modal Trigger) */}
                         <td className="py-3 px-3 align-middle">
                           <div
                             onClick={() => {
-                              if (item.completedTodayTasks.length > 0) {
-                                setCompletedTodayModalItem({
-                                  member: p,
-                                  tasks: item.completedTodayTasks,
-                                  totalHours: item.completedTodayHours,
-                                });
-                              }
+                              setCompletedTodayModalItem({
+                                member: p,
+                                tasks: item.completedTodayTasks,
+                                totalHours: Math.round(Number(item.completedTodayHours || 0) * 10) / 10,
+                              });
                             }}
-                            className={cn(
-                              "space-y-0.5 p-1 rounded-md transition-colors",
-                              item.completedTodayTasks.length > 0
-                                ? "hover:bg-accent/40 cursor-pointer group/donetoday"
-                                : "opacity-50"
-                            )}
-                            title={
-                              item.completedTodayTasks.length > 0
-                                ? "Click to view tasks completed today"
-                                : "No tasks completed today"
-                            }
+                            className="group/donecell min-w-0 p-2 rounded-xl bg-card hover:bg-accent/40 border border-border/70 hover:border-emerald-500/40 cursor-pointer transition-all flex items-center justify-between gap-3 shadow-2xs"
+                            title="Click to view completed tasks & full history"
                           >
-                            <div className="font-mono text-foreground font-medium flex items-center gap-1 text-[11px]">
-                              <CheckCircle2 className="h-3 w-3 text-muted-foreground group-hover/donetoday:text-emerald-400 shrink-0 transition-colors" />
-                              <span>{item.completedTodayHours} hrs</span>
+                            <div className="min-w-0 space-y-0.5">
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                                <span className="font-mono text-[12px]">
+                                  {Math.round(Number(item.completedTodayHours || 0) * 10) / 10} hrs
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground group-hover/donecell:text-foreground transition-colors font-medium">
+                                {item.completedTodayTasks.length === 1
+                                  ? "1 task completed"
+                                  : `${item.completedTodayTasks.length} tasks completed`}
+                              </div>
                             </div>
-                            <div
-                              className={cn(
-                                "text-[10px] font-mono",
-                                item.completedTodayTasks.length > 0
-                                  ? "text-muted-foreground group-hover/donetoday:text-foreground group-hover/donetoday:underline transition-colors"
-                                  : "text-muted-foreground/60"
-                              )}
-                            >
-                              {item.completedTodayTasks.length} done
+
+                            <div className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 hover:bg-muted text-[11px] font-medium text-foreground border border-border/80 group-hover/donecell:border-emerald-500/30 transition-colors select-none">
+                              <HistoryIcon className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                              <span>{item.historyList.length > 0 ? `${item.historyList.length}d History` : "History"}</span>
                             </div>
                           </div>
                         </td>
 
-                        {/* 6. History */}
-                        <td className="py-3 px-3 align-middle">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpandHistory(p.id)}
-                            className="text-[10px] font-medium px-2 py-1 rounded bg-muted/40 hover:bg-accent text-foreground border border-border/50 flex items-center gap-1 transition-colors"
-                          >
-                            <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
-                            <span>{item.historyList.length}d</span>
-                            {isExpanded ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
-                          </button>
-                        </td>
-
-                        {/* 7. Projects */}
+                        {/* 6. Projects */}
                         <td className="py-3 px-3 align-middle">
                           <div className="flex flex-wrap items-center gap-1">
                             {item.skills.slice(0, 2).map((sk, idx) => (
@@ -1309,59 +1423,12 @@ function TeamCapacityPage() {
                           </div>
                         </td>
                       </tr>
-
-                      {/* Expandable History Detail Row */}
-                      {isExpanded && (
-                        <tr className="bg-muted/10 border-b border-border/50">
-                          <td colSpan={7} className="p-3 pl-12">
-                            <div className="p-3 bg-card border border-border rounded-lg space-y-2 max-w-2xl">
-                              <div className="text-xs font-bold text-foreground flex items-center justify-between">
-                                <span>Completed Tasks History for {p.display_name}</span>
-                                <span className="text-[10px] text-muted-foreground font-mono">
-                                  {item.completedTasks.length} Total Completed
-                                </span>
-                              </div>
-                              {item.historyList.length > 0 ? (
-                                item.historyList.map((hist) => (
-                                  <div
-                                    key={hist.dateStr}
-                                    className="text-xs space-y-1 border-b border-border/50 pb-1.5 last:border-0 last:pb-0"
-                                  >
-                                    <div className="flex items-center justify-between text-foreground font-semibold text-[11px]">
-                                      <span>
-                                        {hist.formattedDate} ({hist.relativeLabel || "Past"})
-                                      </span>
-                                      <span className="font-mono text-foreground">{hist.totalHours} hrs</span>
-                                    </div>
-                                    {hist.tasks.map((t) => (
-                                      <div
-                                        key={t.id}
-                                        onClick={() => setInspectTaskItem({ task: t, profile: p })}
-                                        className="text-[11px] text-muted-foreground hover:text-foreground flex items-center justify-between pl-2 cursor-pointer transition-colors"
-                                      >
-                                        <span className="truncate">• {t.task_name}</span>
-                                        <span className="font-mono text-[10px] text-muted-foreground">
-                                          {t.actual_hours || t.planned_hours || 0}h
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="text-xs text-muted-foreground/60 italic">
-                                  No past history recorded
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
                     </Fragment>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-muted-foreground text-xs">
+                  <td colSpan={6} className="py-12 text-center text-muted-foreground text-xs">
                     No team members found matching current filters.
                   </td>
                 </tr>
@@ -1438,24 +1505,25 @@ function TeamCapacityPage() {
                 return (
                   <Card
                     key={group.projectName}
-                    className="bg-card border border-border/80 hover:border-border transition-all shadow-xs rounded-xl overflow-hidden flex flex-col justify-between"
+                    className="bg-card border border-border/60 hover:border-border/90 transition-all rounded-xl overflow-hidden flex flex-col justify-between"
                   >
                     {/* Project Card Header */}
                     <div className="p-4 space-y-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-2 font-bold text-base text-foreground truncate">
-                            <Briefcase className="h-4 w-4 text-primary shrink-0" />
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2 font-semibold text-sm text-foreground truncate">
+                            <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
                             <span className="truncate" title={group.projectName}>{group.projectName}</span>
                           </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="truncate font-medium">{group.clientName || "Internal Client"}</span>
+                            <span className="truncate font-medium text-muted-foreground/80">{group.clientName || "Internal Client"}</span>
                             {group.activeTasksCount > 0 ? (
-                              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-[10px] px-2 py-0.5 font-bold font-mono">
-                                ● {group.activeTasksCount} Active Now
+                              <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px] px-2 py-0.5 font-medium font-mono rounded-full flex items-center gap-1.5 shrink-0">
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+                                <span>{group.activeTasksCount} Active Now</span>
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="bg-muted/20 text-muted-foreground border-border/40 text-[10px] px-2 py-0.5 font-mono">
+                              <Badge variant="outline" className="bg-muted/40 text-muted-foreground/70 border-border/40 text-[10px] px-2 py-0.5 font-mono rounded-full shrink-0">
                                 Idle
                               </Badge>
                             )}
@@ -1465,60 +1533,60 @@ function TeamCapacityPage() {
                         {/* Quick Menu Popover */}
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground shrink-0">
-                              <MoreVertical className="h-4 w-4" />
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0">
+                              <MoreVertical className="h-3.5 w-3.5" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent align="end" className="w-52 p-1.5 bg-popover border-border text-xs z-[9999]">
+                          <PopoverContent align="end" className="w-48 p-1 bg-popover border-border text-xs z-[9999]">
                             <button
                               type="button"
                               onClick={() => handleAssignTask(null, group.projectName)}
-                              className="w-full text-left px-2.5 py-2 hover:bg-accent rounded-md font-semibold text-foreground flex items-center gap-2 transition-colors"
+                              className="w-full text-left px-2.5 py-1.5 hover:bg-accent rounded-sm font-medium text-foreground flex items-center gap-2 transition-colors"
                             >
-                              <Plus className="h-4 w-4 text-primary" /> Assign Task Here
+                              <Plus className="h-3.5 w-3.5 text-blue-400" /> Assign Task Here
                             </button>
                             <button
                               type="button"
                               onClick={() => setInspectProjectModalItem(group)}
-                              className="w-full text-left px-2.5 py-2 hover:bg-accent rounded-md font-semibold text-foreground flex items-center gap-2 transition-colors"
+                              className="w-full text-left px-2.5 py-1.5 hover:bg-accent rounded-sm font-medium text-foreground flex items-center gap-2 transition-colors"
                             >
-                              <Eye className="h-4 w-4 text-muted-foreground" /> View Full Details
+                              <Eye className="h-3.5 w-3.5 text-muted-foreground" /> View Full Details
                             </button>
                           </PopoverContent>
                         </Popover>
                       </div>
 
                       {/* Metrics & Avatars Bar */}
-                      <div className="flex items-center justify-between border-y border-border/50 py-2.5 text-xs">
-                        <div className="flex items-center gap-2 text-muted-foreground font-mono text-xs">
-                          <span className="font-bold text-foreground">{group.totalProjectTasks} Tasks</span>
-                          <span>•</span>
-                          <span className="text-primary font-bold">{group.totalPlannedHours}h Planned</span>
+                      <div className="flex items-center justify-between border-y border-border/40 py-2 text-xs">
+                        <div className="flex items-center gap-2 text-muted-foreground font-mono text-[11px]">
+                          <span><strong className="text-foreground font-semibold">{group.totalProjectTasks}</strong> Tasks</span>
+                          <span className="text-muted-foreground/40">•</span>
+                          <span><strong className="text-foreground font-semibold">{group.totalPlannedHours}h</strong> Planned</span>
                         </div>
 
                         {/* Member Avatars Stack */}
-                        <div className="flex items-center -space-x-2 overflow-hidden">
+                        <div className="flex items-center -space-x-1.5 overflow-hidden">
                           {group.members.slice(0, 5).map((m) => {
                             const p = m.profile;
                             const isWorking = m.activeTasks.length > 0;
 
                             return (
                               <div key={p.id} className="relative group/avatar" title={`${p.display_name} (${isWorking ? "Working on active task" : "Available"})`}>
-                                <Avatar className="h-7 w-7 border-2 border-background shrink-0">
+                                <Avatar className="h-6 w-6 border-2 border-card shrink-0">
                                   {p.avatar_url ? (
                                     <AvatarImage src={p.avatar_url} alt={p.display_name} />
                                   ) : (
-                                    <AvatarFallback className="bg-muted text-foreground text-[9px] font-bold">
+                                    <AvatarFallback className="bg-muted text-muted-foreground text-[9px] font-medium">
                                       {p.display_name.slice(0, 2).toUpperCase()}
                                     </AvatarFallback>
                                   )}
                                 </Avatar>
-                                <span className={cn("absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-1 ring-background", isWorking ? "bg-primary" : "bg-muted-foreground/40")} />
+                                <span className={cn("absolute bottom-0 right-0 h-2 w-2 rounded-full ring-1 ring-card", isWorking ? "bg-blue-500" : "bg-muted-foreground/30")} />
                               </div>
                             );
                           })}
                           {group.members.length > 5 && (
-                            <div className="h-7 w-7 rounded-full bg-muted border-2 border-background flex items-center justify-center text-[10px] font-bold text-muted-foreground font-mono">
+                            <div className="h-6 w-6 rounded-full bg-muted border-2 border-card flex items-center justify-center text-[9px] font-mono font-medium text-muted-foreground">
                               +{group.members.length - 5}
                             </div>
                           )}
@@ -1526,18 +1594,21 @@ function TeamCapacityPage() {
                       </div>
 
                       {/* Active Members & Work Status List inside Card */}
-                      <div className="space-y-2.5">
-                        <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                      <div className="space-y-2 pt-0.5">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 flex items-center justify-between">
                           <span>Team Workload ({group.members.length})</span>
                           {group.activeTasksCount > 0 ? (
-                            <span className="text-primary font-mono text-xs font-bold">● {group.activeTasksCount} Working Now</span>
+                            <span className="text-blue-400 font-mono text-[10px] font-medium flex items-center gap-1.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                              <span>{group.activeTasksCount} Working Now</span>
+                            </span>
                           ) : (
-                            <span className="text-emerald-400 font-mono text-xs">⚡ All Available</span>
+                            <span className="text-muted-foreground/60 font-mono text-[10px]">All Available</span>
                           )}
                         </div>
 
                         {sortedMembers.length > 0 ? (
-                          <div className="space-y-2.5 max-h-80 overflow-y-auto pr-0.5">
+                          <div className="space-y-2 max-h-80 overflow-y-auto pr-0.5">
                             {sortedMembers.map((m) => {
                               const p = m.profile;
                               const liveTask = m.activeTasks[0]; // ONLY In Progress task!
@@ -1554,112 +1625,100 @@ function TeamCapacityPage() {
                                 <div
                                   key={p.id}
                                   className={cn(
-                                    "p-3 rounded-xl border text-xs transition-all space-y-2",
-                                    isOnLeave
-                                      ? "bg-muted/30 border-border/50 border-l-2 border-l-amber-500/60 shadow-2xs"
-                                      : isWorkingNow
-                                      ? "bg-card border-border/80 border-l-4 border-l-primary shadow-xs"
-                                      : isFree
-                                      ? "bg-emerald-500/5 border-emerald-500/20"
+                                    "p-2.5 rounded-lg border text-xs transition-colors space-y-2",
+                                    isWorkingNow
+                                      ? "bg-blue-500/[0.03] border-blue-500/30"
+                                      : isOnLeave
+                                      ? "bg-muted/15 border-border/40 opacity-80"
                                       : "bg-muted/20 border-border/40"
                                   )}
                                 >
-                                  {/* Header: Avatar, Name, Live Status Pill */}
+                                  {/* Header: Avatar, Name, Live Status Pill & Queued Hours */}
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                      <Avatar className="h-7 w-7 border border-border shrink-0">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <Avatar className="h-6 w-6 border border-border/40 shrink-0">
                                         {p.avatar_url ? (
                                           <AvatarImage src={p.avatar_url} alt={p.display_name} />
                                         ) : (
-                                          <AvatarFallback className="bg-muted text-foreground text-[10px] font-bold">
+                                          <AvatarFallback className="bg-muted text-muted-foreground text-[9px] font-medium">
                                             {p.display_name.slice(0, 2).toUpperCase()}
                                           </AvatarFallback>
                                         )}
                                       </Avatar>
-                                      <div className="min-w-0">
-                                        <div className="font-bold text-foreground truncate text-xs flex items-center gap-1.5">
-                                          <span className="truncate">{p.display_name}</span>
-                                          {isOnLeave ? (
-                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-muted/40 text-amber-300/90 border border-border/60 shrink-0">
-                                              <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
-                                            </span>
-                                          ) : isWfh ? (
-                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-sky-500/15 text-sky-400 border border-sky-500/30 shrink-0">
-                                              🏠 WFH
-                                            </span>
-                                          ) : null}
-                                          {isWorkingNow && (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-primary/15 text-primary border border-primary/30 shrink-0">
-                                              ● WORKING NOW
-                                            </span>
-                                          )}
-                                          {isFree && (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0">
-                                              ⚡ FREE
-                                            </span>
-                                          )}
-                                        </div>
+                                      <div className="min-w-0 flex items-center gap-1.5">
+                                        <span className="font-semibold text-foreground truncate text-xs">{p.display_name}</span>
+                                        {isOnLeave ? (
+                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                                            <Palmtree className="h-3 w-3" /> ON LEAVE
+                                          </span>
+                                        ) : isWfh ? (
+                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0">
+                                            🏠 WFH
+                                          </span>
+                                        ) : isWorkingNow ? (
+                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" /> WORKING NOW
+                                          </span>
+                                        ) : isFree ? (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                                            FREE
+                                          </span>
+                                        ) : null}
+                                        <MemberProjectsBadge projectsBreakdown={memberInfo?.projectsBreakdown} />
                                       </div>
                                     </div>
 
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] px-2 py-0.5 font-mono shrink-0 border-border bg-muted/30 text-muted-foreground"
-                                    >
+                                    <span className="font-mono text-[11px] text-muted-foreground/80 shrink-0">
                                       {memberInfo?.plannedHours || 0}h queued
-                                    </Badge>
+                                    </span>
                                   </div>
 
                                   {/* Task Details - Explicitly label Task Status */}
                                   {isOnLeave ? (
-                                    <div className="p-2.5 rounded-lg bg-card border border-border/60 space-y-1 shadow-2xs">
-                                      <div className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
-                                        <span className="font-semibold text-muted-foreground flex items-center gap-1">
-                                          <Palmtree className="h-3 w-3 text-amber-400/80" /> Leave ({activeLeave?.leave_type?.toUpperCase() || "CASUAL"})
-                                        </span>
-                                        <span className="font-mono text-[10px] text-muted-foreground/80">Timer Paused</span>
-                                      </div>
-                                      <div className="font-medium text-foreground text-xs truncate flex items-center gap-1.5">
-                                        <span className="truncate text-muted-foreground italic">
+                                    <div className="p-1.5 px-2 rounded-md bg-background/50 border border-border/30 text-xs flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground/70">
+                                        <Palmtree className="h-3 w-3 text-amber-400/80 shrink-0" />
+                                        <span className="truncate italic text-[11px]" title={liveTask ? liveTask.task_name : queuedTask ? queuedTask.task_name : undefined}>
                                           {liveTask ? `Task Paused: ${liveTask.task_name}` : queuedTask ? `Task Paused: ${queuedTask.task_name}` : "Member currently on leave"}
                                         </span>
                                       </div>
+                                      <span className="font-mono text-[10px] text-muted-foreground/50 shrink-0">Paused</span>
                                     </div>
                                   ) : isWorkingNow ? (
                                     <div
                                       onClick={() => setActiveTaskModalItem({ task: liveTask, member: p })}
-                                      className="p-2.5 rounded-lg bg-muted/30 border border-primary/30 hover:border-primary/60 cursor-pointer transition-colors space-y-1 shadow-2xs"
+                                      className="group/task p-2 rounded-md bg-background/60 hover:bg-background border border-blue-500/30 hover:border-blue-500/50 cursor-pointer transition-all space-y-1"
                                     >
-                                      <div className="text-[10px] uppercase font-bold text-primary flex items-center justify-between">
-                                        <span className="font-bold">Current Task:</span>
-                                        <span className="font-mono text-[10px] text-muted-foreground">{liveTask.planned_hours || 0}h planned</span>
+                                      <div className="text-[10px] font-semibold text-blue-400/90 flex items-center justify-between uppercase tracking-wider">
+                                        <span>Current Task:</span>
+                                        <span className="font-mono text-muted-foreground">{liveTask.planned_hours || 0}h planned</span>
                                       </div>
-                                      <div className="font-semibold text-foreground text-xs truncate flex items-center gap-1.5">
-                                        <Play className="h-3.5 w-3.5 text-primary fill-primary shrink-0" />
-                                        <span className="truncate">{liveTask.task_name}</span>
+                                      <div className="font-medium text-foreground text-xs truncate flex items-center gap-1.5">
+                                        <Play className="h-3 w-3 text-blue-400 fill-blue-400 shrink-0" />
+                                        <span className="truncate group-hover/task:text-blue-400 transition-colors" title={liveTask.task_name}>{liveTask.task_name}</span>
                                       </div>
                                     </div>
                                   ) : queuedTask ? (
                                     <div
                                       onClick={() => setActiveTaskModalItem({ task: queuedTask, member: p })}
-                                      className="p-2 rounded-lg bg-muted/20 border border-border/40 hover:border-border cursor-pointer transition-colors space-y-0.5"
+                                      className="group/task p-1.5 px-2 rounded-md bg-background/40 hover:bg-background/80 border border-border/40 cursor-pointer transition-all space-y-0.5"
                                     >
-                                      <div className="text-[10px] uppercase font-bold text-muted-foreground flex items-center justify-between">
-                                        <span>Queued (To Do):</span>
-                                        <span className="font-mono text-[10px] text-muted-foreground">{queuedTask.planned_hours || 0}h</span>
+                                      <div className="text-[10px] font-medium text-muted-foreground/70 flex items-center justify-between uppercase tracking-wider">
+                                        <span className="text-[9px]">Queued:</span>
+                                        <span className="font-mono text-[10px]">{queuedTask.planned_hours || 0}h</span>
                                       </div>
                                       <div className="font-medium text-muted-foreground text-xs truncate flex items-center gap-1.5">
-                                        <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                        <span className="truncate">{queuedTask.task_name}</span>
+                                        <Clock className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                                        <span className="truncate group-hover/task:text-foreground transition-colors" title={queuedTask.task_name}>{queuedTask.task_name}</span>
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="p-2 rounded-lg bg-emerald-500/5 border border-dashed border-emerald-500/30 flex items-center justify-between text-xs">
-                                      <span className="text-emerald-400 font-medium text-[11px]">⚡ Available for new task</span>
+                                    <div className="p-1.5 px-2 rounded-md bg-muted/20 border border-border/30 flex items-center justify-between text-xs">
+                                      <span className="text-emerald-400/90 font-medium text-[11px]">⚡ Available for new task</span>
                                       <button
                                         type="button"
                                         onClick={() => handleAssignTask(p.id, group.projectName)}
-                                        className="text-[11px] font-bold text-primary hover:underline"
+                                        className="text-[11px] font-medium text-blue-400 hover:text-blue-300 hover:underline"
                                       >
                                         + Assign Now
                                       </button>
@@ -1667,7 +1726,7 @@ function TeamCapacityPage() {
                                   )}
 
                                   {/* Footer: Completed Today & History Trigger */}
-                                  <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[11px]">
+                                  <div className="pt-1.5 border-t border-border/30 flex items-center justify-between text-[11px]">
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -1678,13 +1737,13 @@ function TeamCapacityPage() {
                                           totalHours: memberInfo?.completedTodayHours || 0,
                                         });
                                       }}
-                                      className="flex items-center gap-1 text-muted-foreground hover:text-foreground font-mono transition-colors"
+                                      className="flex items-center gap-1 text-muted-foreground hover:text-foreground font-mono transition-colors text-[11px]"
                                       title="Click to view Completed Today & History breakdown"
                                     >
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                                      <span>{memberInfo?.completedTodayHours || 0}h done today</span>
+                                      <CheckCircle2 className="h-3 w-3 text-emerald-400/80 shrink-0" />
+                                      <span>{Math.round(Number(memberInfo?.completedTodayHours || 0) * 10) / 10}h done today</span>
                                       {memberInfo?.historyList && memberInfo.historyList.length > 0 && (
-                                        <span className="text-muted-foreground/60">({memberInfo.historyList.length}d history)</span>
+                                        <span className="text-muted-foreground/50">({memberInfo.historyList.length}d history)</span>
                                       )}
                                     </button>
                                   </div>
@@ -1693,7 +1752,7 @@ function TeamCapacityPage() {
                             })}
                           </div>
                         ) : (
-                          <div className="p-4 text-center text-xs text-muted-foreground/60 italic bg-muted/20 rounded-lg border border-dashed border-border">
+                          <div className="p-4 text-center text-xs text-muted-foreground/50 italic bg-muted/10 rounded-lg border border-dashed border-border/40">
                             No members currently working on this project
                           </div>
                         )}
@@ -1701,20 +1760,20 @@ function TeamCapacityPage() {
                     </div>
 
                     {/* Card Footer Quick Actions */}
-                    <div className="p-3 bg-muted/20 border-t border-border flex items-center justify-between gap-2">
+                    <div className="p-2.5 bg-muted/20 border-t border-border/50 flex items-center justify-between gap-2">
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleAssignTask(null, group.projectName)}
-                        className="h-8 text-xs font-semibold gap-1 text-foreground border-border hover:bg-accent w-full"
+                        className="h-7 text-xs font-medium gap-1.5 text-foreground border-border hover:bg-accent w-full"
                       >
-                        <Plus className="h-3.5 w-3.5 text-primary" /> Assign Task
+                        <Plus className="h-3.5 w-3.5 text-blue-400" /> Assign Task
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => setInspectProjectModalItem(group)}
-                        className="h-8 text-xs font-semibold text-muted-foreground hover:text-foreground shrink-0 gap-1"
+                        className="h-7 text-xs font-medium text-muted-foreground hover:text-foreground shrink-0 gap-1"
                       >
                         <Eye className="h-3.5 w-3.5 text-muted-foreground" /> Details
                       </Button>
@@ -2051,7 +2110,7 @@ function TeamCapacityPage() {
                             }}
                             className="p-2 rounded bg-card border border-border/50 hover:border-primary/40 cursor-pointer flex items-center justify-between gap-2 transition-colors"
                           >
-                            <span className="truncate text-foreground font-medium">• {task.task_name}</span>
+                            <span className="truncate text-foreground font-medium" title={task.task_name}>• {task.task_name}</span>
                             <span className="font-mono text-[10px] text-muted-foreground shrink-0">
                               {task.actual_hours || task.planned_hours || 0}h
                             </span>
@@ -2091,7 +2150,7 @@ function TeamCapacityPage() {
                                   }}
                                   className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                                 >
-                                  <span className="truncate">• {t.task_name}</span>
+                                  <span className="truncate" title={t.task_name}>• {t.task_name}</span>
                                   <span className="font-mono text-[10px] text-muted-foreground shrink-0">
                                     {t.actual_hours || t.planned_hours || 0}h
                                   </span>
@@ -2210,12 +2269,12 @@ function TeamCapacityPage() {
 
                           {liveT ? (
                             <div className="text-[11px] text-foreground pl-8 font-medium flex items-center justify-between">
-                              <span className="truncate">• Current Task: {liveT.task_name}</span>
+                              <span className="truncate" title={liveT.task_name}>• Current Task: {liveT.task_name}</span>
                               <span className="font-mono text-[10px] text-muted-foreground">{liveT.planned_hours || 0}h</span>
                             </div>
                           ) : upcomingT ? (
                             <div className="text-[11px] text-muted-foreground pl-8 flex items-center justify-between">
-                              <span className="truncate">• Next: {upcomingT.task_name}</span>
+                              <span className="truncate" title={upcomingT.task_name}>• Next: {upcomingT.task_name}</span>
                               <span className="font-mono text-[10px] text-muted-foreground">{upcomingT.planned_hours || 0}h</span>
                             </div>
                           ) : (
