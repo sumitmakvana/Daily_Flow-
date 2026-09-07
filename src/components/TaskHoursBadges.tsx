@@ -44,7 +44,7 @@ export function TaskHoursBadges({ task, className }: TaskHoursBadgesProps) {
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted/30 border border-border/50 text-[10px] font-mono text-muted-foreground transition-colors shrink-0",
+        "inline-flex flex-wrap items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted/30 border border-border/50 text-[10px] font-mono text-muted-foreground transition-colors max-w-full overflow-hidden",
         className,
       )}
     >
