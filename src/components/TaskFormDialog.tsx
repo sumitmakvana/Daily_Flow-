@@ -259,7 +259,7 @@ export function TaskFormDialog({
   useEffect(() => {
     if (open) {
       const isNewOpen = !prevOpen;
-      const isDifferentTask = initial?.id !== prevInitialId;
+      const isDifferentTask = (initial?.id !== undefined && initial?.id !== prevInitialId) || (!initial?.id && isNewOpen);
       if (isNewOpen || isDifferentTask) {
         const defaultAssignee = (initial ? initial.assigned_to : (userId ?? null)) ?? null;
         const defaultStartDate = (initial?.start_date ?? getDefaultStartDate(null, apiHolidays, holidayCalendar)) as string | null;
@@ -270,6 +270,7 @@ export function TaskFormDialog({
         const defaultPlannedHours = initial?.planned_hours !== undefined && initial?.planned_hours !== null ? initial.planned_hours : 4;
         const hasPreset = PLANNED_HOURS_OPTIONS.some((opt) => opt.value === defaultPlannedHours);
         setIsCustomSingleHours(!hasPreset);
+        const isNewOrDuplicate = !initial?.id;
         setForm(
           initial
             ? {
@@ -281,6 +282,7 @@ export function TaskFormDialog({
                 due_date: defaultDueDate,
                 planned_hours: defaultPlannedHours,
                 ...initial,
+                ...(isNewOrDuplicate ? { status: "To Do", system_hours: 0, started_at: null, actual_hours: 0, done: false, completed_at: null } : {}),
               }
             : {
                 priority: "Medium",
@@ -290,6 +292,9 @@ export function TaskFormDialog({
                 start_date: defaultStartDate,
                 due_date: defaultDueDate,
                 planned_hours: 4,
+                system_hours: 0,
+                started_at: null,
+                actual_hours: 0,
               }
         );
         setCreationMode("single");
@@ -591,6 +596,8 @@ export function TaskFormDialog({
         start_date: defaultStartDate,
         planned_hours: prev.planned_hours !== undefined && prev.planned_hours !== null ? prev.planned_hours : 4,
         actual_hours: 0,
+        system_hours: 0,
+        started_at: null,
       };
     });
     toast.success("Task cloned into new creation form. Adjust fields and click Create Task.");
