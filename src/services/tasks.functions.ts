@@ -16,10 +16,10 @@ import type { Task } from "@/lib/types";
 const PartialTaskSchema = z.record(z.string(), z.unknown());
 
 export const createTaskFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .validator((d: { payload: Record<string, unknown> }) =>
     z.object({ payload: PartialTaskSchema }).parse(d),
   )
+  .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const row = await withUser(context.userId, async (client) => {
       const payload: Record<string, unknown> = {
@@ -38,6 +38,41 @@ export const createTaskFn = createServerFn({ method: "POST" })
 
       const keys = Object.keys(payload);
       if (keys.length === 0) throw new Error("Empty task payload");
+
+      // BACKEND ENFORCEMENT: Single Active Task per user.
+      const targetAssignee = (payload.assigned_to as string) || context.userId;
+      const isBecomingActive = payload.status === "In Progress" || (payload.started_at && payload.started_at !== null);
+
+      if (isBecomingActive && targetAssignee) {
+        const activeOtherRes = await client.query<{ id: string; started_at: string | null; system_hours: number | null; status: string }>(
+          `SELECT id, started_at::text, system_hours, status FROM public.tasks 
+           WHERE assigned_to = $1 
+             AND (status = 'In Progress' OR started_at IS NOT NULL) 
+             AND status != 'Completed'`,
+          [targetAssignee]
+        );
+
+        for (const otherTask of activeOtherRes.rows) {
+          let newSysHours = Number(otherTask.system_hours ?? 0);
+          if (otherTask.started_at) {
+            const startTs = new Date(otherTask.started_at).getTime();
+            const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+            newSysHours += elapsed;
+          }
+          await client.query(
+            `UPDATE public.tasks 
+             SET status = 'To Do',
+                 started_at = NULL,
+                 system_hours = $1,
+                 version = version + 1,
+                 updated_at = NOW(),
+                 updated_by = $2
+             WHERE id = $3`,
+            [newSysHours, context.userId, otherTask.id]
+          );
+        }
+      }
+
       const cols = keys.map((k) => `"${k}"`).join(", ");
       const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
       const values = keys.map((k) => payload[k]);
@@ -70,7 +105,6 @@ export const createTaskFn = createServerFn({ method: "POST" })
   });
 
 export const updateTaskFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .validator((d: { id: string; version: number; patch: Record<string, unknown> }) =>
     z
       .object({
@@ -80,6 +114,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
+  .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const result = await withUser(context.userId, async (client) => {
       // Get old assigned_to, started_at, and status before update
@@ -115,6 +150,51 @@ export const updateTaskFn = createServerFn({ method: "POST" })
           }
         }
         patch.started_at = null;
+      }
+
+      // BACKEND ENFORCEMENT: Single Active Task per user.
+      const targetAssignee = (patch.assigned_to as string | undefined) || oldAssignedTo || context.userId;
+      const isBecomingActive = patch.status === "In Progress" || (patch.started_at && patch.started_at !== null);
+
+      if (isBecomingActive && targetAssignee) {
+        const activeOtherRes = await client.query<{ id: string; started_at: string | null; system_hours: number | null; status: string }>(
+          `SELECT id, started_at::text, system_hours, status FROM public.tasks 
+           WHERE assigned_to = $1 
+             AND (status = 'In Progress' OR started_at IS NOT NULL) 
+             AND status != 'Completed'
+             AND id != $2`,
+          [targetAssignee, data.id]
+        );
+
+        for (const otherTask of activeOtherRes.rows) {
+          let newSysHours = Number(otherTask.system_hours ?? 0);
+          if (otherTask.started_at) {
+            const startTs = new Date(otherTask.started_at).getTime();
+            const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+            newSysHours += elapsed;
+          }
+          await client.query(
+            `UPDATE public.tasks 
+             SET status = 'To Do',
+                 started_at = NULL,
+                 system_hours = $1,
+                 version = version + 1,
+                 updated_at = NOW(),
+                 updated_by = $2
+             WHERE id = $3`,
+            [newSysHours, context.userId, otherTask.id]
+          );
+
+          try {
+            await client.query(
+              `INSERT INTO public.task_history (task_id, old_status, new_status, updated_by, comment)
+               VALUES ($1, $2, 'To Do', $3, 'Timer paused automatically — started new active task')`,
+              [otherTask.id, otherTask.status, context.userId]
+            );
+          } catch (e) {
+            console.warn("[tasks] history insert failed on single-active auto-pause:", (e as Error).message);
+          }
+        }
       }
 
       delete patch.id;
@@ -171,10 +251,10 @@ export const updateTaskFn = createServerFn({ method: "POST" })
   });
 
 export const notifyTaskBlockedFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .validator((d: { taskId: string; reason: string }) =>
     z.object({ taskId: z.string(), reason: z.string() }).parse(d),
   )
+  .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await withUser(context.userId, async (client) => {
       await client.query(`SELECT public.notify_task_blocked($1, $2)`, [data.taskId, data.reason]);
@@ -183,10 +263,10 @@ export const notifyTaskBlockedFn = createServerFn({ method: "POST" })
   });
 
 export const insertAssignmentNotificationFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .validator((d: { userId: string; taskId: string }) =>
     z.object({ userId: z.string(), taskId: z.string() }).parse(d),
   )
+  .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     try {
       await withUser(context.userId, async (client) => {
@@ -220,12 +300,12 @@ export const insertAssignmentNotificationFn = createServerFn({ method: "POST" })
   });
 
 export const addTaskCommentHistoryFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .validator((d: { taskId: string; comment: string; status: string }) =>
     z
       .object({ taskId: z.string(), comment: z.string(), status: z.string() })
       .parse(d),
   )
+  .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     await withUser(context.userId, async (client) => {
       await client.query(
@@ -238,8 +318,8 @@ export const addTaskCommentHistoryFn = createServerFn({ method: "POST" })
   });
 
 export const deleteTaskFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .validator((d: { id: string }) => z.object({ id: z.string() }).parse(d))
+  .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
     const res = await withUser(context.userId, async (client) => {
       return await client.query(`DELETE FROM public.tasks WHERE id = $1`, [data.id]);

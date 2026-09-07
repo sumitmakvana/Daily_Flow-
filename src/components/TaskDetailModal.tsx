@@ -31,6 +31,7 @@ import { formatDate } from "@/lib/format";
 import { formatToDateStr } from "@/lib/task-date-utils";
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
+import { ActiveTaskConflictModal } from "./ActiveTaskConflictModal";
 import { tasksService } from "@/services/tasks";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,8 @@ export function TaskDetailModal({
   const { user } = useAuth();
   const [copiedCode, setCopiedCode] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [existingActiveTask, setExistingActiveTask] = useState<Task | null>(null);
 
   if (!task) return null;
 
@@ -71,6 +74,15 @@ export function TaskDetailModal({
     if (!user) return;
     setIsUpdating(true);
     try {
+      if (newStatus === "In Progress") {
+        const currentActive = await tasksService.getActiveTask(user.id);
+        if (currentActive && currentActive.id !== task.id) {
+          setExistingActiveTask(currentActive);
+          setConflictModalOpen(true);
+          setIsUpdating(false);
+          return;
+        }
+      }
       await tasksService.setStatus(task, newStatus, user.id);
       toast.success(`${task.task_code || "Task"} marked as ${newStatus}`);
       onTaskUpdated?.();
@@ -82,13 +94,29 @@ export function TaskDetailModal({
     }
   };
 
+  const handleConfirmSwitch = async () => {
+    if (!existingActiveTask || !user) return;
+    setIsUpdating(true);
+    try {
+      await tasksService.switchActiveTask(existingActiveTask, task, user.id);
+      toast.success(`Stopped ${existingActiveTask.task_code || "active task"} · Started ${task.task_code || "new task"}`);
+      onTaskUpdated?.();
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to switch active task");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const isOverdue =
     task.status !== "Completed" &&
     task.due_date &&
     task.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg bg-popover border border-border shadow-2xl rounded-2xl p-5 text-popover-foreground space-y-4">
         {/* Header */}
         <DialogHeader className="space-y-2 border-b border-border pb-3">
@@ -254,5 +282,15 @@ export function TaskDetailModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <ActiveTaskConflictModal
+      open={conflictModalOpen}
+      onOpenChange={setConflictModalOpen}
+      activeTask={existingActiveTask}
+      newTask={task}
+      onConfirm={handleConfirmSwitch}
+      isSubmitting={isUpdating}
+    />
+    </>
   );
 }

@@ -26,6 +26,7 @@ import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
 import { BlockerDialog } from "./BlockerDialog";
 import { OnHoldDialog } from "./OnHoldDialog";
+import { ActiveTaskConflictModal } from "./ActiveTaskConflictModal";
 import type { Task, TaskStatus } from "@/lib/types";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { taskEodService } from "@/services/task-eod";
@@ -51,6 +52,8 @@ export function TaskQuickActionModal({
 }) {
   const [blockOpen, setBlockOpen] = useState(false);
   const [onHoldOpen, setOnHoldOpen] = useState(false);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [existingActiveTask, setExistingActiveTask] = useState<Task | null>(null);
   const [hoursInput, setHoursInput] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
@@ -87,6 +90,16 @@ export function TaskQuickActionModal({
   const handleSetStatus = async (status: TaskStatus, extras = {}) => {
     setBusy(true);
     try {
+      if (status === "In Progress" && userId) {
+        const currentActive = await tasksService.getActiveTask(userId);
+        if (currentActive && currentActive.id !== task.id) {
+          setExistingActiveTask(currentActive);
+          setConflictModalOpen(true);
+          setBusy(false);
+          return;
+        }
+      }
+
       const hoursToSave = parseHoursOrMins(hoursInput) || planned;
       
       // Update task status and actual_hours
@@ -105,6 +118,21 @@ export function TaskQuickActionModal({
       onOpenChange(false);
     } catch (e) {
       handleError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleConfirmSwitch = async () => {
+    if (!existingActiveTask || !userId) return;
+    setBusy(true);
+    try {
+      await tasksService.switchActiveTask(existingActiveTask, task, userId);
+      toast.success(`Stopped ${existingActiveTask.task_code || "active task"} · Started ${task.task_code || "new task"}`);
+      onChanged?.();
+      onOpenChange(false);
+    } catch (err: any) {
+      handleError(err);
     } finally {
       setBusy(false);
     }
@@ -256,20 +284,7 @@ export function TaskQuickActionModal({
                   size="sm"
                   className="h-10 justify-start text-xs gap-2 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer font-semibold"
                   disabled={busy}
-                  onClick={async () => {
-                    if (!userId) return;
-                    try {
-                      setBusy(true);
-                      await tasksService.resumeTimer(task, userId);
-                      toast.success("Timer resumed");
-                      onChanged?.();
-                      onOpenChange(false);
-                    } catch (err: any) {
-                      toast.error(err?.message || "Failed to resume timer");
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
+                  onClick={() => handleSetStatus("In Progress")}
                 >
                   <Play className="h-4 w-4 text-emerald-400" />
                   Resume Timer
@@ -327,10 +342,18 @@ export function TaskQuickActionModal({
         onOpenChange={setOnHoldOpen}
         taskCode={task.task_code}
         taskTitle={task.task_name}
-        onConfirm={(reason) => {
-          setOnHoldOpen(false);
-          handleSetStatus("On Hold", { hold_reason: reason });
+        onConfirm={async (reason) => {
+          await handleSetStatus("On Hold", { hold_reason: reason });
         }}
+      />
+
+      <ActiveTaskConflictModal
+        open={conflictModalOpen}
+        onOpenChange={setConflictModalOpen}
+        activeTask={existingActiveTask}
+        newTask={task}
+        onConfirm={handleConfirmSwitch}
+        isSubmitting={busy}
       />
     </>
   );

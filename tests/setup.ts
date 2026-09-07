@@ -34,6 +34,7 @@ vi.mock("@tanstack/react-start", () => {
       return {};
     });
     fn.middleware = () => fn;
+    fn.validator = () => fn;
     fn.inputValidator = () => fn;
     fn.handler = (handler: any) => {
       fn._handler = handler;

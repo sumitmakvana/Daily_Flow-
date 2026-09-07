@@ -45,6 +45,7 @@ import { TaskHistorySheet } from "./TaskHistorySheet";
 import { WorkItemTypeBadge } from "./WorkItemTypeBadge";
 import { TaskFormDialog } from "./TaskFormDialog";
 import { ImagePreviewModal } from "./ImagePreviewModal";
+import { ActiveTaskConflictModal } from "./ActiveTaskConflictModal";
 import { inlineCompleteStore } from "@/services/inline-complete-store";
 import { attachmentsService } from "@/services/attachments";
 import { TaskHoursBadges } from "./TaskHoursBadges";
@@ -87,6 +88,9 @@ export function TaskCard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [existingActiveTask, setExistingActiveTask] = useState<Task | null>(null);
+  const [switchBusy, setSwitchBusy] = useState(false);
 
   const planned = Number(task.planned_hours ?? 0);
   const currentActual = Number(task.actual_hours ?? 0);
@@ -143,11 +147,50 @@ export function TaskCard({
 
   const setStatus = async (s: TaskStatus, extras = {}) => {
     try {
+      if (s === "In Progress" && userId) {
+        const currentActive = await tasksService.getActiveTask(userId);
+        if (currentActive && currentActive.id !== task.id) {
+          setExistingActiveTask(currentActive);
+          setConflictModalOpen(true);
+          return;
+        }
+      }
       await tasksService.setStatus(task, s, userId, extras);
       toast.success(`${task.task_code} → ${s}`);
       onChanged();
     } catch (e) {
       handleError(e);
+    }
+  };
+
+  const handleStartOrResumeWithCheck = async () => {
+    if (!userId) return;
+    try {
+      const currentActive = await tasksService.getActiveTask(userId);
+      if (currentActive && currentActive.id !== task.id) {
+        setExistingActiveTask(currentActive);
+        setConflictModalOpen(true);
+        return;
+      }
+      await tasksService.resumeTimer(task, userId);
+      toast.success(`${task.task_code || "Task"} started`);
+      onChanged?.();
+    } catch (err: any) {
+      handleError(err);
+    }
+  };
+
+  const handleConfirmSwitch = async () => {
+    if (!existingActiveTask || !userId) return;
+    setSwitchBusy(true);
+    try {
+      await tasksService.switchActiveTask(existingActiveTask, task, userId);
+      toast.success(`Stopped ${existingActiveTask.task_code || "active task"} · Started ${task.task_code || "new task"}`);
+      onChanged?.();
+    } catch (err: any) {
+      handleError(err);
+    } finally {
+      setSwitchBusy(false);
     }
   };
 
@@ -275,18 +318,7 @@ export function TaskCard({
                     </DropdownMenuItem>
                   )}
                   {canAct && task.status === "In Progress" && !task.started_at && (
-                    <DropdownMenuItem
-                      onClick={async () => {
-                        if (!userId) return;
-                        try {
-                          await tasksService.resumeTimer(task, userId);
-                          toast.success("Timer resumed");
-                          onChanged?.();
-                        } catch (err: any) {
-                          toast.error(err?.message || "Failed to resume timer");
-                        }
-                      }}
-                    >
+                    <DropdownMenuItem onClick={() => handleStartOrResumeWithCheck()}>
                       <Play className="mr-2 h-3.5 w-3.5" /> Resume timer
                     </DropdownMenuItem>
                   )}
@@ -519,17 +551,10 @@ export function TaskCard({
                     size="sm"
                     variant="outline"
                     className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
-                      if (!userId) return;
-                      try {
-                        await tasksService.resumeTimer(task, userId);
-                        toast.success("Timer resumed");
-                        onChanged?.();
-                      } catch (err: any) {
-                        toast.error(err?.message || "Failed to resume timer");
-                      }
+                      handleStartOrResumeWithCheck();
                     }}
                     title="Resume running timer"
                   >
@@ -701,6 +726,15 @@ export function TaskCard({
         onOpenChange={setPreviewModalOpen}
         url={previewUrl}
         fileName={previewFileName}
+      />
+
+      <ActiveTaskConflictModal
+        open={conflictModalOpen}
+        onOpenChange={setConflictModalOpen}
+        activeTask={existingActiveTask}
+        newTask={task}
+        onConfirm={handleConfirmSwitch}
+        isSubmitting={switchBusy}
       />
     </>
   );
