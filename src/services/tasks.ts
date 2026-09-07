@@ -68,6 +68,19 @@ export const tasksService = {
     if ("project_id" in cleanedPayload) {
       cleanedPayload.project_id = cleanProjectId(cleanedPayload.project_id) as any;
     }
+    // Default initial status and clean timer fields for new/duplicated tasks
+    if (!cleanedPayload.status) {
+      cleanedPayload.status = "To Do";
+    }
+    if (cleanedPayload.status === "Completed") {
+      cleanedPayload.done = true;
+      cleanedPayload.completed_at = cleanedPayload.completed_at || new Date().toISOString();
+      cleanedPayload.started_at = null;
+      cleanedPayload.system_hours = cleanedPayload.system_hours ?? 0;
+    } else {
+      if (cleanedPayload.system_hours === undefined) cleanedPayload.system_hours = 0;
+      if (cleanedPayload.started_at === undefined && cleanedPayload.status !== "In Progress") cleanedPayload.started_at = null;
+    }
     const row = (await createTaskFn({
       data: { payload: cleanedPayload as Record<string, unknown> },
     })) as unknown as Task | null;

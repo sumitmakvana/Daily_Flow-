@@ -722,6 +722,8 @@ export function TaskCard({
           task_name: `${task.task_name} (Copy)`,
           status: "To Do",
           actual_hours: 0,
+          system_hours: 0,
+          started_at: null,
           done: false,
           completed_at: null,
           start_date: getDefaultStartDate(),
