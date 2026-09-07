@@ -238,11 +238,22 @@ function TeamCapacityPage() {
         return due < todayStr;
       });
 
-      // Active leave status for today (DB leaves or task hold reason)
-      const leaveRecord = activeLeavesToday.find((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled");
-      const leaveTask = memberTasks.find((t) => (t.hold_reason && t.hold_reason.toLowerCase().includes("leave")) || (t.status as string)?.toLowerCase().includes("leave"));
+      // Active leave or WFH status for today (DB leaves/wfh or active task hold reason for today)
+      const wfhRecord = activeLeavesToday.find(
+        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh"
+      );
+      const leaveRecord = activeLeavesToday.find(
+        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh"
+      );
+      const leaveTask = memberTasks.find(
+        (t) =>
+          t.status === "On Hold" &&
+          ((t.hold_reason && t.hold_reason.toLowerCase().includes("leave")) || (t.status as string)?.toLowerCase().includes("leave")) &&
+          ((t.updated_at && formatToDateStr(t.updated_at) === todayStr) || (t.due_date && formatToDateStr(t.due_date) === todayStr))
+      );
       const activeLeave = leaveRecord || (leaveTask ? { leave_type: leaveTask.hold_reason || "Casual" } : null);
       const isOnLeave = !!activeLeave;
+      const isWfh = !!wfhRecord;
 
       // Planned Hours for Capacity
       const plannedHours = memberTasks.reduce(
@@ -378,6 +389,7 @@ function TeamCapacityPage() {
         isLowQueue: plannedHours < 16,
         activeLeave,
         isOnLeave,
+        isWfh,
         completedTodayTasks,
         completedTodayHours,
         historyList,
@@ -514,8 +526,10 @@ function TeamCapacityPage() {
 
     const result = Array.from(groupMap.values()).map((g) => {
       const membersList = Array.from(g.membersMap.values()).map((m) => {
-        const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.profile.id);
+        const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh");
+        const activeWfh = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh");
         const isOnLeave = !!activeLeave;
+        const isWfh = !!activeWfh;
         const activeTasks = isOnLeave ? [] : m.tasks.filter((t) => t.status === "In Progress");
         const upcomingTasks = m.tasks.filter((t) => t.status === "To Do" || (t.status as string) === "Pending");
         const completedTodayTasks = m.tasks.filter((t) => isTaskCompletedToday(t, todayStr));
@@ -523,6 +537,7 @@ function TeamCapacityPage() {
           ...m,
           activeLeave,
           isOnLeave,
+          isWfh,
           activeTasks,
           upcomingTasks,
           completedTodayTasks,
@@ -1099,6 +1114,10 @@ function TeamCapacityPage() {
                                   <Badge variant="outline" className="bg-muted/40 text-amber-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
                                     <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
                                   </Badge>
+                                ) : item.isWfh ? (
+                                  <Badge variant="outline" className="bg-sky-500/15 text-sky-400 border-sky-500/30 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
+                                    🏠 WFH
+                                  </Badge>
                                 ) : item.isLowQueue ? (
                                   <Badge variant="outline" className="bg-muted/40 text-emerald-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
                                     <Zap className="h-3 w-3 text-emerald-400/80" /> &lt;16h Queue
@@ -1524,8 +1543,10 @@ function TeamCapacityPage() {
                               const liveTask = m.activeTasks[0]; // ONLY In Progress task!
                               const queuedTask = m.upcomingTasks[0];
                               const memberInfo = memberData.find((md) => md.profile.id === p.id);
-                              const activeLeave = memberInfo?.activeLeave || activeLeavesToday.find((l: any) => l.user_id === p.id);
+                              const activeLeave = memberInfo?.activeLeave || activeLeavesToday.find((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh");
+                              const activeWfh = memberInfo?.isWfh || activeLeavesToday.some((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh");
                               const isOnLeave = !!activeLeave || memberInfo?.isOnLeave;
+                              const isWfh = !!activeWfh || memberInfo?.isWfh;
                               const isWorkingNow = !!liveTask && !isOnLeave;
                               const isFree = memberInfo?.capacityStatus === "free" && !isWorkingNow && !isOnLeave;
 
@@ -1558,11 +1579,15 @@ function TeamCapacityPage() {
                                       <div className="min-w-0">
                                         <div className="font-bold text-foreground truncate text-xs flex items-center gap-1.5">
                                           <span className="truncate">{p.display_name}</span>
-                                          {isOnLeave && (
+                                          {isOnLeave ? (
                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-muted/40 text-amber-300/90 border border-border/60 shrink-0">
                                               <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
                                             </span>
-                                          )}
+                                          ) : isWfh ? (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-sky-500/15 text-sky-400 border border-sky-500/30 shrink-0">
+                                              🏠 WFH
+                                            </span>
+                                          ) : null}
                                           {isWorkingNow && (
                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-primary/15 text-primary border border-primary/30 shrink-0">
                                               ● WORKING NOW
