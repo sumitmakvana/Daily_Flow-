@@ -56,6 +56,7 @@ import {
   Table,
   Grid,
   X,
+  Palmtree,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -81,6 +82,7 @@ import {
 } from "@/lib/executive.functions";
 import type { Task, Profile, Project, EodCheckin } from "@/lib/types";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
+import { leavesService } from "@/services/leaves";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import { toast } from "sonner";
@@ -208,6 +210,17 @@ function ExecutivePage() {
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
     staleTime: 30000,
+  });
+
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const { data: activeLeavesToday = [] } = useQuery({
+    queryKey: ["exec-active-leaves", todayStr],
+    queryFn: async () => {
+      const leaves = await leavesService.getLeaves({ startDate: todayStr, endDate: todayStr, status: "__all" });
+      return leaves || [];
+    },
+    staleTime: 10000,
   });
 
   const { data: eodCheckinsList = [] } = useQuery({
@@ -498,6 +511,7 @@ function ExecutivePage() {
         tasks={eodTasks}
         projects={projectsList}
         checkins={eodCheckinsList}
+        activeLeavesToday={activeLeavesToday}
         range={range}
         scope={scope}
         selectedProjects={selectedProjects}
@@ -514,6 +528,7 @@ function ExecutivePage() {
         tasks={eodTasks}
         projects={projectsList}
         checkins={eodCheckinsList}
+        activeLeavesToday={activeLeavesToday}
       />
 
       {/* Executive Health & Operations Sections */}
@@ -544,6 +559,7 @@ function ExecutiveRealDashboard({
   tasks,
   projects,
   checkins,
+  activeLeavesToday = [],
   range,
   scope,
   selectedProjects = [],
@@ -555,6 +571,7 @@ function ExecutiveRealDashboard({
   tasks: Task[];
   projects: Project[];
   checkins: EodCheckin[];
+  activeLeavesToday?: any[];
   range: string;
   scope: Scope | null;
   selectedProjects?: string[];
@@ -1026,6 +1043,9 @@ function ExecutiveRealDashboard({
                 const pct = Math.min(100, Math.round((m.actualHours / (plannedOrCap || 1)) * 100));
                 const isOverloaded = m.actualHours > plannedOrCap;
 
+                const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh");
+                const activeWfh = activeLeavesToday.find((l: any) => l.user_id === m.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh");
+
                 return (
                   <tr
                     key={m.id}
@@ -1044,8 +1064,17 @@ function ExecutiveRealDashboard({
                           )}
                         </Avatar>
                         <div className="min-w-0">
-                          <div className="font-medium text-foreground group-hover:text-primary transition-colors truncate">
-                            {m.name}
+                          <div className="font-medium text-foreground group-hover:text-primary transition-colors truncate flex items-center gap-1.5">
+                            <span className="truncate">{m.name}</span>
+                            {activeLeave ? (
+                              <Badge variant="outline" className="bg-muted/40 text-amber-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
+                                <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
+                              </Badge>
+                            ) : activeWfh ? (
+                              <Badge variant="outline" className="bg-sky-500/15 text-sky-400 border-sky-500/30 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
+                                🏠 WFH
+                              </Badge>
+                            ) : null}
                           </div>
                           <div className="text-[10px] text-muted-foreground truncate max-w-[170px]">{m.userProjects}</div>
                         </div>
@@ -1550,6 +1579,7 @@ export function MemberDetailSheet({
   tasks,
   projects,
   checkins,
+  activeLeavesToday = [],
 }: {
   memberId: string | null;
   onClose: () => void;
@@ -1557,6 +1587,7 @@ export function MemberDetailSheet({
   tasks: Task[];
   projects: Project[];
   checkins: EodCheckin[];
+  activeLeavesToday?: any[];
 }) {
   const [taskSearch, setTaskSearch] = useState("");
   const [statusFilterTab, setStatusFilterTab] = useState<string>("all");
@@ -1740,6 +1771,15 @@ export function MemberDetailSheet({
                 <h2 className="text-base font-bold text-foreground truncate">
                   {member.display_name}
                 </h2>
+                {activeLeavesToday.some((l: any) => l.user_id === member.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh") ? (
+                  <Badge variant="outline" className="bg-muted/40 text-amber-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
+                    <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
+                  </Badge>
+                ) : activeLeavesToday.some((l: any) => l.user_id === member.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh") ? (
+                  <Badge variant="outline" className="bg-sky-500/15 text-sky-400 border-sky-500/30 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
+                    🏠 WFH
+                  </Badge>
+                ) : null}
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary bg-primary/10 font-medium">
                   Member Inspection
                 </Badge>
