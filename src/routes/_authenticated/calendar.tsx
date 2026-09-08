@@ -6,13 +6,14 @@ import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { LeaveDialog } from "@/components/LeaveDialog";
 import { leavesService } from "@/services/leaves";
+import { holidaysService } from "@/services/operations";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TaskCard } from "@/components/TaskCard";
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter, Palmtree, Home, Check, X, Trash2, Pencil } from "lucide-react";
-import type { Profile, Task, Leave } from "@/lib/types";
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter, Palmtree, Home, Check, X, Trash2, Pencil, Building2 } from "lucide-react";
+import type { Profile, Task, Leave, HolidayCalendar } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getLocalHoliday, fetchIndianHolidays, toLocalISO, type Holiday } from "@/lib/format";
 import { statusColor, leaveColor, leaveDot, priorityDot } from "@/lib/colors";
@@ -41,6 +42,7 @@ function CalendarPage() {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [apiHolidays, setApiHolidays] = useState<Record<string, Holiday>>({});
+  const [customHolidays, setCustomHolidays] = useState<HolidayCalendar[]>([]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -51,6 +53,7 @@ function CalendarPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [editingLeave, setEditingLeave] = useState<Leave | null>(null);
+  const [holidaysSheetOpen, setHolidaysSheetOpen] = useState(false);
 
   
   // Custom Month/Year Picker States
@@ -79,14 +82,16 @@ function CalendarPage() {
   }, [isManager]);
 
   const load = useCallback(async () => {
-    const [{ data: t }, { data: p }, l] = await Promise.all([
+    const [{ data: t }, { data: p }, l, h] = await Promise.all([
       supabase.from("tasks").select("*"),
       supabase.from("profiles").select("id,display_name,avatar_url"),
       leavesService.getLeaves().catch(() => [] as Leave[]),
+      holidaysService.list().catch(() => [] as HolidayCalendar[]),
     ]);
     setTasks((t ?? []) as Task[]);
     setProfiles((p ?? []) as Profile[]);
     setLeaves(l || []);
+    setCustomHolidays(h || []);
   }, []);
 
 
@@ -447,6 +452,16 @@ function CalendarPage() {
           <User className="h-3.5 w-3.5" />
           My Tasks Only
         </button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setHolidaysSheetOpen(true)}
+          className="ml-auto text-xs gap-1.5 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 hover:text-indigo-300 font-medium"
+        >
+          <Building2 className="w-3.5 h-3.5" />
+          Company Holidays ({customHolidays.length})
+        </Button>
       </div>
 
       {/* Grid Layout of Calendar */}
@@ -470,7 +485,7 @@ function CalendarPage() {
             const dayActualLeaves = dayLeaves.filter((l) => l.leave_type !== "wfh");
             const dayWfh = dayLeaves.filter((l) => l.leave_type === "wfh");
             const isToday = toLocalISO(new Date()) === dateStr;
-            const holiday = getLocalHoliday(date, apiHolidays);
+            const holiday = getLocalHoliday(date, apiHolidays, customHolidays);
 
             return (
               <div
@@ -483,7 +498,7 @@ function CalendarPage() {
                   "min-h-[68px] sm:min-h-[115px] p-1.5 sm:p-2 flex flex-col justify-between transition-colors hover:bg-accent/40 cursor-pointer select-none group relative",
                   !isCurrentMonth && "bg-muted/10 text-muted-foreground/40",
                   isToday && "bg-primary/5 ring-1 ring-primary/30",
-                  holiday && holiday.isHoliday && "bg-amber-500/5 hover:bg-amber-500/10"
+                  holiday && holiday.isHoliday && (holiday.isCompanyHoliday ? "bg-indigo-500/10 dark:bg-indigo-500/15 hover:bg-indigo-500/20" : "bg-amber-500/5 hover:bg-amber-500/10")
                 )}
               >
                 {/* Day Header */}
@@ -519,9 +534,14 @@ function CalendarPage() {
                 </div>
 
                 {holiday && (
-                  <div className="absolute bottom-1 right-1 sm:right-1.5 flex items-center gap-0.5 text-[8px] sm:text-[9px] font-medium text-status-hold bg-status-hold/10 border border-status-hold/25 px-1 py-0.5 rounded shadow-xs max-w-[90%] truncate">
+                  <div className={cn(
+                    "absolute bottom-1 right-1 sm:right-1.5 flex items-center gap-0.5 text-[8px] sm:text-[9px] font-semibold px-1.5 py-0.5 rounded shadow-xs max-w-[90%] truncate border",
+                    holiday.isCompanyHoliday 
+                      ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border-indigo-500/30" 
+                      : "bg-status-hold/10 text-status-hold border-status-hold/25"
+                  )}>
                     <span>{holiday.emoji}</span>
-                    <span className="hidden sm:inline truncate">{holiday.name}</span>
+                    <span className="hidden sm:inline truncate">{holiday.isCompanyHoliday ? `Office: ${holiday.name}` : holiday.name}</span>
                   </div>
                 )}
 
@@ -819,8 +839,72 @@ function CalendarPage() {
         leaveToEdit={editingLeave}
         onSuccess={load}
       />
+
+      {/* Official Company Holidays List Sheet */}
+      <Sheet open={holidaysSheetOpen} onOpenChange={setHolidaysSheetOpen}>
+        <SheetContent className="w-[90vw] sm:max-w-xl p-6 bg-card border-l border-border space-y-4 overflow-y-auto">
+          <SheetHeader className="border-b border-border pb-3">
+            <SheetTitle className="text-base font-semibold flex items-center gap-2 text-foreground">
+              <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <Building2 className="w-4.5 h-4.5" />
+              </div>
+              Official Company Office Holidays ({customHolidays.length})
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground leading-normal">
+              Official schedule of company office closure dates. Office remains closed on these dates, task start dates skip these days, and SLA due dates deduct these days.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="space-y-3 pt-2">
+            {customHolidays.length > 0 ? (
+              <div className="rounded-xl border border-border/60 overflow-hidden bg-background/50 text-xs shadow-sm">
+                <div className="grid grid-cols-12 bg-muted/40 px-3.5 py-2 font-semibold text-muted-foreground uppercase text-[10px] tracking-wider border-b border-border/40">
+                  <div className="col-span-4">Date</div>
+                  <div className="col-span-3">Day</div>
+                  <div className="col-span-5">Holiday Name</div>
+                </div>
+                <div className="divide-y divide-border/40">
+                  {customHolidays.map((h) => {
+                    let dayName = "";
+                    let formatted = h.calendar_date;
+                    try {
+                      const [y, m, d] = h.calendar_date.split("-").map(Number);
+                      const dt = new Date(y, m - 1, d);
+                      dayName = dt.toLocaleDateString("en-US", { weekday: "short" });
+                      formatted = dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                    } catch (e) {}
+
+                    return (
+                      <div key={h.id} className="grid grid-cols-12 items-center px-3.5 py-2.5 hover:bg-accent/20 transition-colors">
+                        <div className="col-span-4 font-mono font-medium text-foreground flex items-center gap-1.5">
+                          <CalendarIcon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                          <span>{formatted}</span>
+                        </div>
+                        <div className="col-span-3 text-muted-foreground font-medium">{dayName}</div>
+                        <div className="col-span-5 font-semibold text-foreground flex items-center justify-between gap-1.5">
+                          <span className="truncate">{h.label}</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
+                            Office Closed
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="py-10 text-center space-y-2 border border-dashed border-border rounded-xl bg-muted/10 p-6">
+                <div className="w-10 h-10 rounded-full bg-muted/60 mx-auto flex items-center justify-center text-muted-foreground">
+                  <Palmtree className="w-5 h-5 text-indigo-400" />
+                </div>
+                <p className="text-xs font-semibold text-foreground">No official company holidays configured.</p>
+                <p className="text-[11px] text-muted-foreground">Admins can configure official holidays in Settings ➔ Operations.</p>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
-
 }
 

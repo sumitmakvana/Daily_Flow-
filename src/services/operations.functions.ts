@@ -211,7 +211,7 @@ export const listHolidaysFn = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const rows = await withUser(context.userId, async (client) => {
       const res = await client.query(
-        `SELECT id, calendar_date, label FROM public.holiday_calendar
+        `SELECT id, calendar_date::text AS calendar_date, label FROM public.holiday_calendar
            ORDER BY calendar_date`,
       );
       return res.rows;

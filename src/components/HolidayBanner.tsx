@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { fetchIndianHolidays, todayISO, getActiveHolidaysForDate, type Holiday, type ActiveHolidayMatch } from "@/lib/format";
+import { holidaysService } from "@/services/operations";
 import { useServerFn } from "@tanstack/react-start";
 import { fetchActiveAnnouncements } from "@/services/announcements.functions";
 import { X } from "lucide-react";
@@ -82,13 +83,19 @@ export function HolidayBanner() {
       // 2. Fetch automatic festival & holiday list (covering 1 working day before, day of, 1 day after)
       try {
         let apiHolidays: Record<string, Holiday> = {};
+        let customHolidays: Array<{ calendar_date?: string; label?: string }> = [];
         try {
-          apiHolidays = await fetchIndianHolidays(year);
+          const [api, custom] = await Promise.all([
+            fetchIndianHolidays(year).catch(() => ({})),
+            holidaysService.list().catch(() => []),
+          ]);
+          apiHolidays = api;
+          customHolidays = custom;
         } catch (e) {
           apiHolidays = {};
         }
 
-        const activeHolidays = getActiveHolidaysForDate(todayStr, apiHolidays);
+        const activeHolidays = getActiveHolidaysForDate(todayStr, apiHolidays, customHolidays);
 
         for (const match of activeHolidays) {
           // If custom announcement already matches this holiday name, avoid duplicate
@@ -520,7 +527,11 @@ function buildHolidayBanner(match: ActiveHolidayMatch): BannerItem {
 
   // Subtext based on relative status
   let subText = "Noesis Analytics wishes you and your team a wonderful holiday!";
-  if (status === "advance") {
+  if (holiday.isCompanyHoliday) {
+    themeClass = "from-indigo-950 via-indigo-900 to-slate-900 text-white border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.25)]";
+    message = `Company Office Holiday Notice: Office is closed for ${holiday.name}. 🏢✨`;
+    subText = `🏢 Official Company Office Holiday (${holiday.name}) • Office Closed`;
+  } else if (status === "advance") {
     try {
       const festivalDate = new Date(date + "T00:00:00");
       const formattedDate = festivalDate.toLocaleDateString("en-US", {
@@ -528,9 +539,9 @@ function buildHolidayBanner(match: ActiveHolidayMatch): BannerItem {
         month: "short",
         day: "numeric",
       });
-      subText = `Upcoming Festival (${formattedDate}) • Noesis Analytics wishes you in advance!`;
+      subText = `🎉 Upcoming Festival (${formattedDate}) • Noesis Analytics wishes you in advance!`;
     } catch (e) {
-      subText = "Upcoming Festival • Noesis Analytics wishes you in advance!";
+      subText = "🎉 Upcoming Festival • Noesis Analytics wishes you in advance!";
     }
   } else if (status === "post") {
     subText = `Noesis Analytics hopes you had a wonderful ${holiday.name} celebration!`;

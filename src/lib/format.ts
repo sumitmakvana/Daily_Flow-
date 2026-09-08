@@ -107,6 +107,8 @@ export interface Holiday {
   name: string;
   emoji: string;
   isHoliday: boolean;
+  isCompanyHoliday?: boolean;
+  type?: "public" | "company";
 }
 
 /**
@@ -230,7 +232,8 @@ export async function fetchIndianHolidays(year: number): Promise<Record<string, 
 
 export function getLocalHoliday(
   dateOrStr: Date | string | null | undefined,
-  apiHolidays: Record<string, Holiday> = {}
+  apiHolidays: Record<string, Holiday> = {},
+  customHolidays: Array<{ calendar_date?: string; date?: string; label?: string }> = []
 ): Holiday | null {
   if (!dateOrStr) return null;
 
@@ -257,6 +260,16 @@ export function getLocalHoliday(
     dStr = String(date.getDate()).padStart(2, "0");
     ymd = `${y}-${mStr}-${dStr}`;
     md = `${mStr}-${dStr}`;
+  }
+
+  // Check custom company holidays (added via Operations settings)
+  if (customHolidays && customHolidays.length > 0) {
+    const match = customHolidays.find(
+      (h) => (h.calendar_date || h.date || "").slice(0, 10) === ymd
+    );
+    if (match) {
+      return { name: match.label || "Office Holiday", emoji: "🏢", isHoliday: true, isCompanyHoliday: true, type: "company" };
+    }
   }
 
   // Fixed regional holidays (like Uttarayan / Vasi Uttarayan)
@@ -352,7 +365,8 @@ export interface ActiveHolidayMatch {
  */
 export function getActiveHolidaysForDate(
   todayStr: string,
-  apiHolidays: Record<string, Holiday> = {}
+  apiHolidays: Record<string, Holiday> = {},
+  customHolidays: Array<{ calendar_date?: string; date?: string; label?: string }> = []
 ): ActiveHolidayMatch[] {
   if (!todayStr || todayStr.length !== 10) return [];
 
@@ -371,7 +385,7 @@ export function getActiveHolidaysForDate(
     const cdStr = String(candidate.getDate()).padStart(2, "0");
     const candidateISO = `${cy}-${cmStr}-${cdStr}`;
 
-    const holiday = getLocalHoliday(candidateISO, apiHolidays);
+    const holiday = getLocalHoliday(candidateISO, apiHolidays, customHolidays);
     if (!holiday || !holiday.isHoliday) continue;
 
     // Calculate the active start date (1 working day before candidateISO, skipping weekends)
