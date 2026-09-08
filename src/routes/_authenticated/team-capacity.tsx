@@ -55,6 +55,7 @@ import {
   Layers,
   Sparkles,
   Zap,
+  Gauge,
   Pause,
   FileSpreadsheet,
   Palmtree,
@@ -338,7 +339,7 @@ function TeamCapacityPage() {
         (s, t) => (t.status !== "Completed" ? s + Number(t.planned_hours ?? 0) : s),
         0,
       );
-      const plannedHours = Math.round(rawPlannedHours * 10) / 10;
+      const plannedHours = Math.round(rawPlannedHours * 100) / 100;
 
       const maxDailyHours = 8;
       const capacityPct = Math.min(150, Math.round((plannedHours / maxDailyHours) * 100));
@@ -363,7 +364,7 @@ function TeamCapacityPage() {
         (sum, t) => sum + Number(t.actual_hours || t.planned_hours || 0),
         0,
       );
-      const completedTodayHours = Math.round(rawCompletedTodayHours * 10) / 10;
+      const completedTodayHours = Math.round(rawCompletedTodayHours * 100) / 100;
 
       // --- Completed History ---
       const pastCompletedTasks = completedTasks.filter((t) => {
@@ -569,6 +570,44 @@ function TeamCapacityPage() {
     });
   }, [memberData, search, teamFilter, projectFilter, statusFilter, availabilityFilter]);
 
+  const isFilterActive =
+    search.trim() !== "" ||
+    teamFilter !== "all" ||
+    projectFilter !== "all" ||
+    statusFilter !== "all" ||
+    availabilityFilter !== "all";
+
+  const filterSummaryText = useMemo(() => {
+    if (!isFilterActive) return null;
+    const parts: string[] = [];
+    if (statusFilter === "completed") {
+      const tasksDone = filteredMembers.reduce((s, m) => s + m.completedTodayTasks.length, 0);
+      const hoursDone = Math.round(filteredMembers.reduce((s, m) => s + m.completedTodayHours, 0) * 100) / 100;
+      parts.push(`Completed Today (${filteredMembers.length} members, ${tasksDone} tasks, ${hoursDone}h logged)`);
+    } else if (statusFilter === "in_progress") {
+      const activeCount = filteredMembers.reduce((s, m) => s + m.activeTasks.length, 0);
+      parts.push(`In Progress Work (${filteredMembers.length} members, ${activeCount} active tasks)`);
+    } else if (statusFilter === "to_do") {
+      const toDoCount = filteredMembers.reduce((s, m) => s + m.upcomingTasks.length, 0);
+      parts.push(`Queued To Do (${filteredMembers.length} members, ${toDoCount} pending tasks)`);
+    } else if (statusFilter === "overdue") {
+      const overdueCount = filteredMembers.reduce((s, m) => s + m.overdueTasks.length, 0);
+      parts.push(`Overdue Tasks (${filteredMembers.length} members, ${overdueCount} past due)`);
+    }
+
+    if (availabilityFilter === "free") parts.push("Free Today (0h)");
+    else if (availabilityFilter === "available") parts.push("Available (<5.5h)");
+    else if (availabilityFilter === "partially") parts.push("Partially Available (5.5h-8h)");
+    else if (availabilityFilter === "overloaded") parts.push("Overloaded (>8h)");
+    else if (availabilityFilter === "low_queue") parts.push("⚡ Low Backlog (<16h)");
+
+    if (teamFilter !== "all") parts.push(`Team: ${teamFilter}`);
+    if (projectFilter !== "all") parts.push(`Project: ${projectFilter}`);
+    if (search.trim()) parts.push(`Search: "${search}"`);
+
+    return parts.join(" • ");
+  }, [isFilterActive, statusFilter, availabilityFilter, teamFilter, projectFilter, search, filteredMembers]);
+
   // 5. Group data by project for Project View
   const projectGroupedData = useMemo(() => {
     const groupMap = new Map<
@@ -597,8 +636,8 @@ function TeamCapacityPage() {
       const p = item.profile;
       const memberTasks = item.memberTasks;
 
-      // Filter tasks by active status if showActiveOnly is true
-      const tasksToProcess = showActiveOnly
+      // Filter tasks by active status if showActiveOnly is true (unless filtering for completed tasks)
+      const tasksToProcess = (showActiveOnly && statusFilter !== "completed")
         ? memberTasks.filter((t) => t.status !== "Completed")
         : memberTasks;
 
@@ -643,8 +682,8 @@ function TeamCapacityPage() {
           }
           const mEntry = group.membersMap.get(p.id)!;
           mEntry.tasks.push(t);
-          mEntry.totalPlannedHours += Number(t.planned_hours || 0);
-          mEntry.totalActualHours += Number(t.actual_hours || 0);
+          mEntry.totalPlannedHours = Math.round((mEntry.totalPlannedHours + Number(t.planned_hours || 0)) * 100) / 100;
+          mEntry.totalActualHours = Math.round((mEntry.totalActualHours + Number(t.actual_hours || 0)) * 100) / 100;
         });
       }
     });
@@ -671,7 +710,7 @@ function TeamCapacityPage() {
 
       const totalProjectTasks = membersList.reduce((sum, m) => sum + m.tasks.length, 0);
       const activeWorkingMembersCount = membersList.filter((m) => m.activeTasks.length > 0 && !m.isOnLeave).length;
-      const totalPlannedHours = membersList.reduce((sum, m) => sum + m.totalPlannedHours, 0);
+      const totalPlannedHours = Math.round(membersList.reduce((sum, m) => sum + m.totalPlannedHours, 0) * 100) / 100;
 
       return {
         projectName: g.projectName,
@@ -706,10 +745,11 @@ function TeamCapacityPage() {
     const totalTasksCount = tasks.length;
     const completedTodayTasks = tasks.filter((t) => isTaskCompletedToday(t, todayStr));
     const completedTodayCount = completedTodayTasks.length;
-    const completedTodayHoursTotal = completedTodayTasks.reduce(
+    const rawCompletedTodayHoursTotal = completedTodayTasks.reduce(
       (sum, t) => sum + Number(t.actual_hours || t.planned_hours || 0),
       0,
     );
+    const completedTodayHoursTotal = Math.round(rawCompletedTodayHoursTotal * 100) / 100;
 
     const inProgressCount = tasks.filter((t) => t.status === "In Progress").length;
     const inProgressPct = totalTasksCount > 0 ? Math.round((inProgressCount / totalTasksCount) * 100) : 0;
@@ -945,7 +985,7 @@ function TeamCapacityPage() {
           title="Click to filter members with less than 16 hours of queued work (<2 days)"
         >
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <Zap className="h-3.5 w-3.5 text-emerald-400" />
+            <Gauge className="h-3.5 w-3.5 text-emerald-400" />
             <span>Low Queue (&lt;16h)</span>
           </div>
           <div className="text-2xl md:text-3xl font-bold text-emerald-400 font-mono tracking-tight">{kpis.lowQueueCount}</div>
@@ -1150,6 +1190,7 @@ function TeamCapacityPage() {
               <SelectItem value="in_progress">In Progress</SelectItem>
               <SelectItem value="to_do">To Do</SelectItem>
               <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="low_queue">⚡ Low Backlog (&lt;16h)</SelectItem>
             </SelectContent>
           </Select>
 
@@ -1186,6 +1227,40 @@ function TeamCapacityPage() {
           )}
         </div>
       </div>
+
+      {/* Active Filter Notice Banner for ALL Filters */}
+      {isFilterActive && (
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-xs text-foreground shadow-2xs border transition-all",
+            statusFilter === "completed" && "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
+            statusFilter === "in_progress" && "bg-blue-500/10 border-blue-500/30 text-blue-400",
+            statusFilter === "to_do" && "bg-amber-500/10 border-amber-500/30 text-amber-400",
+            statusFilter === "overdue" && "bg-rose-500/10 border-rose-500/30 text-rose-400",
+            availabilityFilter === "low_queue" && "bg-emerald-500/10 border-emerald-500/30 text-emerald-300",
+            statusFilter === "all" && availabilityFilter !== "low_queue" && "bg-primary/10 border-primary/25 text-primary"
+          )}
+        >
+          <div className="flex items-center gap-2 font-medium min-w-0">
+            <Sparkles className="h-4 w-4 shrink-0 animate-pulse" />
+            <span className="font-bold">Active Filter:</span>
+            <span className="text-foreground/90 truncate">{filterSummaryText}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="font-mono text-[11px] font-semibold opacity-90">
+              {filteredMembers.length} member{filteredMembers.length === 1 ? "" : "s"} shown
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetFilters}
+              className="h-6 px-2 text-[11px] font-semibold gap-1 shrink-0 hover:bg-foreground/10"
+            >
+              <Filter className="h-3 w-3" /> Clear Filter
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* MAIN TABLE VIEW */}
       {viewMode === "table" && (
@@ -1246,7 +1321,7 @@ function TeamCapacityPage() {
                                   </Badge>
                                 ) : item.isLowQueue ? (
                                   <Badge variant="outline" className="bg-muted/40 text-emerald-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
-                                    <Zap className="h-3 w-3 text-emerald-400/80" /> &lt;16h Queue
+                                    <Gauge className="h-3 w-3 text-emerald-400/80" /> &lt;16h Queue
                                   </Badge>
                                 ) : null}
                                 {item.projectsBreakdown && item.projectsBreakdown.length > 1 && (
@@ -1258,9 +1333,114 @@ function TeamCapacityPage() {
                           </div>
                         </td>
 
-                        {/* 2. Current Work */}
+                        {/* 2. Current Work / Filtered Tasks */}
                         <td className="py-3 px-3 align-middle">
-                          {item.isOnLeave ? (
+                          {statusFilter === "completed" ? (
+                            <div className="space-y-1.5 p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                              <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Completed Today ({item.completedTodayTasks.length}):
+                                </span>
+                                <span className="font-mono text-[10px] text-emerald-400 font-bold">{item.completedTodayHours}h</span>
+                              </div>
+                              {item.completedTodayTasks.length > 0 ? (
+                                <div className="space-y-1 pt-0.5">
+                                  {item.completedTodayTasks.map((ct) => (
+                                    <div
+                                      key={ct.id}
+                                      onClick={() => setInspectTaskItem({ task: ct, profile: p })}
+                                      className="p-1.5 rounded bg-card hover:bg-accent border border-emerald-500/20 cursor-pointer transition-colors flex items-center justify-between gap-2 text-xs group/ct"
+                                    >
+                                      <span className="truncate text-foreground font-medium group-hover/ct:text-emerald-400 transition-colors" title={ct.task_name}>
+                                        ✓ {ct.task_name}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-emerald-400 shrink-0 font-semibold">
+                                        {ct.actual_hours || ct.planned_hours || 0}h
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground/70 italic block">No tasks completed today</span>
+                              )}
+                            </div>
+                          ) : statusFilter === "to_do" ? (
+                            <div className="space-y-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs">
+                              <div className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3 text-amber-400" /> Queued To Do ({item.upcomingTasks.length}):
+                                </span>
+                                <span className="font-mono text-[10px] text-amber-400 font-bold">{item.plannedHours}h</span>
+                              </div>
+                              {item.upcomingTasks.length > 0 ? (
+                                <div className="space-y-1 pt-0.5 max-h-36 overflow-y-auto">
+                                  {item.upcomingTasks.map((td) => (
+                                    <div
+                                      key={td.id}
+                                      onClick={() => setInspectTaskItem({ task: td, profile: p })}
+                                      className="p-1.5 rounded bg-card hover:bg-accent border border-amber-500/20 cursor-pointer transition-colors flex items-center justify-between gap-2 text-xs group/td"
+                                    >
+                                      <span className="truncate text-foreground font-medium group-hover/td:text-amber-400 transition-colors" title={td.task_name}>
+                                        • {td.task_name}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-amber-400 shrink-0 font-semibold">
+                                        {td.planned_hours || 0}h
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground/70 italic block">No queued tasks</span>
+                              )}
+                            </div>
+                          ) : statusFilter === "overdue" ? (
+                            <div className="space-y-1.5 p-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-xs">
+                              <div className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                  <AlertOctagon className="h-3 w-3 text-rose-400" /> Overdue Tasks ({item.overdueTasks.length}):
+                                </span>
+                              </div>
+                              {item.overdueTasks.length > 0 ? (
+                                <div className="space-y-1 pt-0.5 max-h-36 overflow-y-auto">
+                                  {item.overdueTasks.map((od) => (
+                                    <div
+                                      key={od.id}
+                                      onClick={() => setInspectTaskItem({ task: od, profile: p })}
+                                      className="p-1.5 rounded bg-card hover:bg-accent border border-rose-500/20 cursor-pointer transition-colors flex items-center justify-between gap-2 text-xs group/od"
+                                    >
+                                      <span className="truncate text-foreground font-medium group-hover/od:text-rose-400 transition-colors" title={od.task_name}>
+                                        ⚠️ {od.task_name}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-rose-400 shrink-0 font-semibold">
+                                        {formatToDateStr(od.due_date)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground/70 italic block">No overdue tasks</span>
+                              )}
+                            </div>
+                          ) : statusFilter === "low_queue" || availabilityFilter === "low_queue" ? (
+                            <div className="space-y-1.5 p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                              <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                  <Gauge className="h-3 w-3 text-emerald-400" /> High Capacity (&lt;16h Queue):
+                                </span>
+                                <span className="font-mono text-[10px] text-emerald-400 font-bold">{item.queuedHours}h backlog</span>
+                              </div>
+                              <div className="text-[11px] text-emerald-300 font-medium flex items-center justify-between gap-1 pt-0.5">
+                                <span>Ready for new task assignment</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAssignTask(p.id)}
+                                  className="text-[10px] font-bold text-emerald-400 hover:underline shrink-0"
+                                >
+                                  + Assign Work
+                                </button>
+                              </div>
+                            </div>
+                          ) : item.isOnLeave ? (
                             <div className="p-2 rounded-lg bg-muted/30 border border-border/50 text-xs space-y-0.5">
                               <div className="font-semibold text-muted-foreground flex items-center gap-1 text-[11px]">
                                 <Palmtree className="h-3 w-3 text-amber-400/80" /> On Leave ({item.activeLeave?.leave_type?.toUpperCase() || "CASUAL"})
@@ -1343,7 +1523,7 @@ function TeamCapacityPage() {
                         </td>
 
                         {/* 4. Capacity */}
-                        <td className="py-3 px-3 align-middle">
+                        <td className={cn("py-3 px-3 align-middle transition-colors", (availabilityFilter === "low_queue" || statusFilter === "low_queue") && "bg-emerald-500/10 border border-emerald-500/30 rounded-lg")}>
                           <div className="space-y-1">
                             <div className="flex items-center justify-between text-[11px]">
                               <span className="font-mono text-foreground font-semibold">
@@ -1354,12 +1534,12 @@ function TeamCapacityPage() {
                                   "font-mono text-[10px] font-semibold",
                                   item.isOnLeave
                                     ? "text-amber-400 font-bold"
+                                    : (availabilityFilter === "low_queue" || statusFilter === "low_queue" || item.capacityStatus === "free")
+                                    ? "text-emerald-400 font-bold"
                                     : item.capacityStatus === "overloaded"
                                     ? "text-rose-400/90"
                                     : item.capacityStatus === "partially"
                                     ? "text-amber-400/90"
-                                    : item.capacityStatus === "free"
-                                    ? "text-emerald-400/90"
                                     : "text-blue-400/90"
                                 )}
                               >
@@ -1372,17 +1552,22 @@ function TeamCapacityPage() {
                                   "h-full rounded-full transition-all duration-300",
                                   item.isOnLeave
                                     ? "bg-amber-500"
+                                    : (availabilityFilter === "low_queue" || statusFilter === "low_queue" || item.capacityStatus === "free")
+                                    ? "bg-emerald-500"
                                     : item.capacityStatus === "overloaded"
                                     ? "bg-rose-500/80"
                                     : item.capacityStatus === "partially"
                                     ? "bg-amber-500/80"
-                                    : item.capacityStatus === "free"
-                                    ? "bg-emerald-500/80"
                                     : "bg-blue-500/80"
                                 )}
                                 style={{ width: item.isOnLeave ? "100%" : `${Math.min(100, item.capacityPct)}%` }}
                               />
                             </div>
+                            {(availabilityFilter === "low_queue" || statusFilter === "low_queue") && (
+                              <div className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 pt-0.5">
+                                <Gauge className="h-2.5 w-2.5 text-emerald-400 shrink-0" /> Low Backlog ({item.queuedHours}h)
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -1697,7 +1882,112 @@ function TeamCapacityPage() {
                                   </div>
 
                                   {/* Task Details - Explicitly label Task Status */}
-                                  {isOnLeave ? (
+                                  {statusFilter === "completed" ? (
+                                    <div className="space-y-1.5 p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                                      <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                                        <span className="flex items-center gap-1">
+                                          <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Completed Today ({memberInfo?.completedTodayTasks.length || 0}):
+                                        </span>
+                                        <span className="font-mono text-[10px] text-emerald-400 font-bold">{memberInfo?.completedTodayHours || 0}h</span>
+                                      </div>
+                                      {memberInfo?.completedTodayTasks && memberInfo.completedTodayTasks.length > 0 ? (
+                                        <div className="space-y-1 pt-0.5 max-h-40 overflow-y-auto">
+                                          {memberInfo.completedTodayTasks.map((ct) => (
+                                            <div
+                                              key={ct.id}
+                                              onClick={() => setInspectTaskItem({ task: ct, profile: p })}
+                                              className="p-1.5 rounded bg-background/80 hover:bg-background border border-emerald-500/20 cursor-pointer transition-colors flex items-center justify-between gap-2 text-xs group/ct"
+                                            >
+                                              <span className="truncate text-foreground font-medium group-hover/ct:text-emerald-400 transition-colors" title={ct.task_name}>
+                                                ✓ {ct.task_name}
+                                              </span>
+                                              <span className="font-mono text-[10px] text-emerald-400 shrink-0 font-semibold">
+                                                {ct.actual_hours || ct.planned_hours || 0}h
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-[11px] text-muted-foreground/70 italic block">No tasks completed today</span>
+                                      )}
+                                    </div>
+                                  ) : statusFilter === "to_do" ? (
+                                    <div className="space-y-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs">
+                                      <div className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider flex items-center justify-between">
+                                        <span className="flex items-center gap-1">
+                                          <Clock className="h-3 w-3 text-amber-400" /> Queued To Do ({memberInfo?.upcomingTasks.length || 0}):
+                                        </span>
+                                        <span className="font-mono text-[10px] text-amber-400 font-bold">{memberInfo?.plannedHours || 0}h</span>
+                                      </div>
+                                      {memberInfo?.upcomingTasks && memberInfo.upcomingTasks.length > 0 ? (
+                                        <div className="space-y-1 pt-0.5 max-h-40 overflow-y-auto">
+                                          {memberInfo.upcomingTasks.map((td) => (
+                                            <div
+                                              key={td.id}
+                                              onClick={() => setInspectTaskItem({ task: td, profile: p })}
+                                              className="p-1.5 rounded bg-background/80 hover:bg-background border border-amber-500/20 cursor-pointer transition-colors flex items-center justify-between gap-2 text-xs group/td"
+                                            >
+                                              <span className="truncate text-foreground font-medium group-hover/td:text-amber-400 transition-colors" title={td.task_name}>
+                                                • {td.task_name}
+                                              </span>
+                                              <span className="font-mono text-[10px] text-amber-400 shrink-0 font-semibold">
+                                                {td.planned_hours || 0}h
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-[11px] text-muted-foreground/70 italic block">No queued tasks</span>
+                                      )}
+                                    </div>
+                                  ) : statusFilter === "overdue" ? (
+                                    <div className="space-y-1.5 p-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-xs">
+                                      <div className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider flex items-center justify-between">
+                                        <span className="flex items-center gap-1">
+                                          <AlertOctagon className="h-3 w-3 text-rose-400" /> Overdue Tasks ({memberInfo?.overdueTasks.length || 0}):
+                                        </span>
+                                      </div>
+                                      {memberInfo?.overdueTasks && memberInfo.overdueTasks.length > 0 ? (
+                                        <div className="space-y-1 pt-0.5 max-h-40 overflow-y-auto">
+                                          {memberInfo.overdueTasks.map((od) => (
+                                            <div
+                                              key={od.id}
+                                              onClick={() => setInspectTaskItem({ task: od, profile: p })}
+                                              className="p-1.5 rounded bg-background/80 hover:bg-background border border-rose-500/20 cursor-pointer transition-colors flex items-center justify-between gap-2 text-xs group/od"
+                                            >
+                                              <span className="truncate text-foreground font-medium group-hover/od:text-rose-400 transition-colors" title={od.task_name}>
+                                                ⚠️ {od.task_name}
+                                              </span>
+                                              <span className="font-mono text-[10px] text-rose-400 shrink-0 font-semibold">
+                                                {formatToDateStr(od.due_date)}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-[11px] text-muted-foreground/70 italic block">No overdue tasks</span>
+                                      )}
+                                    </div>
+                                  ) : statusFilter === "low_queue" || availabilityFilter === "low_queue" ? (
+                                    <div className="space-y-1.5 p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                                      <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                                        <span className="flex items-center gap-1">
+                                          <Gauge className="h-3 w-3 text-emerald-400" /> High Capacity (&lt;16h Backlog):
+                                        </span>
+                                        <span className="font-mono text-[10px] text-emerald-400 font-bold">{memberInfo?.queuedHours || 0}h queued</span>
+                                      </div>
+                                      <div className="text-[11px] text-emerald-300 font-medium flex items-center justify-between gap-1 pt-0.5">
+                                        <span>Ready for new task assignment</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAssignTask(p.id, group.projectName)}
+                                          className="text-[10px] font-bold text-emerald-400 hover:underline shrink-0"
+                                        >
+                                          + Assign
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : isOnLeave ? (
                                     <div className="p-1.5 px-2 rounded-md bg-background/50 border border-border/30 text-xs flex items-center justify-between gap-2">
                                       <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground/70">
                                         <Palmtree className="h-3 w-3 text-amber-400/80 shrink-0" />

@@ -76,6 +76,7 @@ const managerNav = [
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
+  { to: "/exports", icon: Download, label: "Exports & Reports" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

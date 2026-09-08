@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { withUser } from "@/integrations/postgres/query.server";
+import { withUser, adminSelect } from "@/integrations/postgres/query.server";
 
 const KIND = [
   "task_audit",
@@ -379,7 +379,7 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
         tasksParams,
       );
 
-      // 6. Query Approved Leaves (safely handle RLS / permission restrictions)
+      // 6. Query Approved Leaves (using adminSelect to bypass RLS permission restrictions)
       let leavesRows: Array<{
         user_id: string;
         leave_type: string;
@@ -388,7 +388,7 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
       }> = [];
 
       try {
-        const leavesRes = await client.query<{
+        leavesRows = await adminSelect<{
           user_id: string;
           leave_type: string;
           start_date: string;
@@ -405,9 +405,8 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
               AND l.user_id = ANY($3::uuid[])`,
           [fromDateStr, toDateStr, userIds],
         );
-        leavesRows = leavesRes.rows;
       } catch (err) {
-        console.warn("[getMonthlyCapacityReport] leaves table permission skipped:", (err as Error).message);
+        console.warn("[getMonthlyCapacityReport] leaves query error:", (err as Error).message);
       }
 
       // Organize hours by user
