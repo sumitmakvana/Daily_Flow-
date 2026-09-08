@@ -9,6 +9,8 @@ import {
   isTaskDueOrActiveToday,
 } from "@/lib/task-date-utils";
 
+import { checkIsWorkingDayServer, getUsersOnLeaveTodayServer } from "@/lib/workday-checker.server";
+
 // Global singleton state to survive Vite / HMR module re-evaluations in dev server
 const globalCronState = globalThis as unknown as {
   __cronTickerInterval?: NodeJS.Timeout;
@@ -42,6 +44,14 @@ export function startBackgroundCronTicker() {
   globalCronState.__cronTickerInterval = setInterval(async () => {
     try {
       const todayStr = getTodayDateStr("Asia/Kolkata");
+
+      // Verify if today is a valid working day (not a weekend or official company/public holiday)
+      const workStatus = await checkIsWorkingDayServer(todayStr);
+      if (!workStatus.isWorkingDay) {
+        // Skip automated digests and notifications on non-working days & holidays
+        return;
+      }
+
       const currentLocalTime = new Date().toLocaleTimeString("en-US", {
         timeZone: "Asia/Kolkata",
         hour: "2-digit",
@@ -96,12 +106,13 @@ export function startBackgroundCronTicker() {
           `[CronTicker] Time matched Evening Digest (${currentLocalTime} === ${memberEodTime})! Triggering Member EOD & Leave Alerts...`,
         );
 
-        const { data: profiles } = await supabaseAdmin
-          .from("profiles")
-          .select("id, display_name, email, is_active")
-          .eq("is_active", true);
+        const [{ data: profiles }, usersOnLeave] = await Promise.all([
+          supabaseAdmin.from("profiles").select("id, display_name, email, is_active").eq("is_active", true),
+          getUsersOnLeaveTodayServer(todayStr),
+        ]);
 
         for (const p of profiles ?? []) {
+          if (usersOnLeave.has(p.id)) continue; // Skip users on approved leave today
           const dedupeKey = `EOD_${todayStr}_${p.id}`;
           // Check idempotency marker before inserting notification
           const { data: existingNotif } = await supabaseAdmin
