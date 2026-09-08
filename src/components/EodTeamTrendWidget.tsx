@@ -29,8 +29,8 @@ import {
   UserCheck,
 } from "lucide-react";
 import type { Task, Profile } from "@/lib/types";
-import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format";
 
 interface EodTeamTrendWidgetProps {
   tasks: Task[];
