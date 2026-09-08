@@ -55,6 +55,7 @@ import {
   Layers,
   Sparkles,
   Zap,
+  Pause,
   FileSpreadsheet,
   Palmtree,
 } from "lucide-react";
@@ -1272,20 +1273,36 @@ function TeamCapacityPage() {
                             <div className="space-y-1.5">
                               {item.activeTasks.slice(0, 2).map((t) => {
                                 const displayName = t.task_name?.trim() || (t.task_code ? `Task #${t.task_code}` : "Untitled Task");
+                                const isTimerRunning = !!t.started_at;
                                 return (
                                   <div
                                     key={t.id}
                                     onClick={() => setActiveTaskModalItem({ task: t, member: p })}
                                     className="p-1.5 rounded-md bg-muted/40 hover:bg-accent/50 border border-border/50 cursor-pointer transition-colors group/item min-w-0 space-y-1"
                                   >
-                                    <div className="min-w-0 flex items-center gap-1.5">
-                                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
-                                      <span
-                                        className="truncate text-foreground font-semibold group-hover/item:text-primary transition-colors text-[11px]"
-                                        title={displayName}
-                                      >
-                                        {displayName}
-                                      </span>
+                                    <div className="min-w-0 flex items-center justify-between gap-1.5">
+                                      <div className="min-w-0 flex items-center gap-1.5">
+                                        {isTimerRunning ? (
+                                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Timer is actively running" />
+                                        ) : (
+                                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400/80 shrink-0" title="Timer is paused" />
+                                        )}
+                                        <span
+                                          className="truncate text-foreground font-semibold group-hover/item:text-primary transition-colors text-[11px]"
+                                          title={displayName}
+                                        >
+                                          {displayName}
+                                        </span>
+                                      </div>
+                                      {isTimerRunning ? (
+                                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0 font-medium flex items-center gap-1">
+                                          <Zap className="h-2.5 w-2.5 fill-emerald-400 text-emerald-400 animate-pulse" /> Active
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400/90 border border-amber-500/20 shrink-0 font-medium flex items-center gap-1">
+                                          <Pause className="h-2.5 w-2.5 text-amber-400" /> Paused
+                                        </span>
+                                      )}
                                     </div>
                                     <TaskHoursBadges task={t} variant="badges" className="shrink-0 text-[10px] max-w-full" />
                                   </div>
@@ -1656,9 +1673,15 @@ function TeamCapacityPage() {
                                             🏠 WFH
                                           </span>
                                         ) : isWorkingNow ? (
-                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" /> WORKING NOW
-                                          </span>
+                                          liveTask?.started_at ? (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                                              <Zap className="h-2.5 w-2.5 fill-emerald-400 text-emerald-400 animate-pulse" /> ACTIVE
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                                              <Pause className="h-2.5 w-2.5 text-amber-400" /> PAUSED
+                                            </span>
+                                          )
                                         ) : isFree ? (
                                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                                             FREE
@@ -1687,16 +1710,41 @@ function TeamCapacityPage() {
                                   ) : isWorkingNow ? (
                                     <div
                                       onClick={() => setActiveTaskModalItem({ task: liveTask, member: p })}
-                                      className="group/task p-2 rounded-md bg-background/60 hover:bg-background border border-blue-500/30 hover:border-blue-500/50 cursor-pointer transition-all space-y-1"
+                                      className={cn(
+                                        "group/task p-2 rounded-md bg-background/60 hover:bg-background border cursor-pointer transition-all space-y-1",
+                                        liveTask.started_at
+                                          ? "border-emerald-500/30 hover:border-emerald-500/50"
+                                          : "border-amber-500/30 hover:border-amber-500/50"
+                                      )}
                                     >
-                                      <div className="text-[10px] font-semibold text-blue-400/90 flex items-center justify-between uppercase tracking-wider">
-                                        <span>Current Task:</span>
-                                        <span className="font-mono text-muted-foreground">{liveTask.planned_hours || 0}h planned</span>
+                                      <div className="text-[10px] font-semibold flex items-center justify-between uppercase tracking-wider">
+                                        {liveTask.started_at ? (
+                                          <span className="text-emerald-400/90 flex items-center gap-1">
+                                            <Zap className="h-2.5 w-2.5 fill-emerald-400 text-emerald-400 animate-pulse" /> Active Task:
+                                          </span>
+                                        ) : (
+                                          <span className="text-amber-400/90 flex items-center gap-1">
+                                            <Pause className="h-2.5 w-2.5 text-amber-400" /> Task Paused:
+                                          </span>
+                                        )}
                                       </div>
                                       <div className="font-medium text-foreground text-xs truncate flex items-center gap-1.5">
-                                        <Play className="h-3 w-3 text-blue-400 fill-blue-400 shrink-0" />
-                                        <span className="truncate group-hover/task:text-blue-400 transition-colors" title={liveTask.task_name}>{liveTask.task_name}</span>
+                                        {liveTask.started_at ? (
+                                          <Zap className="h-3 w-3 text-emerald-400 fill-emerald-400 shrink-0" />
+                                        ) : (
+                                          <Pause className="h-3 w-3 text-amber-400 shrink-0" />
+                                        )}
+                                        <span
+                                          className={cn(
+                                            "truncate transition-colors",
+                                            liveTask.started_at ? "group-hover/task:text-emerald-400" : "group-hover/task:text-amber-400"
+                                          )}
+                                          title={liveTask.task_name}
+                                        >
+                                          {liveTask.task_name}
+                                        </span>
                                       </div>
+                                      <TaskHoursBadges task={liveTask} variant="badges" className="shrink-0 text-[10px] max-w-full mt-1.5" />
                                     </div>
                                   ) : queuedTask ? (
                                     <div
