@@ -6,6 +6,8 @@ import { sendEodEmail } from "@/services/email-dispatcher";
 import { getUnstartedTasksNudgeHtml, getZeroTasksNudgeHtml } from "@/services/email-templates";
 import type { Task } from "@/lib/types";
 
+import { checkIsWorkingDayServer, getUsersOnLeaveTodayServer } from "@/lib/workday-checker.server";
+
 /**
  * Start-of-day digest cron (e.g., 08:30 local).
  * Sends each active user the day's plate; rolls up to their manager.
@@ -24,6 +26,18 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
         }
 
         const today = new Date().toISOString().slice(0, 10);
+
+        if (!force) {
+          const workStatus = await checkIsWorkingDayServer(today);
+          if (!workStatus.isWorkingDay) {
+            return Response.json({
+              ok: true,
+              skipped: true,
+              reason: `Today is a non-working day (${workStatus.label}). Morning digest skipped.`,
+            });
+          }
+        }
+        const usersOnLeave = await getUsersOnLeaveTodayServer(today);
         const todayMs = new Date(today).getTime();
         const origin = process.env.APP_URL || "https://operon.noesisanalytics.co.in";
 
@@ -86,6 +100,7 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
         let failed = 0;
 
         for (const p of profiles ?? []) {
+          if (usersOnLeave.has(p.id)) continue; // Skip users on approved leave today
           const mine = (plateByUser.get(p.id) ?? []).slice(0, 20);
 
           const high = mine.filter((t) => t.priority === "High").length;

@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireCronAuth } from "@/lib/cron-auth.server";
 import { recordFailure } from "@/lib/ops-failures.server";
 
+import { checkIsWorkingDayServer, getUsersOnLeaveTodayServer } from "@/lib/workday-checker.server";
+
 /**
  * Recurring reminder cron (intended to run every 20 minutes).
  * Sends a nudge to active users who still have 0 tasks on their plate today.
@@ -12,10 +14,27 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const denied = await requireCronAuth(request, "no-tasks-reminder");
-        if (denied) return denied;
+        const url = new URL(request.url);
+        const force = url.searchParams.get("force") === "true";
+
+        if (!force) {
+          const denied = await requireCronAuth(request, "no-tasks-reminder");
+          if (denied) return denied;
+        }
 
         const today = new Date().toISOString().slice(0, 10);
+
+        if (!force) {
+          const workStatus = await checkIsWorkingDayServer(today);
+          if (!workStatus.isWorkingDay) {
+            return Response.json({
+              ok: true,
+              skipped: true,
+              reason: `Today is a non-working day (${workStatus.label}). No-tasks reminder skipped.`,
+            });
+          }
+        }
+        const usersOnLeave = await getUsersOnLeaveTodayServer(today);
         const todayMs = new Date(today).getTime();
 
         // Get current time in Indian Standard Time (IST)
@@ -52,8 +71,6 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
             .is("read_at", null),
         ]);
 
-        const url = new URL(request.url);
-        const force = url.searchParams.get("force") === "true";
         const morningTime = settings?.morning_digest_time ?? "10:00";
         const eveningTime = settings?.evening_digest_time ?? "18:00";
         const interval = settings?.no_tasks_reminder_interval ?? 20;
@@ -105,6 +122,7 @@ export const Route = createFileRoute("/api/public/hooks/no-tasks-reminder")({
         const slot = Math.floor(m / slotInterval); 
 
         for (const p of profiles ?? []) {
+          if (usersOnLeave.has(p.id)) continue; // Skip users on approved leave today
           const mine = plateByUser.get(p.id) ?? [];
           const userTasks = (tasks ?? []).filter((t) => t.assigned_to === p.id);
           const hasStartedTask = userTasks.some(

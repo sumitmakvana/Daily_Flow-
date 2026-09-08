@@ -12,6 +12,8 @@ import {
   isTaskDueOrActiveToday,
 } from "@/lib/task-date-utils";
 
+import { checkIsWorkingDayServer, getUsersOnLeaveTodayServer } from "@/lib/workday-checker.server";
+
 /**
  * End-of-day digest cron (e.g., 18:30 local).
  * Active users only; idempotent via notifications.dedupe_key.
@@ -28,7 +30,21 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
           if (denied) return denied;
         }
 
-        const today = getTodayDateStr("Asia/Kolkata");
+        const today = getTodayDateStr();
+
+        if (!force) {
+          const workStatus = await checkIsWorkingDayServer(today);
+          if (!workStatus.isWorkingDay) {
+            return Response.json({
+              ok: true,
+              skipped: true,
+              reason: `Today is a non-working day (${workStatus.label}). Evening digest skipped.`,
+            });
+          }
+        }
+
+        const usersOnLeave = await getUsersOnLeaveTodayServer(today);
+
         const origin = process.env.APP_URL || "https://operon.noesisanalytics.co.in";
 
         // Get current time in Indian Standard Time (IST) formatted as HH:MM
@@ -241,6 +257,7 @@ export const Route = createFileRoute("/api/public/hooks/evening-digest")({
         let failed = 0;
 
         for (const p of profiles ?? []) {
+          if (usersOnLeave.has(p.id)) continue; // Skip users on approved leave today
           const mine = plateByUser.get(p.id) ?? [];
           const s = summarize(mine);
 
