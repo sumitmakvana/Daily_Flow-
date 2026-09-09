@@ -143,7 +143,15 @@ export const tasksService = {
       patch.blocked_at = null;
     }
     if (newStatus === "On Hold") {
-      patch.hold_reason = extras.hold_reason ?? task.hold_reason ?? "On Hold";
+      if (extras.hold_reason) {
+        patch.hold_reason = extras.hold_reason;
+      } else if (task.hold_reason && !task.hold_reason.toLowerCase().includes("leave")) {
+        patch.hold_reason = task.hold_reason;
+      } else {
+        patch.hold_reason = "On Hold";
+      }
+    } else {
+      patch.hold_reason = null;
     }
     if (extras.actual_hours !== undefined) {
       patch.actual_hours = extras.actual_hours;

@@ -4,9 +4,16 @@ import type { TaskStatus } from "@/lib/types";
 import { Palmtree } from "lucide-react";
 
 export function StatusBadge({ status, reason, className }: { status: TaskStatus; reason?: string | null; className?: string }) {
-  const isLeave = (reason && reason.toLowerCase().includes("leave")) || (status as string)?.toLowerCase().includes("leave");
+  const isLeave =
+    status === "On Hold" &&
+    ((reason && reason.toLowerCase().includes("leave")) || (status as string)?.toLowerCase().includes("leave"));
 
   if (isLeave) {
+    let subReason = reason || "";
+    if (subReason.toLowerCase().startsWith("on leave")) {
+      subReason = subReason.replace(/^on leave\s*/i, "").replace(/^\(|\)$/g, "").trim();
+    }
+
     return (
       <span
         className={cn(
@@ -16,10 +23,10 @@ export function StatusBadge({ status, reason, className }: { status: TaskStatus;
         title={reason ? `On Leave: ${reason}` : "On Leave (Timer Paused)"}
       >
         <Palmtree className="h-3 w-3 shrink-0 text-amber-400/80" />
-        <span>Leave</span>
-        {reason && (
+        <span>On Leave</span>
+        {subReason && (
           <span className="opacity-80 font-normal border-l border-amber-500/20 pl-1 ml-0.5 max-w-[130px] truncate text-[11px]">
-            ({reason})
+            ({subReason})
           </span>
         )}
       </span>
