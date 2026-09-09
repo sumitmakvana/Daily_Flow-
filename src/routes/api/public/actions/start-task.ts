@@ -124,6 +124,17 @@ export const Route = createFileRoute("/api/public/actions/start-task")({
                 const startTs = new Date(otherTask.started_at).getTime();
                 const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
                 newSysHours += elapsed;
+                if (elapsed > 0) {
+                  try {
+                    await pool.query(
+                      `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
+                       VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
+                      [otherTask.id, userId, elapsed, otherTask.started_at],
+                    );
+                  } catch (e) {
+                    console.warn("[task_worklogs] insert failed in start-task:", (e as Error).message);
+                  }
+                }
               }
               await pool.query(
                 `UPDATE public.tasks 

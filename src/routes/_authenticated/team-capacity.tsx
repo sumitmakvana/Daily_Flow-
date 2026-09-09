@@ -236,15 +236,36 @@ function TeamCapacityPage() {
     staleTime: 10000,
   });
 
-  // 2. Fetch tasks (Real DB)
+  // 2. Fetch tasks & worklogs (Real DB)
   const { data: tasks = [] } = useQuery({
     queryKey: ["capacity-tasks"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("tasks")
-        .select("*")
-        .order("created_at", { ascending: false });
-      return (data ?? []) as Task[];
+      const [{ data: rawTasks }, { data: worklogsData }] = await Promise.all([
+        supabase.from("tasks").select("*").order("created_at", { ascending: false }),
+        supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
+      ]);
+
+      if (!rawTasks || rawTasks.length === 0) return [];
+
+      const worklogsByTask = new Map<string, any[]>();
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      for (const w of worklogsData || []) {
+        const list = worklogsByTask.get(w.task_id) || [];
+        list.push(w);
+        worklogsByTask.set(w.task_id, list);
+      }
+
+      return (rawTasks as Task[]).map((t) => {
+        const logs = worklogsByTask.get(t.id) || [];
+        const todayLogs = logs.filter((w) => w.work_date === todayStr);
+        const todaySys = todayLogs.reduce((sum, w) => sum + Number(w.system_hours || 0), 0);
+        return {
+          ...t,
+          today_system_hours: todaySys,
+          worklogs: logs,
+        };
+      });
     },
     staleTime: 10000,
   });

@@ -32,6 +32,7 @@ import {
   ChevronRight,
   User,
   Palmtree,
+  Clock,
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -478,6 +479,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Link to="/my-day" className="cursor-pointer">
                       <Sunrise className="mr-2 h-4 w-4" />
                       <span>My Day</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/time-tracking" className="cursor-pointer">
+                      <Clock className="mr-2 h-4 w-4 text-amber-400" />
+                      <span>Time Tracking</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>

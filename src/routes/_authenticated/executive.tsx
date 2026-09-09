@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import {
   Select,
   SelectContent,
@@ -84,7 +85,6 @@ import type { Task, Profile, Project, EodCheckin } from "@/lib/types";
 import { generateEodHtmlReport } from "@/services/pdf-report.generator";
 import { leavesService } from "@/services/leaves";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
-import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDate, formatHoursMins } from "@/lib/format";
@@ -1732,7 +1732,7 @@ export function MemberDetailSheet({
     const systemHours = memberTasks.reduce((s, t) => {
       const baseSys = Number((t as any).system_hours ?? 0);
       const runningSys = (t as any).started_at 
-        ? Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10)
+        ? Math.min(8.0, Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10))
         : 0;
       return s + baseSys + runningSys;
     }, 0);
@@ -3203,25 +3203,7 @@ function StatusDetailSheet({
                   ) : (
                     <span className="text-muted-foreground italic">Unassigned</span>
                   )}
-                  {(() => {
-                    const baseSys = Number((t as any).system_hours ?? 0);
-                    const runningSys = (t as any).started_at 
-                      ? Math.max(0, Math.round(((Date.now() - new Date((t as any).started_at).getTime()) / 3600000) * 10) / 10)
-                      : 0;
-                    const sysHrs = baseSys + runningSys;
-                    return (
-                      <div className="text-right font-mono text-[11px]">
-                        <div className="font-bold flex items-center gap-1 justify-end">
-                          <span className="text-emerald-400">User: {t.actual_hours ?? 0}h</span>
-                          <span className="text-slate-600">|</span>
-                          <span className="text-amber-400">Auto: {sysHrs}h</span>
-                          <span className="text-slate-600">|</span>
-                          <span className="text-indigo-400">Plan: {t.planned_hours ?? 0}h</span>
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">User / Auto / Plan</div>
-                      </div>
-                    );
-                  })()}
+                  <TaskHoursBadges task={t as any} />
                 </div>
               </div>
             );
