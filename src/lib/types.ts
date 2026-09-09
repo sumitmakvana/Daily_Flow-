@@ -90,6 +90,8 @@ export interface Task {
   actual_hours: number | null;
   started_at?: string | null;
   system_hours?: number | null;
+  today_system_hours?: number | null;
+  worklogs?: TaskWorklog[];
   blocker_reason: string | null;
   hold_reason?: string | null;
   blocked_at: string | null;
@@ -119,6 +121,19 @@ export interface TaskHistory {
   updated_by: string | null;
   comment: string | null;
   created_at: string;
+}
+
+export interface TaskWorklog {
+  id: string;
+  task_id: string;
+  user_id: string;
+  work_date: string;
+  system_hours: number;
+  logged_hours: number;
+  started_at?: string | null;
+  ended_at?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AppNotification {

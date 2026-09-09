@@ -16,6 +16,7 @@ import { Route as AppStorageUploadRouteImport } from './routes/app-storage/uploa
 import { Route as AppStorageFileRouteImport } from './routes/app-storage/file'
 import { Route as AuthenticatedWorkloadRouteImport } from './routes/_authenticated/workload'
 import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
+import { Route as AuthenticatedTimeTrackingRouteImport } from './routes/_authenticated/time-tracking'
 import { Route as AuthenticatedTeamCapacityRouteImport } from './routes/_authenticated/team-capacity'
 import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
 import { Route as AuthenticatedSyncRouteImport } from './routes/_authenticated/sync'
@@ -95,6 +96,12 @@ const AuthenticatedTodayRoute = AuthenticatedTodayRouteImport.update({
   path: '/today',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedTimeTrackingRoute =
+  AuthenticatedTimeTrackingRouteImport.update({
+    id: '/time-tracking',
+    path: '/time-tracking',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedTeamCapacityRoute =
   AuthenticatedTeamCapacityRouteImport.update({
     id: '/team-capacity',
@@ -367,6 +374,7 @@ export interface FileRoutesByFullPath {
   '/sync': typeof AuthenticatedSyncRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/team-capacity': typeof AuthenticatedTeamCapacityRoute
+  '/time-tracking': typeof AuthenticatedTimeTrackingRoute
   '/today': typeof AuthenticatedTodayRoute
   '/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
@@ -419,6 +427,7 @@ export interface FileRoutesByTo {
   '/sync': typeof AuthenticatedSyncRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/team-capacity': typeof AuthenticatedTeamCapacityRoute
+  '/time-tracking': typeof AuthenticatedTimeTrackingRoute
   '/today': typeof AuthenticatedTodayRoute
   '/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
@@ -473,6 +482,7 @@ export interface FileRoutesById {
   '/_authenticated/sync': typeof AuthenticatedSyncRoute
   '/_authenticated/tasks': typeof AuthenticatedTasksRoute
   '/_authenticated/team-capacity': typeof AuthenticatedTeamCapacityRoute
+  '/_authenticated/time-tracking': typeof AuthenticatedTimeTrackingRoute
   '/_authenticated/today': typeof AuthenticatedTodayRoute
   '/_authenticated/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
@@ -527,6 +537,7 @@ export interface FileRouteTypes {
     | '/sync'
     | '/tasks'
     | '/team-capacity'
+    | '/time-tracking'
     | '/today'
     | '/workload'
     | '/app-storage/file'
@@ -579,6 +590,7 @@ export interface FileRouteTypes {
     | '/sync'
     | '/tasks'
     | '/team-capacity'
+    | '/time-tracking'
     | '/today'
     | '/workload'
     | '/app-storage/file'
@@ -632,6 +644,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sync'
     | '/_authenticated/tasks'
     | '/_authenticated/team-capacity'
+    | '/_authenticated/time-tracking'
     | '/_authenticated/today'
     | '/_authenticated/workload'
     | '/app-storage/file'
@@ -728,6 +741,13 @@ declare module '@tanstack/react-router' {
       path: '/today'
       fullPath: '/today'
       preLoaderRoute: typeof AuthenticatedTodayRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/time-tracking': {
+      id: '/_authenticated/time-tracking'
+      path: '/time-tracking'
+      fullPath: '/time-tracking'
+      preLoaderRoute: typeof AuthenticatedTimeTrackingRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/team-capacity': {
@@ -1084,6 +1104,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSyncRoute: typeof AuthenticatedSyncRoute
   AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
   AuthenticatedTeamCapacityRoute: typeof AuthenticatedTeamCapacityRoute
+  AuthenticatedTimeTrackingRoute: typeof AuthenticatedTimeTrackingRoute
   AuthenticatedTodayRoute: typeof AuthenticatedTodayRoute
   AuthenticatedWorkloadRoute: typeof AuthenticatedWorkloadRoute
   AuthenticatedSettingsEmailOperationsRoute: typeof AuthenticatedSettingsEmailOperationsRoute
@@ -1117,6 +1138,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSyncRoute: AuthenticatedSyncRoute,
   AuthenticatedTasksRoute: AuthenticatedTasksRoute,
   AuthenticatedTeamCapacityRoute: AuthenticatedTeamCapacityRoute,
+  AuthenticatedTimeTrackingRoute: AuthenticatedTimeTrackingRoute,
   AuthenticatedTodayRoute: AuthenticatedTodayRoute,
   AuthenticatedWorkloadRoute: AuthenticatedWorkloadRoute,
   AuthenticatedSettingsEmailOperationsRoute:

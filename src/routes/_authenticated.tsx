@@ -4,6 +4,7 @@ import { auth } from "@/integrations/backend/auth";
 import { getMyRoles } from "@/services/auth.functions";
 import { AppShell } from "@/components/AppShell";
 import { UnstartedTaskLeaveModal } from "@/components/UnstartedTaskLeaveModal";
+import { MorningResumePromptModal } from "@/components/MorningResumePromptModal";
 
 /**
  * Manager/admin-only path prefixes. Members hitting these get redirected to /my-day.
@@ -98,6 +99,7 @@ function AuthenticatedLayout() {
     <AppShell>
       <Outlet />
       <UnstartedTaskLeaveModal />
+      <MorningResumePromptModal />
     </AppShell>
   );
 }

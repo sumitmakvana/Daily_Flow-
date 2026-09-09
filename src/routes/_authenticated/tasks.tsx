@@ -207,12 +207,33 @@ function TasksPage() {
   };
 
   const load = async () => {
-    const [{ data: t }, { data: p }, { data: e }] = await Promise.all([
+    const [{ data: t }, { data: p }, { data: e }, { data: w }] = await Promise.all([
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("id,display_name,avatar_url"),
       supabase.from("profile_emails" as never).select("id,email") as never,
+      supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
     ]);
-    setTasks((t ?? []) as Task[]);
+
+    const worklogsByTask = new Map<string, any[]>();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    for (const item of w || []) {
+      const list = worklogsByTask.get(item.task_id) || [];
+      list.push(item);
+      worklogsByTask.set(item.task_id, list);
+    }
+
+    const enrichedTasks = ((t ?? []) as Task[]).map((task) => {
+      const logs = worklogsByTask.get(task.id) || [];
+      const todayLogs = logs.filter((x) => x.work_date === todayStr);
+      const todaySys = todayLogs.reduce((sum, x) => sum + Number(x.system_hours || 0), 0);
+      return {
+        ...task,
+        today_system_hours: todaySys,
+        worklogs: logs,
+      };
+    });
+
+    setTasks(enrichedTasks);
     setProfiles((p ?? []) as Profile[]);
     const map: Record<string, string> = {};
     for (const row of ((e ?? []) as Array<{ id: string; email: string }>)) map[row.id] = row.email;

@@ -141,12 +141,34 @@ export const updateTaskFn = createServerFn({ method: "POST" })
         const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
         patch.system_hours = existingSystemHours + elapsed;
         patch.started_at = null;
+        if (elapsed > 0) {
+          try {
+            await client.query(
+              `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
+               VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
+              [data.id, context.userId, elapsed, existingStartedAt]
+            );
+          } catch (e) {
+            console.warn("[task_worklogs] insert failed:", (e as Error).message);
+          }
+        }
       } else if ((patch.status === "Completed" || patch.done === true)) {
         if (existingStartedAt || patch.started_at) {
           const startTs = new Date((patch.started_at as string) || existingStartedAt!).getTime();
           const diffHrs = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
           if (patch.system_hours === undefined) {
             patch.system_hours = existingSystemHours + diffHrs;
+          }
+          if (diffHrs > 0) {
+            try {
+              await client.query(
+                `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
+                 VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
+                [data.id, context.userId, diffHrs, existingStartedAt || (patch.started_at as string)]
+              );
+            } catch (e) {
+              console.warn("[task_worklogs] insert failed:", (e as Error).message);
+            }
           }
         }
         patch.started_at = null;
@@ -172,6 +194,17 @@ export const updateTaskFn = createServerFn({ method: "POST" })
             const startTs = new Date(otherTask.started_at).getTime();
             const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
             newSysHours += elapsed;
+            if (elapsed > 0) {
+              try {
+                await client.query(
+                  `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
+                   VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
+                  [otherTask.id, context.userId, elapsed, otherTask.started_at]
+                );
+              } catch (e) {
+                console.warn("[task_worklogs] insert failed on single active auto-pause:", (e as Error).message);
+              }
+            }
           }
           await client.query(
             `UPDATE public.tasks 
