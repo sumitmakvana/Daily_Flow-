@@ -271,6 +271,7 @@ export function TaskFormDialog({
         const hasPreset = PLANNED_HOURS_OPTIONS.some((opt) => opt.value === defaultPlannedHours);
         setIsCustomSingleHours(!hasPreset);
         const isNewOrDuplicate = !initial?.id;
+        const lastInfo = isNewOrDuplicate && defaultAssignee ? profileLastTasks[defaultAssignee] : null;
         setForm(
           initial
             ? {
@@ -281,6 +282,12 @@ export function TaskFormDialog({
                 start_date: defaultStartDate,
                 due_date: defaultDueDate,
                 planned_hours: defaultPlannedHours,
+                ...(lastInfo
+                  ? {
+                      project_name: initial.project_name ?? lastInfo.project_name ?? "",
+                      client: initial.client ?? lastInfo.client ?? "",
+                    }
+                  : {}),
                 ...initial,
                 ...(isNewOrDuplicate ? { status: "To Do", system_hours: 0, started_at: null, actual_hours: 0, done: false, completed_at: null } : {}),
               }
@@ -295,6 +302,12 @@ export function TaskFormDialog({
                 system_hours: 0,
                 started_at: null,
                 actual_hours: 0,
+                ...(lastInfo
+                  ? {
+                      project_name: lastInfo.project_name ?? "",
+                      client: lastInfo.client ?? "",
+                    }
+                  : {}),
               }
         );
         setCreationMode("single");
@@ -344,6 +357,19 @@ export function TaskFormDialog({
           }
         }
         setProfileLastTasks(lastTasks);
+
+        if (!initial?.id) {
+          setForm((prev) => {
+            const currentAssignee = prev.assigned_to || userId;
+            const info = currentAssignee ? lastTasks[currentAssignee] : null;
+            if (!info) return prev;
+            return {
+              ...prev,
+              project_name: prev.project_name || initial?.project_name || info.project_name || "",
+              client: prev.client || initial?.client || info.client || "",
+            };
+          });
+        }
 
         const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
         const todayStr = todayISO();
@@ -1385,7 +1411,21 @@ export function TaskFormDialog({
                   {initial || creationMode === "single" ? (
                     <Select
                       value={form.assigned_to ?? NONE}
-                      onValueChange={(v) => setForm({ ...form, assigned_to: v === NONE ? null : v })}
+                      onValueChange={(v) => {
+                        const newAssignee = v === NONE ? null : v;
+                        setForm((prev) => {
+                          const info = newAssignee ? profileLastTasks[newAssignee] : null;
+                          if (!initial?.id && info) {
+                            return {
+                              ...prev,
+                              assigned_to: newAssignee,
+                              project_name: info.project_name || "",
+                              client: info.client || "",
+                            };
+                          }
+                          return { ...prev, assigned_to: newAssignee };
+                        });
+                      }}
                     >
                       <SelectTrigger className="h-9 text-xs bg-background border-border text-foreground">
                         <SelectValue placeholder="Search or select a person..." />

@@ -214,7 +214,7 @@ export function TaskQuickActionModal({
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              {/* 1. Mark Complete */}
+              {/* 1. Mark Complete / Reopen */}
               <Button
                 size="sm"
                 className="h-10 justify-start text-xs gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium cursor-pointer"
@@ -225,8 +225,22 @@ export function TaskQuickActionModal({
                 }}
               >
                 <CheckCircle2 className="h-4 w-4 text-white" />
-                {task.status === "Completed" ? "Completed" : "Mark Complete"}
+                {task.status === "Completed" ? "Completed ✓" : "Mark Complete"}
               </Button>
+
+              {/* Reopen button — only when Completed */}
+              {task.status === "Completed" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10 justify-start text-xs gap-2 border-blue-500/40 text-blue-400 hover:bg-blue-500/10 font-semibold cursor-pointer"
+                  disabled={busy}
+                  onClick={() => handleSetStatus("To Do")}
+                >
+                  <Play className="h-4 w-4 text-blue-400" />
+                  Reopen Task
+                </Button>
+              )}
 
               {/* 2. In Progress */}
               <Button
