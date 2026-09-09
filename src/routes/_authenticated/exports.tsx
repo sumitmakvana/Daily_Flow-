@@ -39,6 +39,9 @@ import {
   ListChecks,
   Search,
   Filter,
+  FilterX,
+  RotateCcw,
+  CheckSquare,
   HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -78,10 +81,21 @@ function MultiSelectFilter({
     }
   };
 
-  const isAll = selectedValues.length === 0;
+  const isAllDefault = selectedValues.length === 0;
+  const isAllSelected = selectedValues.length === options.length && options.length > 0;
 
-  const displayText = isAll
+  const handleSelectAllToggle = () => {
+    if (isAllSelected) {
+      onChange([]);
+    } else {
+      onChange(options.map((o) => o.value));
+    }
+  };
+
+  const displayText = isAllDefault
     ? placeholder
+    : isAllSelected
+    ? `All (${options.length}) Selected`
     : selectedValues.length === 1
     ? options.find((o) => o.value === selectedValues[0])?.label || selectedValues[0]
     : `${selectedValues.length} Selected`;
@@ -93,7 +107,10 @@ function MultiSelectFilter({
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="h-8 w-full px-2.5 text-xs bg-input/40 border border-border rounded-md text-foreground flex items-center justify-between gap-1.5 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer hover:bg-accent/40"
+          className={cn(
+            "h-8 w-full px-2.5 text-xs bg-input/40 border rounded-md text-foreground flex items-center justify-between gap-1.5 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer hover:bg-accent/40 transition-colors",
+            !isAllDefault && "border-primary/50 text-primary font-bold bg-primary/5"
+          )}
         >
           <span className="truncate text-left font-medium">{displayText}</span>
           <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -102,25 +119,24 @@ function MultiSelectFilter({
         {open && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-            <div className="absolute left-0 top-9 z-50 w-56 p-2 bg-card border border-border rounded-lg shadow-xl text-xs space-y-1 max-h-64 overflow-y-auto">
+            <div className="absolute left-0 top-9 z-50 w-60 p-2 bg-card border border-border rounded-lg shadow-xl text-xs space-y-1 max-h-64 overflow-y-auto">
               <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-border/60 text-[11px]">
                 <button
                   type="button"
-                  onClick={() => onChange([])}
-                  className={cn(
-                    "text-xs font-semibold cursor-pointer",
-                    isAll ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground"
-                  )}
+                  onClick={handleSelectAllToggle}
+                  className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                 >
-                  All ({options.length})
+                  <CheckSquare className="h-3 w-3" />
+                  <span>{isAllSelected ? "Deselect All" : `Select All (${options.length})`}</span>
                 </button>
-                {selectedValues.length > 0 && (
+                {!isAllDefault && (
                   <button
                     type="button"
                     onClick={() => onChange([])}
-                    className="text-[10px] text-muted-foreground hover:text-destructive cursor-pointer"
+                    className="text-[10px] text-muted-foreground hover:text-rose-400 flex items-center gap-0.5 cursor-pointer"
                   >
-                    Clear Filter
+                    <RotateCcw className="h-2.5 w-2.5" />
+                    <span>Reset</span>
                   </button>
                 )}
               </div>
@@ -318,6 +334,26 @@ function ExportsPage() {
     ? !reportData?.rows.length
     : !reportData?.projectSummary?.length;
 
+  const isAnyFilterActive =
+    selectedTeamId !== "all" ||
+    selectedUserIds.length > 0 ||
+    selectedProjects.length > 0 ||
+    dateMode !== "month" ||
+    selectedMonth !== defaultMonth ||
+    Boolean(customFrom) ||
+    Boolean(customTo);
+
+  const handleClearAllFilters = () => {
+    setSelectedTeamId("all");
+    setSelectedUserIds([]);
+    setSelectedProjects([]);
+    setDateMode("month");
+    setSelectedMonth(defaultMonth);
+    setCustomFrom("");
+    setCustomTo("");
+    toast.success("All filters reset to default");
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-3 md:px-6 py-5 space-y-5">
       {/* Header */}
@@ -388,15 +424,28 @@ function ExportsPage() {
           <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-primary" /> Report Scope & Multi-Filters
           </h2>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={fetchReport}
-            disabled={loading}
-            className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground border border-border/40 hover:bg-accent"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5 mr-1", loading && "animate-spin")} /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAnyFilterActive && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleClearAllFilters}
+                className="h-7 px-2.5 text-xs text-rose-400 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300 transition-colors cursor-pointer"
+                title="Reset all filters to default"
+              >
+                <FilterX className="h-3.5 w-3.5 mr-1 text-rose-400" /> Clear All Filters
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={fetchReport}
+              disabled={loading}
+              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground border border-border/40 hover:bg-accent cursor-pointer"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5 mr-1", loading && "animate-spin")} /> Refresh
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-end gap-3.5">
@@ -527,12 +576,16 @@ function ExportsPage() {
             <span className="text-primary font-mono">{reportData?.meta.monthLabel ?? selectedMonth}</span>
           </div>
           {reportData?.meta && (
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground font-mono">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 text-[11px] text-muted-foreground font-mono">
               <span>Working Days: <strong className="text-foreground">{reportData.meta.totalWorkingDays}d</strong></span>
               <span>•</span>
-              <span>Total Hours: <strong className="text-foreground">{reportData.meta.totalWorkingHours}h</strong></span>
+              <span>Per Member: <strong className="text-foreground">{reportData.meta.totalWorkingHours}h</strong></span>
               <span>•</span>
               <span>Members: <strong className="text-foreground">{reportData.meta.totalMembers}</strong></span>
+              <span>•</span>
+              <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded border border-primary/20">
+                Team Gross Capacity: <strong className="text-primary font-bold">{reportData.meta.totalMembers * reportData.meta.totalWorkingHours}h</strong>
+              </span>
             </div>
           )}
         </div>
@@ -620,11 +673,11 @@ function ExportsPage() {
                   <HelpCircle className="h-3.5 w-3.5 text-primary shrink-0" />
                   <span>
                     <strong className="text-foreground font-sans font-medium">Resource FTE Formula:</strong>{" "}
-                    <code className="text-primary font-bold">Team Hours ÷ Total Working Hours</code> (e.g. 40.4h ÷ 168h = <strong className="text-emerald-400">0.2 FTE</strong>)
+                    <code className="text-primary font-bold">Team Logged Hours ÷ Per Member Month Hours</code> (e.g. 40.4h ÷ 168h = <strong className="text-emerald-400">0.2 FTE</strong>)
                   </span>
                 </div>
                 <span className="text-[10px] text-muted-foreground/80 font-sans hidden sm:inline">
-                  1.0 FTE = 1 Full-Time Employee for full month ({reportData?.meta.totalWorkingHours ?? 168}h)
+                  Team Gross Capacity: <strong className="text-foreground font-mono">{reportData?.meta ? reportData.meta.totalMembers * reportData.meta.totalWorkingHours : 2016}h</strong> ({reportData?.meta.totalMembers ?? 12} members × {reportData?.meta.totalWorkingHours ?? 168}h)
                 </span>
               </div>
             </>
