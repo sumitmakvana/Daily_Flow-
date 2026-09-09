@@ -317,20 +317,14 @@ function TeamCapacityPage() {
         return due < todayStr;
       });
 
-      // Active leave or WFH status for today (DB leaves/wfh or active task hold reason for today)
+      // Active leave or WFH status for today (DB leaves/wfh for today)
       const wfhRecord = activeLeavesToday.find(
         (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh"
       );
       const leaveRecord = activeLeavesToday.find(
         (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh"
       );
-      const leaveTask = memberTasks.find(
-        (t) =>
-          t.status === "On Hold" &&
-          ((t.hold_reason && t.hold_reason.toLowerCase().includes("leave")) || (t.status as string)?.toLowerCase().includes("leave")) &&
-          ((t.updated_at && formatToDateStr(t.updated_at) === todayStr) || (t.due_date && formatToDateStr(t.due_date) === todayStr))
-      );
-      const activeLeave = leaveRecord || (leaveTask ? { leave_type: leaveTask.hold_reason || "Casual" } : null);
+      const activeLeave = leaveRecord;
       const isOnLeave = !!activeLeave;
       const isWfh = !!wfhRecord;
 
@@ -1443,7 +1437,7 @@ function TeamCapacityPage() {
                           ) : item.isOnLeave ? (
                             <div className="p-2 rounded-lg bg-muted/30 border border-border/50 text-xs space-y-0.5">
                               <div className="font-semibold text-muted-foreground flex items-center gap-1 text-[11px]">
-                                <Palmtree className="h-3 w-3 text-amber-400/80" /> On Leave ({item.activeLeave?.leave_type?.toUpperCase() || "CASUAL"})
+                                <Palmtree className="h-3 w-3 text-amber-400/80" /> On Leave ({(item.activeLeave?.leave_type || "CASUAL").replace(/^on leave\s*/i, "").replace(/^\(|\)$/g, "").toUpperCase()})
                               </div>
                               <div className="text-[10px] text-muted-foreground/80 italic truncate">
                                 Timer & active tasks paused
