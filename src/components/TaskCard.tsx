@@ -3,6 +3,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -14,6 +21,11 @@ import {
   DropdownMenuSubContent,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Play,
   Pause,
@@ -34,6 +46,14 @@ import {
   ChevronUp,
   Paperclip,
   Image as ImageIcon,
+  Check,
+  Plus,
+  Flag,
+  X,
+  ChevronRight,
+  Mail,
+  MessageSquare,
+  UserCheck,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { PriorityBadge } from "./PriorityBadge";
@@ -44,6 +64,7 @@ import { CarryForwardBadge } from "./CarryForwardBadge";
 import { TaskHistorySheet } from "./TaskHistorySheet";
 import { WorkItemTypeBadge } from "./WorkItemTypeBadge";
 import { TaskFormDialog } from "./TaskFormDialog";
+import { TaskDetailModal } from "./TaskDetailModal";
 import { ImagePreviewModal } from "./ImagePreviewModal";
 import { ActiveTaskConflictModal } from "./ActiveTaskConflictModal";
 import { inlineCompleteStore } from "@/services/inline-complete-store";
@@ -97,28 +118,23 @@ export function TaskCard({
   const remaining = Math.max(0, planned - currentActual);
   const defaultFill = remaining > 0 ? remaining : planned > 0 ? planned : 1;
 
-  const [activeInlineId, setActiveInlineId] = useState(() => inlineCompleteStore.get());
-  useEffect(() => inlineCompleteStore.subscribe(() => setActiveInlineId(inlineCompleteStore.get())), []);
-
-  const isCompletingInline = activeInlineId === task.id;
-
+  const [completeModalOpen, setCompleteModalOpen] = useState(false);
   const [inlineHours, setInlineHours] = useState<string>("");
   const [inlineNote, setInlineNote] = useState<string>("");
   const [inlineBusy, setInlineBusy] = useState(false);
 
-  useEffect(() => {
-    if (isCompletingInline) {
-      const baseSys = Number((task as any).system_hours ?? 0);
-      const runningSys = (task as any).started_at 
-        ? Math.min(8.0, Math.max(0, (Date.now() - new Date((task as any).started_at).getTime()) / 3600000))
-        : 0;
-      const sysHrs = baseSys + runningSys;
-      const fillVal = sysHrs > 0 ? sysHrs : defaultFill;
-      setInlineHours(formatHoursMins(fillVal));
-    } else {
-      setInlineHours("");
-    }
-  }, [isCompletingInline, defaultFill]);
+  const openCompleteModal = () => {
+    const baseSys = Number((task as any).system_hours ?? 0);
+    const runningSys = (task as any).started_at
+      ? Math.min(8.0, Math.max(0, (Date.now() - new Date((task as any).started_at).getTime()) / 3600000))
+      : 0;
+    const sysHrs = baseSys + runningSys;
+    const fillVal = sysHrs > 0 ? sysHrs : defaultFill;
+    setInlineHours(formatHoursMins(fillVal));
+    setInlineNote("");
+    setCompleteModalOpen(true);
+  };
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [expandedRemarks, setExpandedRemarks] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -156,7 +172,7 @@ export function TaskCard({
         }
       }
       await tasksService.setStatus(task, s, userId, extras);
-      toast.success(`${task.task_code} → ${s}`);
+      toast.success(`${task.task_code} set to ${s}`);
       onChanged();
     } catch (e) {
       handleError(e);
@@ -173,10 +189,10 @@ export function TaskCard({
         return;
       }
       await tasksService.resumeTimer(task, userId);
-      toast.success(`${task.task_code || "Task"} started`);
-      onChanged?.();
-    } catch (err: any) {
-      handleError(err);
+      toast.success("Timer started");
+      onChanged();
+    } catch (e) {
+      handleError(e);
     }
   };
 
@@ -185,16 +201,18 @@ export function TaskCard({
     setSwitchBusy(true);
     try {
       await tasksService.switchActiveTask(existingActiveTask, task, userId);
-      toast.success(`Stopped ${existingActiveTask.task_code || "active task"} · Started ${task.task_code || "new task"}`);
-      onChanged?.();
-    } catch (err: any) {
-      handleError(err);
+      toast.success(`Stopped ${existingActiveTask.task_code} · Started ${task.task_code}`);
+      setConflictModalOpen(false);
+      onChanged();
+    } catch (e) {
+      handleError(e);
     } finally {
       setSwitchBusy(false);
     }
   };
 
   const handleInlineSubmit = async () => {
+    if (!userId) return;
     setInlineBusy(true);
     try {
       const hrs = parseHoursOrMins(inlineHours) || defaultFill;
@@ -203,7 +221,7 @@ export function TaskCard({
         await taskEodService.submit(task.id, "done", hrs, inlineNote.trim() || null);
       }
       toast.success(`${task.task_code} completed · ${formatHoursMins(hrs)} logged`);
-      inlineCompleteStore.close();
+      setCompleteModalOpen(false);
       onChanged();
     } catch (e) {
       handleError(e);
@@ -226,21 +244,194 @@ export function TaskCard({
     <>
       <Card
         className={cn(
-          "p-3 bg-card hover:bg-accent/30 transition-colors flex flex-col gap-3 items-stretch cursor-pointer",
-          overdue && "border-priority-high/40",
+          "group relative p-3 bg-[#1e1f23] hover:bg-[#25262c] border border-[#2b2c34] hover:border-[#3e414c] rounded-xl transition-all flex flex-col gap-2.5 items-stretch cursor-pointer shadow-xs",
+          overdue && "border-priority-high/40 bg-priority-high/[0.02]",
           needsSplit && "border-amber-500/80 bg-amber-500/[0.06] ring-1 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
         )}
         onClick={(e) => {
           const target = e.target as HTMLElement;
-          if (target.closest('button, input, a, [role="button"], [role="menuitem"], label')) {
+          if (target.closest('button, input, a, [role="button"], [role="menuitem"], label, [data-radix-popper-content-wrapper]')) {
             return;
           }
-          setHistoryOpen(true);
+          setDetailModalOpen(true);
         }}
       >
-        <div className="flex gap-3 items-start">
+        {/* Top-Right Hover Quick Action Bar (Matching Screenshots 1, 4, 5) */}
+        <div className="absolute right-2 top-2 flex items-center gap-1 bg-[#282930] p-1 rounded-lg border border-[#3b3c46] shadow-md z-20 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150">
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openCompleteModal();
+                  }}
+                  className="h-6 w-6 grid place-items-center rounded hover:bg-[#383a45] text-slate-300 hover:text-emerald-400 transition-colors"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-[#1e1f24] text-slate-100 border border-slate-700 text-[11px] font-medium py-1 px-2 z-50">
+                Mark complete
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Start/Resume or Pause Timer Button (replaces + button) */}
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (task.status === "In Progress" && task.started_at && userId) {
+                      try {
+                        await tasksService.pauseTimer(task, userId);
+                        toast.success("Timer paused");
+                        onChanged();
+                      } catch (err: any) {
+                        toast.error(err?.message || "Failed to pause timer");
+                      }
+                    } else {
+                      handleStartOrResumeWithCheck();
+                    }
+                  }}
+                  className={cn(
+                    "h-6 w-6 grid place-items-center rounded hover:bg-[#383a45] transition-colors",
+                    task.started_at ? "text-amber-400 hover:text-amber-300" : "text-blue-400 hover:text-blue-300"
+                  )}
+                >
+                  {task.started_at ? (
+                    <Pause className="h-3.5 w-3.5 fill-current" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-[#1e1f24] text-slate-100 border border-slate-700 text-[11px] font-medium py-1 px-2 z-50">
+                {task.started_at ? "Pause timer" : "Start timer"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFormOpen(true);
+                  }}
+                  className="h-6 w-6 grid place-items-center rounded hover:bg-[#383a45] text-slate-300 hover:text-amber-400 transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-[#1e1f24] text-slate-100 border border-slate-700 text-[11px] font-medium py-1 px-2 z-50">
+                Rename / Edit
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                className="h-6 w-6 grid place-items-center rounded hover:bg-[#383a45] text-slate-300 transition-colors"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-52 max-h-64 overflow-y-auto z-50">
+              <DropdownMenuItem onClick={() => setDetailModalOpen(true)}>
+                <FileText className="mr-2 h-3.5 w-3.5 text-[#5C8EFA]" /> View full details
+              </DropdownMenuItem>
+              {canAct && (
+                <DropdownMenuItem onClick={() => setFormOpen(true)}>
+                  <Pencil className="mr-2 h-3.5 w-3.5" /> Edit task
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => setDuplicateOpen(true)}>
+                <Copy className="mr-2 h-3.5 w-3.5" /> Duplicate task
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+                <History className="mr-2 h-3.5 w-3.5" /> History & comments
+              </DropdownMenuItem>
+              {canAct && task.status === "In Progress" && task.started_at && (
+                <DropdownMenuItem
+                  onClick={async () => {
+                    if (!userId) return;
+                    try {
+                      await tasksService.pauseTimer(task, userId);
+                      toast.success("Timer paused");
+                      onChanged?.();
+                    } catch (err: any) {
+                      toast.error(err?.message || "Failed to pause timer");
+                    }
+                  }}
+                >
+                  <Pause className="mr-2 h-3.5 w-3.5" /> Pause timer
+                </DropdownMenuItem>
+              )}
+              {canAct && task.status === "In Progress" && !task.started_at && (
+                <DropdownMenuItem onClick={() => handleStartOrResumeWithCheck()}>
+                  <Play className="mr-2 h-3.5 w-3.5" /> Resume timer
+                </DropdownMenuItem>
+              )}
+              {canAct && task.status !== "On Hold" && task.status !== "Completed" && (
+                <DropdownMenuItem onClick={() => setOnHoldOpen(true)}>
+                  <PauseCircle className="mr-2 h-3.5 w-3.5" /> Put on hold
+                </DropdownMenuItem>
+              )}
+              {canAct && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Send className="mr-2 h-3.5 w-3.5" /> Transfer to
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                      <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                        {profiles
+                          .filter((p) => p.id !== task.assigned_to)
+                          .map((p) => (
+                            <DropdownMenuItem key={p.id} onClick={() => transfer(p.id)}>
+                              <Send className="mr-2 h-3.5 w-3.5" /> {p.display_name}
+                            </DropdownMenuItem>
+                          ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                  </DropdownMenuSub>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      if (confirm("Are you sure you want to delete this task?")) {
+                        try {
+                          await tasksService.delete(task.id);
+                          toast.success("Task deleted successfully");
+                          onChanged();
+                        } catch (err) {
+                          toast.error((err as Error).message);
+                        }
+                      }
+                    }}
+                    className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete task
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="flex gap-2.5 items-start">
           {onSelectToggle && (
-            <div className="pt-1.5 shrink-0 flex items-center justify-center">
+            <div className="pt-1 shrink-0 flex items-center justify-center">
               <input
                 type="checkbox"
                 checked={selected}
@@ -252,421 +443,291 @@ export function TaskCard({
           
           {/* Main Content Area */}
           <div className="min-w-0 flex-1">
-            {/* Header Row: Code & Title & Dropdown */}
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setHistoryOpen(true)}>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-                  {rank !== undefined && (
-                    <span
-                      className={cn(
-                        "h-5 w-5 grid place-items-center rounded-full text-[10px] font-bold shrink-0",
-                        rank <= 3 ? "bg-primary text-primary-foreground font-mono font-sans" : "bg-muted text-muted-foreground font-mono font-sans"
-                      )}
+            {/* Header Row: Title */}
+            <div className="flex items-start justify-between gap-2 pr-24 transition-all">
+              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setDetailModalOpen(true)}>
+                <div className="flex items-start gap-1.5">
+                  <span className="text-sm shrink-0 select-none mt-0.5">
+                    {task.type_id ? "📝" : task.priority === "High" ? "⚡" : "📌"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      title={task.task_name}
+                      className="font-semibold text-slate-100 leading-snug hover:text-[#5C8EFA] transition-colors text-xs md:text-sm line-clamp-2"
                     >
-                      {rank}
-                    </span>
-                  )}
-                  <span>{task.task_code}</span>
-                </div>
-                <TooltipProvider delayDuration={100}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="mt-0.5 font-semibold text-foreground leading-tight truncate hover:text-primary transition-colors">
-                        {task.task_name}
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" align="start" className="max-w-md bg-slate-900 text-slate-100 border border-slate-700 font-medium text-xs py-1.5 px-2.5 shadow-xl z-50">
                       {task.task_name}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                {!compact && (task.client || task.project_name) && (
-                  <div className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-1">
-                    <span>
-                      {task.client}{task.client && task.project_name ? " · " : ""}{task.project_name}
-                    </span>
-                    {task.project_name?.includes("|") && (
-                      <TooltipProvider delayDuration={100}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="shrink-0 text-amber-500 cursor-help select-none font-bold text-xs">
-                              ⚠️
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent className="bg-amber-600 text-white border-none text-[10px] font-semibold py-1 px-2 rounded-md shadow-md">
-                            Needs Split
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                    </div>
+
+                    {!compact && (task.client || task.project_name) && (
+                      <div className="mt-0.5 text-[11px] text-slate-400 truncate">
+                        {task.client}{task.client && task.project_name ? " · " : ""}{task.project_name}
+                      </div>
                     )}
                   </div>
-                )}
+                </div>
               </div>
-              
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-11 w-11 md:h-9 md:w-9 shrink-0">
-                    <MoreHorizontal className="h-5 w-5 md:h-4 md:w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52 max-h-64 overflow-y-auto">
-                  {canAct && (
-                    <DropdownMenuItem onClick={() => setFormOpen(true)}>
-                      <Pencil className="mr-2 h-3.5 w-3.5" /> Edit task
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => setDuplicateOpen(true)}>
-                    <Copy className="mr-2 h-3.5 w-3.5" /> Duplicate task
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
-                    <History className="mr-2 h-3.5 w-3.5" /> History & comments
-                  </DropdownMenuItem>
-                  {canAct && task.status === "In Progress" && task.started_at && (
-                    <DropdownMenuItem
-                      onClick={async () => {
-                        if (!userId) return;
-                        try {
-                          await tasksService.pauseTimer(task, userId);
-                          toast.success("Timer paused");
-                          onChanged?.();
-                        } catch (err: any) {
-                          toast.error(err?.message || "Failed to pause timer");
-                        }
-                      }}
-                    >
-                      <Pause className="mr-2 h-3.5 w-3.5" /> Pause timer
-                    </DropdownMenuItem>
-                  )}
-                  {canAct && task.status === "In Progress" && !task.started_at && (
-                    <DropdownMenuItem onClick={() => handleStartOrResumeWithCheck()}>
-                      <Play className="mr-2 h-3.5 w-3.5" /> Resume timer
-                    </DropdownMenuItem>
-                  )}
-                  {canAct && task.status !== "On Hold" && task.status !== "Completed" && (
-                    <DropdownMenuItem onClick={() => setOnHoldOpen(true)}>
-                      <PauseCircle className="mr-2 h-3.5 w-3.5" /> Put on hold
-                    </DropdownMenuItem>
-                  )}
-                  {canAct && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                          <Send className="mr-2 h-3.5 w-3.5" /> Transfer to
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuPortal>
-                          <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
-                            {profiles
-                              .filter((p) => p.id !== task.assigned_to)
-                              .map((p) => (
-                                <DropdownMenuItem key={p.id} onClick={() => transfer(p.id)}>
-                                  <Send className="mr-2 h-3.5 w-3.5" /> {p.display_name}
-                                </DropdownMenuItem>
-                              ))}
-                          </DropdownMenuSubContent>
-                        </DropdownMenuPortal>
-                      </DropdownMenuSub>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          if (confirm("Are you sure you want to delete this task?")) {
-                            try {
-                              await tasksService.delete(task.id);
-                              toast.success("Task deleted successfully");
-                              onChanged();
-                            } catch (err) {
-                              toast.error((err as Error).message);
-                            }
-                          }
-                        }}
-                        className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
-                      >
-                        <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete task
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
 
-            {/* Badges/Meta row */}
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <WorkItemTypeBadge type={workItemTypes.find((t) => t.id === task.type_id)} compact />
-              <StatusBadge status={task.status} reason={task.hold_reason} />
-              <PriorityBadge priority={task.priority} />
-              {task.status === "Blocked" && <BlockerAge blockedAt={task.blocked_at} />}
-              <CarryForwardBadge count={task.carry_forward_count ?? 0} />
-              {task.due_date && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs",
-                    overdue
-                      ? "border-priority-high/40 text-priority-high bg-priority-high/10"
-                      : "border-border text-muted-foreground",
-                  )}
-                >
-                  <Clock className="h-3 w-3" />
-                  {formatDate(task.due_date)}
-                </span>
-              )}
-              <TaskHoursBadges task={task} />
-              {assignee && (
-                <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <UserIcon className="h-3 w-3" /> {assignee.display_name}
-                </span>
-              )}
-            </div>
-
-            {/* Blocker reason row */}
-            {task.status === "Blocked" && task.blocker_reason && (
-              <div className="mt-2 rounded-md border border-status-blocked/30 bg-status-blocked/5 px-2 py-1 text-xs text-status-blocked">
-                <strong className="font-medium">Blocked:</strong> {task.blocker_reason}
-              </div>
-            )}
-
-            {/* Remarks / Description preview with Expand/Collapse */}
+            {/* Description lines indicator (ClickUp style ≡) with Rich Popover Preview (Screenshot 3) */}
             {task.remarks && (
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setExpandedRemarks((prev) => !prev);
-                }}
-                className={cn(
-                  "mt-2 rounded-lg bg-secondary/50 hover:bg-secondary/70 border border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-all cursor-pointer select-text",
-                  expandedRemarks ? "bg-secondary/80 shadow-inner" : ""
-                )}
-                title={expandedRemarks ? "Click to collapse" : "Click to view full description"}
-              >
-                <div className="flex items-start gap-1.5">
-                  <FileText className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        "leading-relaxed whitespace-pre-wrap",
-                        expandedRemarks ? "text-foreground font-normal" : "line-clamp-2"
-                      )}
-                    >
-                      {task.remarks}
-                    </p>
-                  </div>
-                  {task.remarks.length > 60 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-200 select-none group/desc cursor-pointer"
+                  >
+                    <span className="font-bold tracking-tighter text-slate-400 group-hover/desc:text-[#5C8EFA]">≡</span>
+                    <span className="text-[10px] text-slate-400/80 line-clamp-1 group-hover/desc:text-slate-200 transition-colors">
+                      {task.remarks.slice(0, 40)}{task.remarks.length > 40 ? "..." : ""}
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-80 p-3.5 bg-[#141518] border border-[#2b2c34] shadow-2xl rounded-xl text-slate-100 text-xs space-y-2.5 z-50">
+                  <div className="font-semibold text-slate-200 flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span className="flex items-center gap-1.5 text-slate-300 font-medium">
+                      📝 Description
+                    </span>
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedRemarks((prev) => !prev);
-                      }}
-                      className="shrink-0 text-[10px] font-semibold text-primary hover:underline flex items-center gap-0.5 mt-0.5 ml-1 select-none"
+                      onClick={() => setDetailModalOpen(true)}
+                      className="text-[11px] text-[#5C8EFA] hover:underline font-medium"
                     >
-                      {expandedRemarks ? (
-                        <>Less <ChevronUp className="h-3 w-3" /></>
-                      ) : (
-                        <>More <ChevronDown className="h-3 w-3" /></>
-                      )}
+                      Full Details ↗
                     </button>
-                  )}
-                </div>
-              </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[#1b1c21] border border-slate-800 text-slate-200 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto font-sans text-xs">
+                    {task.remarks}
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
 
-            {/* Professional Visual Attachments Badge & Quick View */}
-            {attachments.length > 0 && (
-              <div className="mt-2 flex items-center gap-1.5 flex-wrap bg-slate-900/60 border border-slate-800 p-2 rounded-xl">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                  <Paperclip className="h-3 w-3 text-slate-400" />
-                  <span>Attachments ({attachments.length}):</span>
-                </span>
-                {attachments.map((att) => (
-                  <button
-                    key={att.id}
-                    type="button"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        const url = await attachmentsService.download(att);
-                        if (att.file_type?.startsWith("image/")) {
-                          setPreviewUrl(url);
-                          setPreviewFileName(att.file_name);
-                          setPreviewModalOpen(true);
-                        } else {
-                          window.open(url, "_blank", "noopener");
-                        }
-                      } catch (err) {
-                        toast.error((err as Error).message);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/60 bg-slate-800/70 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700 hover:text-slate-100 hover:border-slate-600 transition-all cursor-pointer shadow-xs"
-                    title={`Click to preview ${att.file_name}`}
-                  >
-                    <ImageIcon className="h-3 w-3 text-slate-400 shrink-0" />
-                    <span className="truncate max-w-[140px]">{att.file_name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Bottom Metadata Row (User Profile Popover, Due Date Tooltip, Priority Flag Popover) */}
+            <div className="mt-2 flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-slate-800/60">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* User Profile Card Popover (Screenshot 1) */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => e.stopPropagation()}
+                      className="relative shrink-0 group/avatar cursor-pointer"
+                    >
+                      <Avatar className="h-5 w-5 border border-slate-700 bg-slate-800 shrink-0">
+                        {assignee?.avatar_url ? (
+                          <AvatarImage src={assignee.avatar_url} />
+                        ) : (
+                          <AvatarFallback className="text-[9px] font-bold text-slate-200 bg-slate-700">
+                            {assignee ? assignee.display_name.slice(0, 2).toUpperCase() : "SM"}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-1 ring-[#1e1f23]" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-64 p-4 bg-[#141518] border border-[#2a2c34] shadow-2xl rounded-2xl space-y-3 z-50 text-slate-100">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-400">You</div>
+                        <div className="text-sm font-bold text-slate-100">{assignee?.display_name || "SUMIT MAKVANA"}</div>
+                      </div>
+                      <div className="relative">
+                        <Avatar className="h-10 w-10 border-2 border-slate-700 bg-slate-200 text-slate-900 text-sm font-bold flex items-center justify-center">
+                          {assignee ? assignee.display_name.slice(0, 2).toUpperCase() : "SM"}
+                        </Avatar>
+                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#141518]" />
+                      </div>
+                    </div>
 
-            {/* Action buttons row */}
-            {canAct && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {task.status !== "In Progress" && task.status !== "Completed" && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-11 md:h-8 px-3 text-xs flex-1 md:flex-none min-w-[88px]"
-                    onClick={() => setStatus("In Progress")}
-                  >
-                    <Play className="mr-1 h-3.5 w-3.5" /> Start
-                  </Button>
-                )}
-                {task.status === "In Progress" && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-11 md:h-8 px-3 text-xs flex-1 md:flex-none"
-                    onClick={() => setStatus("In Review")}
-                  >
-                    Send to review
-                  </Button>
-                )}
-                {task.status !== "Completed" && (
-                  <Button
-                    size="sm"
-                    className={cn(
-                      "h-11 md:h-8 px-3 text-xs flex-1 md:flex-none min-w-[88px] font-semibold transition-all cursor-pointer bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 shadow-xs",
-                      isCompletingInline && "bg-primary text-primary-foreground font-bold"
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      inlineCompleteStore.toggle(task.id);
-                    }}
-                  >
-                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Complete
-                  </Button>
-                )}
-                {task.status === "In Progress" && task.started_at && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none border-amber-500/30 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      if (!userId) return;
-                      try {
-                        await tasksService.pauseTimer(task, userId);
-                        toast.success("Timer paused");
-                        onChanged?.();
-                      } catch (err: any) {
-                        toast.error(err?.message || "Failed to pause timer");
-                      }
-                    }}
-                    title="Pause running timer"
-                  >
-                    <Pause className="mr-1 h-3.5 w-3.5" /> Pause Timer
-                  </Button>
-                )}
-                {task.status === "In Progress" && !task.started_at && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      handleStartOrResumeWithCheck();
-                    }}
-                    title="Resume running timer"
-                  >
-                    <Play className="mr-1 h-3.5 w-3.5" /> Resume Timer
-                  </Button>
-                )}
-                {task.status !== "On Hold" && task.status !== "Completed" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none min-w-[76px] border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent/40 cursor-pointer"
-                    onClick={() => setOnHoldOpen(true)}
-                  >
-                    <PauseCircle className="mr-1 h-3.5 w-3.5 text-amber-400/80" /> Hold
-                  </Button>
-                )}
-                {task.status !== "Blocked" && task.status !== "Completed" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-11 md:h-8 px-2.5 text-xs flex-1 md:flex-none min-w-[80px] border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent/40 cursor-pointer"
-                    onClick={() => setBlockOpen(true)}
-                  >
-                    <AlertOctagon className="mr-1 h-3.5 w-3.5 text-rose-400/80" /> Block
-                  </Button>
-                )}
-                {task.status === "Completed" && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-11 md:h-8 px-3 text-xs"
-                    onClick={() => setStatus("To Do")}
-                  >
-                    Reopen
-                  </Button>
-                )}
+                    <div className="space-y-1.5 text-xs text-slate-300">
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <Mail className="h-3.5 w-3.5" />
+                        <span className="truncate">{assignee?.email || "sumitmakvana535@gmail.com"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-400 font-mono text-[11px]">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} local time</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button size="sm" variant="outline" className="h-7 text-xs flex-1 bg-[#23252c] border-[#343742] text-slate-200 hover:bg-[#2c2e37]">
+                        <MessageSquare className="h-3 w-3 mr-1" /> Chat
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs flex-1 bg-[#23252c] border-[#343742] text-slate-200 hover:bg-[#2c2e37]">
+                        <UserIcon className="h-3 w-3 mr-1" /> View profile
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* ClickUp Date Picker Popover (Image 1) */}
+                <ClickUpDatePickerPopover
+                  task={task}
+                  userId={userId}
+                  overdue={overdue}
+                  onChanged={onChanged}
+                />
+
+                {/* Interactive Priority Flag Popover (Screenshot 3) */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium border bg-[#2b2d35] text-slate-300 border-slate-700/60 hover:bg-[#353842] transition-colors cursor-pointer"
+                    >
+                      <Flag className={cn(
+                        "h-3 w-3",
+                        task.priority === "High" ? "text-amber-400 fill-amber-400/20" : task.priority === "Low" ? "text-slate-400" : "text-blue-400 fill-blue-400/20"
+                      )} />
+                      <span>{task.priority}</span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-56 p-2 bg-[#1c1d22] border border-[#2e3038] shadow-2xl rounded-xl space-y-1 z-50">
+                    <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Priority
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        tasksService.setPriority(task, "High", userId);
+                        toast.success("Priority set to Urgent");
+                        onChanged();
+                      }}
+                      className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Flag className="h-3.5 w-3.5 text-rose-500 fill-rose-500/20" /> Urgent
+                      </span>
+                      {task.priority === "High" && <Check className="h-3.5 w-3.5 text-slate-200" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        tasksService.setPriority(task, "High", userId);
+                        toast.success("Priority set to High");
+                        onChanged();
+                      }}
+                      className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Flag className="h-3.5 w-3.5 text-amber-400 fill-amber-400/20" /> High
+                      </span>
+                      {task.priority === "High" && <Check className="h-3.5 w-3.5 text-slate-200" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        tasksService.setPriority(task, "Medium", userId);
+                        toast.success("Priority set to Normal");
+                        onChanged();
+                      }}
+                      className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Flag className="h-3.5 w-3.5 text-blue-400 fill-blue-400/20" /> Normal
+                      </span>
+                      {task.priority === "Medium" && <Check className="h-3.5 w-3.5 text-slate-200" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        tasksService.setPriority(task, "Low", userId);
+                        toast.success("Priority set to Low");
+                        onChanged();
+                      }}
+                      className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Flag className="h-3.5 w-3.5 text-slate-400" /> Low
+                      </span>
+                      {task.priority === "Low" && <Check className="h-3.5 w-3.5 text-slate-200" />}
+                    </button>
+
+                    <div className="pt-2 border-t border-[#2e3038] px-2 text-[11px] text-slate-400">
+                      <div className="mb-1">Add to Personal Priorities</div>
+                      <div className="flex items-center gap-1.5">
+                        <Avatar className="h-5 w-5 bg-slate-200 text-slate-900 font-bold text-[9px] flex items-center justify-center">
+                          <AvatarFallback className="text-[9px] font-bold text-slate-900">
+                            {assignee ? assignee.display_name.slice(0, 2).toUpperCase() : "SM"}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+
               </div>
-            )}
+
+              <div className="flex items-center gap-1 ml-auto">
+                <TaskHoursBadges task={task} />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Inline Task Completion & Hours Log Panel */}
-        {isCompletingInline && (
-          <div 
-            className="pt-3 border-t border-border/80 bg-muted/40 -mx-3 -mb-3 p-3 rounded-b-xl space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between text-xs flex-wrap gap-1">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Log Hours & Complete Task
-              </span>
-              <TaskHoursBadges task={task} variant="badges" />
-            </div>
+        {/* Complete Task Modal */}
+        <Dialog open={completeModalOpen} onOpenChange={(o) => { if (!inlineBusy) setCompleteModalOpen(o); }}>
+          <DialogContent hideCloseButton className="max-w-sm w-[92vw] p-0 bg-[#18191e] border border-[#2b2c34] shadow-2xl rounded-2xl overflow-hidden">
+            <div className="px-5 pt-5 pb-4 space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-100">Complete Task</div>
+                    <div className="text-[11px] text-slate-400 truncate max-w-[180px]">{task.task_name}</div>
+                  </div>
+                </div>
+                <TaskHoursBadges task={task} variant="badges" />
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2 items-center">
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground block mb-0.5">
-                  Today's Worked Hours:
+              {/* Hours Input */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block">
+                  Today's Worked Hours
                 </label>
                 <Input
                   type="text"
                   placeholder="e.g. 1.5, 45m, 1h 30m"
-                  className="h-8 text-xs font-bold text-primary bg-background border-border text-right focus-visible:ring-1 focus-visible:ring-primary"
+                  className="h-9 text-sm font-bold text-emerald-400 bg-[#111215] border-[#2b2c34] text-right focus-visible:ring-1 focus-visible:ring-emerald-500/50 placeholder:text-slate-600"
                   value={inlineHours}
                   onChange={(e) => setInlineHours(e.target.value)}
                   disabled={inlineBusy}
+                  autoFocus
                 />
               </div>
 
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground block mb-0.5">
-                  Remarks / Note (Optional):
+              {/* Note Input */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block">
+                  Note <span className="normal-case font-normal text-slate-500">(optional)</span>
                 </label>
                 <Input
                   type="text"
-                  placeholder="Optional remarks..."
-                  className="h-8 text-xs bg-background border-border"
+                  placeholder="Add a quick note..."
+                  className="h-9 text-xs bg-[#111215] border-[#2b2c34] text-slate-200 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-slate-500/50"
                   value={inlineNote}
                   onChange={(e) => setInlineNote(e.target.value)}
                   disabled={inlineBusy}
                 />
               </div>
-            </div>
 
-            <div className="flex items-center justify-end pt-1 flex-wrap gap-2">
-              <div className="flex items-center gap-1.5 ml-auto">
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-1">
                 <Button
-                  size="sm"
                   variant="ghost"
+                  size="sm"
                   disabled={inlineBusy}
-                  onClick={() => inlineCompleteStore.close()}
-                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setCompleteModalOpen(false)}
+                  className="flex-1 h-9 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#23242a] border border-[#2b2c34]"
                 >
                   Cancel
                 </Button>
@@ -674,15 +735,15 @@ export function TaskCard({
                   size="sm"
                   disabled={inlineBusy}
                   onClick={handleInlineSubmit}
-                  className="h-7 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white gap-1 shadow-sm"
+                  className="flex-1 h-9 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm"
                 >
-                  {inlineBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                  {inlineBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                   Save & Complete
                 </Button>
               </div>
             </div>
-          </div>
-        )}
+          </DialogContent>
+        </Dialog>
       </Card>
 
       <BlockerDialog
@@ -758,6 +819,260 @@ export function TaskCard({
         onConfirm={handleConfirmSwitch}
         isSubmitting={switchBusy}
       />
+
+      <TaskDetailModal
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        task={task}
+        assignedProfile={assignee}
+        profiles={profiles}
+        onEditTask={() => {
+          setDetailModalOpen(false);
+          setTimeout(() => setFormOpen(true), 150);
+        }}
+        onTaskUpdated={onChanged}
+      />
     </>
+  );
+}
+
+function ClickUpDatePickerPopover({
+  task,
+  userId,
+  overdue,
+  onChanged,
+}: {
+  task: Task;
+  userId: string;
+  overdue: boolean;
+  onChanged: () => void;
+}) {
+  const initialDate = task.due_date ? new Date(task.due_date) : new Date();
+  const [viewDate, setViewDate] = useState<Date>(initialDate);
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth(); // 0-11
+  const monthName = viewDate.toLocaleString("default", { month: "long" });
+
+  const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const today = new Date();
+  const isCurrentMonthToday =
+    today.getFullYear() === year && today.getMonth() === month;
+  const todayDay = today.getDate();
+
+  const selectedDate = task.due_date ? new Date(task.due_date) : null;
+  const isSelectedMonth =
+    selectedDate &&
+    selectedDate.getFullYear() === year &&
+    selectedDate.getMonth() === month;
+  const selectedDay = selectedDate ? selectedDate.getDate() : null;
+
+  const handlePrevMonth = () => {
+    setViewDate(new Date(year, month - 1, 1));
+  };
+  const handleNextMonth = () => {
+    setViewDate(new Date(year, month + 1, 1));
+  };
+  const handleJumpToday = () => {
+    setViewDate(new Date());
+  };
+
+  const setDueDate = async (dateObj: Date | null, label: string) => {
+    const iso = dateObj ? dateObj.toISOString().slice(0, 10) : null;
+    await tasksService.update(task, { due_date: iso }, userId);
+    toast.success(dateObj ? `Due date set to ${label}` : "Due date cleared");
+    onChanged();
+  };
+
+  const getPresetDate = (type: string) => {
+    const d = new Date();
+    if (type === "later") {
+      return { date: d, label: "Today" };
+    } else if (type === "tomorrow") {
+      d.setDate(d.getDate() + 1);
+      return { date: d, label: "Tomorrow" };
+    } else if (type === "weekend") {
+      const day = d.getDay();
+      const diff = (6 - day + 7) % 7 || 7;
+      d.setDate(d.getDate() + diff);
+      return { date: d, label: "This weekend" };
+    } else if (type === "nextweek") {
+      const day = d.getDay();
+      const diff = (1 - day + 7) % 7 || 7;
+      d.setDate(d.getDate() + diff);
+      return { date: d, label: "Next week" };
+    } else if (type === "nextweekend") {
+      const day = d.getDay();
+      const diff = ((6 - day + 7) % 7 || 7) + 7;
+      d.setDate(d.getDate() + diff);
+      return { date: d, label: "Next weekend" };
+    } else if (type === "2weeks") {
+      d.setDate(d.getDate() + 14);
+      return { date: d, label: "2 weeks" };
+    } else if (type === "4weeks") {
+      d.setDate(d.getDate() + 28);
+      return { date: d, label: "4 weeks" };
+    }
+    return { date: d, label: "" };
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium border transition-colors cursor-pointer",
+            overdue
+              ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+              : "bg-[#2b2d35] text-slate-300 border-slate-700/60 hover:bg-[#353842]"
+          )}
+        >
+          <Clock className="h-3 w-3 opacity-70" />
+          <span>{task.due_date ? formatDate(task.due_date) : "Due Date"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={8}
+        collisionPadding={16}
+        avoidCollisions={true}
+        className="w-[450px] p-3 bg-[#18191d] border border-[#2b2d35] shadow-2xl rounded-2xl z-50 text-slate-100 space-y-2.5 max-h-[85vh] overflow-y-auto"
+      >
+        {/* Top Header Bar Inputs (Image 1) */}
+        <div className="flex items-center gap-2 text-xs">
+          <div className="flex-1 relative">
+            <Input
+              placeholder="Start date"
+              className="h-7.5 text-xs pl-7 bg-[#222329] border-[#31333d] text-slate-200 placeholder:text-slate-500 rounded-lg focus:border-slate-500"
+            />
+            <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#222329] border-2 border-slate-100 text-xs font-semibold text-slate-100 shadow-xs">
+            <Clock className="h-3.5 w-3.5 text-slate-300" />
+            <span>{task.due_date ? formatDate(task.due_date) : "Due date"}</span>
+            {task.due_date && (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  await setDueDate(null, "");
+                }}
+                className="ml-1 text-slate-400 hover:text-slate-100 p-0.5 rounded-full hover:bg-slate-700/50"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Split 2-Pane Presets & Calendar Body (Image 1) */}
+        <div className="grid grid-cols-12 divide-x divide-[#2b2d35] text-xs pt-0.5">
+          {/* Left Pane Presets */}
+          <div className="col-span-5 pr-2.5 space-y-0.5">
+            {[
+              { id: "tomorrow", label: "Tomorrow", hint: "Thu" },
+              { id: "weekend", label: "This weekend", hint: "Sat" },
+              { id: "nextweek", label: "Next week", hint: "Mon" },
+              { id: "nextweekend", label: "Next weekend", hint: "19 Sep" },
+              { id: "2weeks", label: "2 weeks", hint: "23 Sep" },
+              { id: "4weeks", label: "4 weeks", hint: "7 Oct" },
+            ].map((pr) => {
+              const { date, label } = getPresetDate(pr.id);
+              return (
+                <button
+                  key={pr.id}
+                  type="button"
+                  onClick={() => setDueDate(date, label)}
+                  className="w-full flex items-center justify-between px-2 py-1 rounded-lg hover:bg-[#25262d] text-slate-300 text-left transition-colors cursor-pointer text-xs"
+                >
+                  <span className="font-medium">{pr.label}</span>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    {pr.hint}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right Pane Month Calendar (Image 1) */}
+          <div className="col-span-7 pl-2.5 space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+              <span>
+                {monthName} {year}
+              </span>
+              <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400">
+                <button
+                  type="button"
+                  onClick={handleJumpToday}
+                  className="hover:text-slate-100 cursor-pointer font-medium px-1"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  className="p-1 hover:text-slate-100"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  className="p-1 hover:text-slate-100"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] font-semibold text-slate-400">
+              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                <div key={day} className="py-0.5">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-0.5 text-center text-xs">
+              {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+                <div key={`empty-${i}`} className="h-6.5 w-6.5" />
+              ))}
+
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                const isTodayDate = isCurrentMonthToday && d === todayDay;
+                const isSelected = isSelectedMonth && d === selectedDay;
+
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      const target = new Date(year, month, d);
+                      setDueDate(target, `${monthName.slice(0, 3)} ${d}`);
+                    }}
+                    className={cn(
+                      "h-6.5 w-6.5 rounded-full flex items-center justify-center font-medium transition-colors mx-auto cursor-pointer text-xs",
+                      isSelected
+                        ? "bg-slate-100 text-slate-900 font-bold shadow-md rounded-lg"
+                        : isTodayDate
+                        ? "bg-rose-500 text-white font-bold rounded-full shadow-sm"
+                        : "hover:bg-[#282a32] text-slate-300"
+                    )}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -20,6 +20,8 @@ import {
   GripVertical,
   Inbox,
   Info,
+  LayoutGrid,
+  List,
   ListChecks,
   Plus,
   RotateCcw,
@@ -34,6 +36,7 @@ import { TaskQuickActionModal } from "@/components/TaskQuickActionModal";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { MyTodayWorkSummaryCard } from "@/components/MyTodayWorkSummaryCard";
 import { TaskCard } from "@/components/TaskCard";
+import { KanbanBoard } from "@/components/KanbanBoard";
 import { EodReminder } from "@/components/EodReminder";
 import {
   Dialog,
@@ -125,6 +128,8 @@ function MyDayPage() {
 
   // Active Tab state (priority | tasks | summary | risks)
   const [activeTab, setActiveTab] = useState<string>(queryTab || "priority");
+  // View mode state (board | list)
+  const [viewMode, setViewMode] = useState<"board" | "list">("board");
 
   // Raw tasks & profiles for TaskCard list views
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -346,7 +351,7 @@ function MyDayPage() {
   const activeWorkTodayCount = today.length + blocked.length + pending.length;
 
   return (
-    <div className="p-3 md:p-6 max-w-5xl mx-auto space-y-4">
+    <div className="p-3 md:p-6 max-w-7xl mx-auto space-y-4">
       {/* Header Bar */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
         <div className="min-w-0">
@@ -362,6 +367,34 @@ function MyDayPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {/* Board / List View Mode Toggle */}
+          <div className="flex items-center p-0.5 rounded-lg bg-muted border border-border">
+            <button
+              type="button"
+              onClick={() => setViewMode("board")}
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer",
+                viewMode === "board"
+                  ? "bg-card text-foreground shadow-xs border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> Board
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer",
+                viewMode === "list"
+                  ? "bg-card text-foreground shadow-xs border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <List className="h-3.5 w-3.5" /> List
+            </button>
+          </div>
+
           <Button
             size="sm"
             className="h-8 md:h-9 gap-1.5 font-medium shadow-sm"
@@ -388,284 +421,134 @@ function MyDayPage() {
         </div>
       </header>
 
-      {/* EOD Reminder Banner (if active tasks or pending submission) */}
-      {user && (
-        <EodReminder
-          tasks={tasks}
-          userId={user.id}
-          onDone={() => {
-            loadTasks();
-            q.refetch();
-          }}
-        />
-      )}
 
-      {/* Main Tabbed Navigation prominently at the top */}
+
+      {/* Main Tabbed Navigation — ClickUp-style compact tab bar */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        {/* Modern high-visibility segmented tab bar */}
-        <TabsList className="w-full grid grid-cols-2 md:grid-cols-4 h-auto p-1.5 bg-muted/80 backdrop-blur border border-border/80 rounded-xl gap-1.5 shadow-sm">
-          <TabsTrigger
-            value="priority"
-            className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-medium text-xs sm:text-sm transition-all cursor-pointer data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=active]:border-primary/40 data-[state=active]:border"
-          >
-            <div className="p-1 rounded-md bg-priority-high/15 text-priority-high shrink-0">
-              <Flame className="h-4 w-4" />
-            </div>
-            <div className="text-left min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold truncate">Priority Flow</span>
-                {d && d.priorities.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono font-bold shrink-0">
-                    {d.priorities.length}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-[10px] text-muted-foreground hidden sm:block truncate">Suggested order</p>
-            </div>
-          </TabsTrigger>
+        <div className="border-b border-[#2b2c34]">
+          <TabsList className="h-auto p-0 bg-transparent gap-0 rounded-none flex w-auto justify-start overflow-x-auto">
+            <TabsTrigger
+              value="priority"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
+            >
+              <Flame className="h-3.5 w-3.5 text-rose-400" />
+              <span>Priority Flow</span>
+              {d && d.priorities.length > 0 && (
+                <span className="ml-0.5 text-[10px] font-mono font-bold bg-[#2b2c34] text-slate-300 rounded px-1 py-0 leading-4">
+                  {d.priorities.length}
+                </span>
+              )}
+            </TabsTrigger>
 
-          <TabsTrigger
-            value="tasks"
-            className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-medium text-xs sm:text-sm transition-all cursor-pointer data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=active]:border-primary/40 data-[state=active]:border"
-          >
-            <div className="p-1 rounded-md bg-primary/15 text-primary shrink-0">
-              <ListChecks className="h-4 w-4" />
-            </div>
-            <div className="text-left min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold truncate">Work Today</span>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono font-bold shrink-0">
-                  {activeWorkTodayCount}
-                </Badge>
-              </div>
-              <p className="text-[10px] text-muted-foreground hidden sm:block truncate">All task cards</p>
-            </div>
-          </TabsTrigger>
+            <div className="w-px h-4 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
 
-          <TabsTrigger
-            value="summary"
-            className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-medium text-xs sm:text-sm transition-all cursor-pointer data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=active]:border-amber-500/40 data-[state=active]:border"
-          >
-            <div className="p-1 rounded-md bg-amber-500/15 text-amber-500 shrink-0">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-            <div className="text-left min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold truncate">Progress & Recap</span>
-              </div>
-              <p className="text-[10px] text-muted-foreground hidden sm:block truncate">Chart & daily note</p>
-            </div>
-          </TabsTrigger>
+            <TabsTrigger
+              value="tasks"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
+            >
+              <ListChecks className="h-3.5 w-3.5 text-blue-400" />
+              <span>Work Today</span>
+              <span className="ml-0.5 text-[10px] font-mono font-bold bg-[#2b2c34] text-slate-300 rounded px-1 py-0 leading-4">
+                {activeWorkTodayCount}
+              </span>
+            </TabsTrigger>
 
-          <TabsTrigger
-            value="risks"
-            className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-medium text-xs sm:text-sm transition-all cursor-pointer data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=active]:border-destructive/40 data-[state=active]:border"
-          >
-            <div className="p-1 rounded-md bg-destructive/15 text-destructive shrink-0">
-              <AlertTriangle className="h-4 w-4" />
-            </div>
-            <div className="text-left min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold truncate">Risks & Approvals</span>
-                {d && totalRisks + d.approvals_pending.length > 0 && (
-                  <Badge
-                    variant={
-                      d.risks.overdue.length > 0 || d.risks.high_severity.length > 0
-                        ? "destructive"
-                        : "secondary"
-                    }
-                    className="text-[10px] px-1.5 py-0 h-4 font-mono font-bold shrink-0"
-                  >
-                    {totalRisks + d.approvals_pending.length}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-[10px] text-muted-foreground hidden sm:block truncate">Blockers & reviews</p>
-            </div>
-          </TabsTrigger>
-        </TabsList>
+            <div className="w-px h-4 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
 
-        {/* Workload + EOD preview metrics (Visible across daily focus) */}
-        {d && (
-          <TooltipProvider>
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              {/* Today's Workload Card */}
-              <Card className="col-span-2 sm:col-span-1 border-border/80 bg-card shadow-sm hover:border-border transition-all">
-                <CardHeader className="pb-2 pt-3 px-4 flex flex-row items-center justify-between space-y-0">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-4 w-4 text-primary" />
-                    <CardTitle className="text-sm font-semibold text-foreground">
-                      Today's Workload
-                    </CardTitle>
-                  </div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded cursor-help"
-                      >
-                        <Info className="h-3.5 w-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs max-w-xs">
-                      Total estimated hours for today's tasks vs. your daily capacity ({d.workload.capacity_hours}h standard).
-                    </TooltipContent>
-                  </Tooltip>
-                </CardHeader>
-                <CardContent className="px-4 pb-3 pt-0 space-y-2.5">
-                  <div className="flex items-baseline justify-between">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl font-bold tracking-tight text-foreground">
-                        {d.workload.planned_hours}h
-                      </span>
-                      <span className="text-xs text-muted-foreground">planned</span>
-                    </div>
-                    <span className="text-xs font-mono text-muted-foreground">
-                      of {d.workload.capacity_hours}h capacity ({utilPct}%)
-                    </span>
-                  </div>
+            <TabsTrigger
+              value="summary"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
+            >
+              <TrendingUp className="h-3.5 w-3.5 text-amber-400" />
+              <span>Progress & Recap</span>
+            </TabsTrigger>
 
-                  <Progress value={utilPct} className="h-2 bg-secondary" />
+            <div className="w-px h-4 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
 
-                  <div className="flex items-center justify-between text-xs pt-0.5">
-                    <span className="text-muted-foreground">
-                      Remaining:{" "}
-                      <span className="text-foreground font-semibold">
-                        {d.workload.remaining_hours}h
-                      </span>
-                    </span>
-
-                    {/* Interactive Completed Work Button */}
-                    <button
-                      type="button"
-                      onClick={() => setCompletedModalOpen(true)}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/25 transition-all cursor-pointer group"
-                      title="Click to view work completed today"
-                    >
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                      <span>{completedToday.length} done today</span>
-                      <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                    </button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* End-of-Day Preview Card */}
-              <Card className="col-span-2 sm:col-span-1 border-border/80 bg-card shadow-sm hover:border-border transition-all">
-                <CardHeader className="pb-2 pt-3 px-4 flex flex-row items-center justify-between space-y-0">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <CardTitle className="text-sm font-semibold text-foreground">
-                      End-of-Day Preview
-                    </CardTitle>
-                  </div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded cursor-help"
-                      >
-                        <Info className="h-3.5 w-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs max-w-xs">
-                      Expected completion rate based on on-track priorities and finished tasks today.
-                    </TooltipContent>
-                  </Tooltip>
-                </CardHeader>
-                <CardContent className="px-4 pb-3 pt-0 space-y-2.5">
-                  <div className="flex items-baseline justify-between">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl font-bold tracking-tight text-foreground">
-                        {d.eod_preview.expected_completion_pct}%
-                      </span>
-                      <span className="text-xs text-muted-foreground">expected on-track</span>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] h-5 px-1.5 font-medium border-border",
-                        d.eod_preview.expected_completion_pct >= 80
-                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
-                          : "bg-primary/10 text-primary border-primary/30",
-                      )}
-                    >
-                      {d.eod_preview.expected_completion_pct >= 80 ? "On Track" : "In Progress"}
-                    </Badge>
-                  </div>
-
-                  <Progress
-                    value={d.eod_preview.expected_completion_pct}
-                    className="h-2 bg-secondary"
-                  />
-
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-0.5">
-                    <span>
-                      {d.eod_preview.expected_done} of {d.eod_preview.open_today} open tasks on track
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleTabChange("tasks")}
-                      className="text-primary hover:underline font-medium text-[11px] flex items-center gap-0.5 cursor-pointer"
-                    >
-                      View tasks <ArrowUpRight className="h-3 w-3" />
-                    </button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TooltipProvider>
-        )}
+            <TabsTrigger
+              value="risks"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+              <span>Risks & Approvals</span>
+              {d && totalRisks + d.approvals_pending.length > 0 && (
+                <span className={cn(
+                  "ml-0.5 text-[10px] font-mono font-bold rounded px-1 py-0 leading-4",
+                  d.risks.overdue.length > 0 || d.risks.high_severity.length > 0
+                    ? "bg-destructive/20 text-destructive"
+                    : "bg-[#2b2c34] text-slate-300"
+                )}>
+                  {totalRisks + d.approvals_pending.length}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* TAB 1: PRIORITY FLOW */}
         <TabsContent value="priority" className="space-y-4 focus-visible:outline-none">
-          <Card className="border-border shadow-sm">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-1.5">
-                <Flame className="h-4 w-4 text-priority-high" /> Today's priorities — suggested
-                execution order
-              </CardTitle>
-              <span className="text-xs text-muted-foreground">
-                Click task for fast update & timer
-              </span>
-            </CardHeader>
-            <CardContent className="p-0">
-              {!d || d.priorities.length === 0 ? (
-                <EmptyRow
-                  icon={<CheckCircle2 className="h-5 w-5" />}
-                  text="Nothing on your plate. Enjoy the calm."
-                />
-              ) : (
-                <div className="p-3 space-y-2.5">
-                  {d.priorities.map((item, idx) => {
-                    const rawTask = tasks.find((t) => t.id === item.id);
-                    if (rawTask) {
+          {viewMode === "board" ? (
+            <KanbanBoard
+              tasks={tasks}
+              profiles={profiles}
+              userId={user?.id || ""}
+              isManager={isManager}
+              onChanged={handleRealtimeChange}
+              onAddTask={(initialStatus) => {
+                setIsCreatingNew(true);
+                setEditingTask(initialStatus ? ({ status: initialStatus } as any) : null);
+                setFormOpen(true);
+              }}
+            />
+          ) : (
+            <Card className="border-border shadow-sm">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <Flame className="h-4 w-4 text-priority-high" /> Today's priorities — suggested
+                  execution order
+                </CardTitle>
+                <span className="text-xs text-muted-foreground">
+                  Click task for fast update & timer
+                </span>
+              </CardHeader>
+              <CardContent className="p-0">
+                {!d || d.priorities.length === 0 ? (
+                  <EmptyRow
+                    icon={<CheckCircle2 className="h-5 w-5" />}
+                    text="Nothing on your plate. Enjoy the calm."
+                  />
+                ) : (
+                  <div className="p-3 space-y-2.5">
+                    {d.priorities.map((item, idx) => {
+                      const rawTask = tasks.find((t) => t.id === item.id);
+                      if (rawTask) {
+                        return (
+                          <TaskCard
+                            key={item.id}
+                            task={rawTask}
+                            rank={idx + 1}
+                            assignee={profiles.find((p) => p.id === rawTask.assigned_to)}
+                            profiles={profiles}
+                            userId={user?.id || ""}
+                            canManage={isManager}
+                            onChanged={handleRealtimeChange}
+                          />
+                        );
+                      }
                       return (
-                        <TaskCard
+                        <PriorityRow
                           key={item.id}
-                          task={rawTask}
                           rank={idx + 1}
-                          assignee={profiles.find((p) => p.id === rawTask.assigned_to)}
-                          profiles={profiles}
-                          userId={user?.id || ""}
-                          canManage={isManager}
-                          onChanged={handleRealtimeChange}
+                          item={item}
+                          onTaskClick={handleTaskClick}
                         />
                       );
-                    }
-                    return (
-                      <PriorityRow
-                        key={item.id}
-                        rank={idx + 1}
-                        item={item}
-                        onTaskClick={handleTaskClick}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Inline mini-risks card if there are overdue items */}
           {d && d.risks.overdue.length > 0 && (
@@ -688,51 +571,76 @@ function MyDayPage() {
           )}
         </TabsContent>
 
-        {/* TAB 2: ALL WORK TODAY (FULL TASK CARDS) */}
+        {/* TAB 2: ALL WORK TODAY (FULL TASK CARDS / KANBAN BOARD) */}
         <TabsContent value="tasks" className="space-y-6 focus-visible:outline-none">
           {user && (
-            <>
-              <TaskSection
-                title="Today & overdue"
-                items={today}
-                tone="text-destructive font-semibold"
+            viewMode === "board" ? (
+              <KanbanBoard
+                tasks={tasks}
                 profiles={profiles}
                 userId={user.id}
                 isManager={isManager}
                 onChanged={handleRealtimeChange}
+                onAddTask={(initialStatus) => {
+                  setIsCreatingNew(true);
+                  setEditingTask(initialStatus ? ({ status: initialStatus } as any) : null);
+                  setFormOpen(true);
+                }}
               />
-              <TaskSection
-                title="Blocked"
-                items={blocked}
-                tone="text-amber-500 font-semibold"
-                profiles={profiles}
-                userId={user.id}
-                isManager={isManager}
-                onChanged={handleRealtimeChange}
-              />
-              <TaskSection
-                title="Pending"
-                items={pending}
-                profiles={profiles}
-                userId={user.id}
-                isManager={isManager}
-                onChanged={handleRealtimeChange}
-              />
-              <TaskSection
-                title="Completed today"
-                items={completedToday}
-                tone="text-emerald-500 font-semibold"
-                profiles={profiles}
-                userId={user.id}
-                isManager={isManager}
-                onChanged={handleRealtimeChange}
-              />
-            </>
+            ) : (
+              <>
+                <TaskSection
+                  title="Today & overdue"
+                  items={today}
+                  tone="text-destructive font-semibold"
+                  profiles={profiles}
+                  userId={user.id}
+                  isManager={isManager}
+                  onChanged={handleRealtimeChange}
+                />
+                <TaskSection
+                  title="Blocked"
+                  items={blocked}
+                  tone="text-amber-500 font-semibold"
+                  profiles={profiles}
+                  userId={user.id}
+                  isManager={isManager}
+                  onChanged={handleRealtimeChange}
+                />
+                <TaskSection
+                  title="Pending"
+                  items={pending}
+                  profiles={profiles}
+                  userId={user.id}
+                  isManager={isManager}
+                  onChanged={handleRealtimeChange}
+                />
+                <TaskSection
+                  title="Completed today"
+                  items={completedToday}
+                  tone="text-emerald-500 font-semibold"
+                  profiles={profiles}
+                  userId={user.id}
+                  isManager={isManager}
+                  onChanged={handleRealtimeChange}
+                />
+              </>
+            )
           )}
         </TabsContent>
 
         {/* TAB 3: PROGRESS & RECAP */}
         <TabsContent value="summary" className="space-y-4 focus-visible:outline-none">
+          {user && (
+            <EodReminder
+              tasks={tasks}
+              userId={user.id}
+              onDone={() => {
+                loadTasks();
+                q.refetch();
+              }}
+            />
+          )}
           <MyTodayWorkSummaryCard
             tasks={d?.priorities || []}
             userName={profile?.display_name || undefined}
