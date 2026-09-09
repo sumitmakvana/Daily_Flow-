@@ -51,9 +51,11 @@ export async function checkIsWorkingDayServer(dateStr?: string): Promise<Working
     );
 
     if (customHolidays && customHolidays.length > 0) {
-      const match = customHolidays.find(
-        (h) => (h.calendar_date || "").slice(0, 10) === targetDateStr
-      );
+      const match = customHolidays.find((h) => {
+        const raw: unknown = h.calendar_date;
+        const str = typeof raw === "string" ? raw : (raw instanceof Date ? raw.toISOString() : String(raw || ""));
+        return str.slice(0, 10) === targetDateStr;
+      });
       if (match) {
         return {
           isWorkingDay: false,

@@ -15,7 +15,7 @@ import { TaskCard } from "@/components/TaskCard";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter, Palmtree, Home, Check, X, Trash2, Pencil, Building2 } from "lucide-react";
 import type { Profile, Task, Leave, HolidayCalendar } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { getLocalHoliday, fetchIndianHolidays, toLocalISO, type Holiday } from "@/lib/format";
+import { getLocalHoliday, fetchIndianHolidays, toLocalISO, getHolidayDateStr, type Holiday } from "@/lib/format";
 import { statusColor, leaveColor, leaveDot, priorityDot } from "@/lib/colors";
 import { toast } from "sonner";
 
@@ -866,9 +866,10 @@ function CalendarPage() {
                 <div className="divide-y divide-border/40">
                   {customHolidays.map((h) => {
                     let dayName = "";
-                    let formatted = h.calendar_date;
+                    const dateStr = getHolidayDateStr(h).slice(0, 10);
+                    let formatted = dateStr;
                     try {
-                      const [y, m, d] = h.calendar_date.split("-").map(Number);
+                      const [y, m, d] = dateStr.split("-").map(Number);
                       const dt = new Date(y, m - 1, d);
                       dayName = dt.toLocaleDateString("en-US", { weekday: "short" });
                       formatted = dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });

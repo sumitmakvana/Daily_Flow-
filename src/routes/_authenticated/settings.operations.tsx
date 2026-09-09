@@ -74,15 +74,16 @@ const CURATED_HOLIDAYS_BY_YEAR: Record<number, Array<{ date: string; label: stri
   ],
 };
 
-function formatHolidayDate(dateStr: string) {
+function formatHolidayDate(dateStr: unknown) {
   try {
-    const [y, m, d] = dateStr.split("-").map(Number);
+    const raw = typeof dateStr === "string" ? dateStr : (dateStr instanceof Date ? dateStr.toISOString() : String(dateStr || ""));
+    const [y, m, d] = raw.slice(0, 10).split("-").map(Number);
     const date = new Date(y, m - 1, d);
     const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
     const formatted = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     return { dayName, formatted };
   } catch (e) {
-    return { dayName: "", formatted: dateStr };
+    return { dayName: "", formatted: String(dateStr || "") };
   }
 }
 

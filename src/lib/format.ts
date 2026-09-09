@@ -54,6 +54,20 @@ export function nextWorkingDay(fromISO?: string): string {
   return new Date(base.getTime() - tz).toISOString().slice(0, 10);
 }
 
+export function getHolidayDateStr(h: { calendar_date?: unknown; date?: unknown } | null | undefined): string {
+  if (!h) return "";
+  const raw = h.calendar_date ?? h.date;
+  if (!raw) return "";
+  if (typeof raw === "string") return raw;
+  if (raw instanceof Date) return raw.toISOString();
+  if (typeof raw === "object" && raw !== null) {
+    const obj = raw as Record<string, unknown>;
+    if (typeof obj.calendar_date === "string") return obj.calendar_date;
+    if (typeof obj.date === "string") return obj.date;
+  }
+  return String(raw || "");
+}
+
 /**
  * Calculates the default start date:
  * Returns the current date (today), or if today is a holiday (or weekend),
@@ -76,8 +90,8 @@ export function getDefaultStartDate(
     base = new Date();
   }
   const customSet = new Set(
-    customHolidays
-      .map((h) => (h.calendar_date || h.date || "").slice(0, 10))
+    (customHolidays || [])
+      .map((h) => getHolidayDateStr(h).slice(0, 10))
       .filter(Boolean)
   );
 
@@ -265,7 +279,7 @@ export function getLocalHoliday(
   // Check custom company holidays (added via Operations settings)
   if (customHolidays && customHolidays.length > 0) {
     const match = customHolidays.find(
-      (h) => (h.calendar_date || h.date || "").slice(0, 10) === ymd
+      (h) => getHolidayDateStr(h).slice(0, 10) === ymd
     );
     if (match) {
       return { name: match.label || "Office Holiday", emoji: "🏢", isHoliday: true, isCompanyHoliday: true, type: "company" };
