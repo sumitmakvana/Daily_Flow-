@@ -827,7 +827,12 @@ export function TaskDetailModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent hideCloseButton className="max-w-5xl w-[95vw] h-[88vh] bg-card border border-border/80 shadow-2xl rounded-2xl p-0 overflow-hidden text-popover-foreground flex flex-col">
+        <DialogContent
+          hideCloseButton
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-5xl w-[95vw] h-[88vh] bg-card border border-border/80 shadow-2xl rounded-2xl p-0 overflow-hidden text-popover-foreground flex flex-col"
+        >
           <DialogTitle className="sr-only">{task.task_name}</DialogTitle>
           {renderDetailContent()}
         </DialogContent>
