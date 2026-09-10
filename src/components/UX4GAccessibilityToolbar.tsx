@@ -193,18 +193,6 @@ export function UX4GAccessibilityToolbar({
         Skip to main content <ArrowDownCircle className="inline h-3.5 w-3.5 ml-1" />
       </a>
 
-      {/* Floating Bottom-Right Trigger Button (Ctrl+F2) matching codebase theme */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground p-3 rounded-full shadow-2xl transition-all transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-ring border border-border"
-        aria-label="Toggle Accessibility Options (Ctrl+F2)"
-        title="Accessibility Options (Ctrl+F2)"
-      >
-        <Accessibility className="h-5 w-5 text-primary-foreground" />
-        <span className="hidden sm:inline text-xs font-semibold pr-1">Ctrl+F2</span>
-      </button>
-
       {/* Right-Side Modal Drawer matching application codebase dark linear theme */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
