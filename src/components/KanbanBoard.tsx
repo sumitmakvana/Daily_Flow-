@@ -119,6 +119,7 @@ export function KanbanBoard({
                     userId={userId}
                     canManage={isManager}
                     onChanged={onChanged}
+                    hideStatusBadge={true}
                   />
                 ))}
               </div>

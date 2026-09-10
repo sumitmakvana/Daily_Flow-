@@ -70,7 +70,7 @@ import { ActiveTaskConflictModal } from "./ActiveTaskConflictModal";
 import { inlineCompleteStore } from "@/services/inline-complete-store";
 import { attachmentsService } from "@/services/attachments";
 import { TaskHoursBadges } from "./TaskHoursBadges";
-import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue, getDefaultStartDate } from "@/lib/format";
+import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue, getDefaultStartDate, parseLocalYYYYMMDD, toLocalISO } from "@/lib/format";
 import type { Profile, Task, TaskStatus, WorkItemType, Attachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
@@ -90,6 +90,7 @@ export function TaskCard({
   compact,
   selected = false,
   onSelectToggle,
+  hideStatusBadge = false,
 }: {
   task: Task;
   rank?: number;
@@ -103,6 +104,7 @@ export function TaskCard({
   compact?: boolean;
   selected?: boolean;
   onSelectToggle?: () => void;
+  hideStatusBadge?: boolean;
 }) {
   const [blockOpen, setBlockOpen] = useState(false);
   const [onHoldOpen, setOnHoldOpen] = useState(false);
@@ -459,13 +461,27 @@ export function TaskCard({
 
         <div className="flex gap-2.5 items-start">
           {onSelectToggle && (
-            <div className="pt-1 shrink-0 flex items-center justify-center">
-              <input
-                type="checkbox"
-                checked={selected}
-                onChange={onSelectToggle}
-                className="h-4 w-4 rounded border-muted-foreground/30 bg-background text-primary focus:ring-primary cursor-pointer accent-primary shrink-0"
-              />
+            <div
+              className={cn(
+                "pt-0.5 shrink-0 transition-opacity duration-150 cursor-pointer select-none",
+                selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectToggle();
+              }}
+            >
+              <div
+                className={cn(
+                  "h-4 w-4 rounded-md flex items-center justify-center transition-all cursor-pointer",
+                  selected
+                    ? "bg-[#5C8EFA] border border-[#5C8EFA] text-[#0A0F1D] shadow-sm shadow-blue-500/30 scale-105"
+                    : "border border-[#3b3e4f] bg-[#16171d] hover:border-[#5C8EFA] hover:bg-[#242736]"
+                )}
+                title={selected ? "Deselect task" : "Select task"}
+              >
+                {selected && <Check className="h-3 w-3 text-[#0A0F1D] stroke-[3]" />}
+              </div>
             </div>
           )}
           
@@ -611,6 +627,57 @@ export function TaskCard({
                     </div>
                   </PopoverContent>
                 </Popover>
+
+                {/* Interactive Status Selector Popover */}
+                {!hideStatusBadge && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={(e) => e.stopPropagation()}
+                        className="cursor-pointer transition-transform active:scale-95 shrink-0"
+                        title="Click to change task status"
+                      >
+                        <StatusBadge status={task.status} />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-48 p-1.5 bg-[#1c1d22] border border-[#2e3038] shadow-2xl rounded-xl space-y-1 z-50 text-xs">
+                      <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Task Status
+                      </div>
+                      {[
+                        { s: "To Do", label: "To Do" },
+                        { s: "In Progress", label: "In Progress" },
+                        { s: "In Review", label: "In Review" },
+                        { s: "Blocked", label: "Blocked" },
+                        { s: "On Hold", label: "On Hold" },
+                        { s: "Completed", label: "Completed" },
+                      ].map(({ s, label }) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!userId) return;
+                            try {
+                              await tasksService.setStatus(task, s as TaskStatus, userId);
+                              toast.success(`Status updated to ${label}`);
+                              onChanged();
+                            } catch (err: any) {
+                              toast.error(err?.message || "Failed to update status");
+                            }
+                          }}
+                          className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2">
+                            <StatusBadge status={s as TaskStatus} />
+                          </span>
+                          {task.status === s && <Check className="h-3.5 w-3.5 text-slate-200 shrink-0" />}
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                )}
 
                 {/* ClickUp Date Picker Popover (Image 1) */}
                 <ClickUpDatePickerPopover
@@ -873,7 +940,7 @@ function ClickUpDatePickerPopover({
   overdue: boolean;
   onChanged: () => void;
 }) {
-  const initialDate = task.due_date ? new Date(task.due_date) : new Date();
+  const initialDate = parseLocalYYYYMMDD(task.due_date) || new Date();
   const [viewDate, setViewDate] = useState<Date>(initialDate);
 
   const year = viewDate.getFullYear();
@@ -888,7 +955,7 @@ function ClickUpDatePickerPopover({
     today.getFullYear() === year && today.getMonth() === month;
   const todayDay = today.getDate();
 
-  const selectedDate = task.due_date ? new Date(task.due_date) : null;
+  const selectedDate = parseLocalYYYYMMDD(task.due_date);
   const isSelectedMonth =
     selectedDate &&
     selectedDate.getFullYear() === year &&
@@ -906,7 +973,7 @@ function ClickUpDatePickerPopover({
   };
 
   const setDueDate = async (dateObj: Date | null, label: string) => {
-    const iso = dateObj ? dateObj.toISOString().slice(0, 10) : null;
+    const iso = dateObj ? toLocalISO(dateObj) : null;
     await tasksService.update(task, { due_date: iso }, userId);
     toast.success(dateObj ? `Due date set to ${label}` : "Due date cleared");
     onChanged();
@@ -979,8 +1046,8 @@ function ClickUpDatePickerPopover({
             <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           </div>
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#222329] border-2 border-slate-100 text-xs font-semibold text-slate-100 shadow-xs">
-            <Clock className="h-3.5 w-3.5 text-slate-300" />
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1a2233] border border-[#5C8EFA]/50 text-xs font-semibold text-[#5C8EFA] shadow-xs">
+            <Clock className="h-3.5 w-3.5 text-[#5C8EFA]" />
             <span>{task.due_date ? formatDate(task.due_date) : "Due date"}</span>
             {task.due_date && (
               <button
@@ -1015,10 +1082,10 @@ function ClickUpDatePickerPopover({
                   key={pr.id}
                   type="button"
                   onClick={() => setDueDate(date, label)}
-                  className="w-full flex items-center justify-between px-2 py-1 rounded-lg hover:bg-[#25262d] text-slate-300 text-left transition-colors cursor-pointer text-xs"
+                  className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[#262938] hover:text-[#5C8EFA] text-slate-300 text-left transition-all cursor-pointer text-xs group/preset"
                 >
-                  <span className="font-medium">{pr.label}</span>
-                  <span className="text-[11px] text-slate-500 font-mono">
+                  <span className="font-medium group-hover/preset:translate-x-0.5 transition-transform">{pr.label}</span>
+                  <span className="text-[11px] text-slate-500 font-mono group-hover/preset:text-[#5C8EFA]/80">
                     {pr.hint}
                   </span>
                 </button>
@@ -1083,12 +1150,12 @@ function ClickUpDatePickerPopover({
                       setDueDate(target, `${monthName.slice(0, 3)} ${d}`);
                     }}
                     className={cn(
-                      "h-6.5 w-6.5 rounded-full flex items-center justify-center font-medium transition-colors mx-auto cursor-pointer text-xs",
+                      "h-6.5 w-6.5 rounded-full flex items-center justify-center font-medium transition-all mx-auto cursor-pointer text-xs",
                       isSelected
-                        ? "bg-slate-100 text-slate-900 font-bold shadow-md rounded-lg"
+                        ? "bg-[#5C8EFA] text-[#0A0F1D] font-bold shadow-md shadow-blue-500/25 rounded-lg scale-105"
                         : isTodayDate
-                        ? "bg-rose-500 text-white font-bold rounded-full shadow-sm"
-                        : "hover:bg-[#282a32] text-slate-300"
+                        ? "bg-rose-500/90 text-white font-bold rounded-full shadow-sm hover:bg-rose-500"
+                        : "hover:bg-[#2b2e3e] hover:text-slate-100 text-slate-300"
                     )}
                   >
                     {d}

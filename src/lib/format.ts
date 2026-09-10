@@ -1,6 +1,20 @@
+export function parseLocalYYYYMMDD(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  const str = iso.slice(0, 10);
+  if (str.length === 10 && str.includes("-")) {
+    const [y, m, d] = str.split("-").map(Number);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m - 1, d);
+    }
+  }
+  const parsed = new Date(iso);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const d = new Date(iso);
+  const d = parseLocalYYYYMMDD(iso);
+  if (!d) return "—";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
@@ -19,12 +33,17 @@ export function formatRelative(iso: string | null | undefined): string {
 
 export function isOverdue(due: string | null, status: string): boolean {
   if (!due || status === "Completed") return false;
-  return new Date(due).getTime() < new Date(new Date().toDateString()).getTime();
+  const dueObj = parseLocalYYYYMMDD(due);
+  if (!dueObj) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return dueObj.getTime() < today.getTime();
 }
 
 export function isToday(due: string | null): boolean {
   if (!due) return false;
-  const d = new Date(due);
+  const d = parseLocalYYYYMMDD(due);
+  if (!d) return false;
   const today = new Date();
   return d.toDateString() === today.toDateString();
 }
@@ -41,17 +60,18 @@ export function todayISO(): string {
 
 /** Format any Date to YYYY-MM-DD in local time. */
 export function toLocalISO(date: Date): string {
-  const tz = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - tz).toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /** Next working day (skip Sat/Sun) as YYYY-MM-DD. */
 export function nextWorkingDay(fromISO?: string): string {
-  const base = fromISO ? new Date(fromISO) : new Date();
+  const base = fromISO ? (parseLocalYYYYMMDD(fromISO) || new Date()) : new Date();
   base.setDate(base.getDate() + 1);
   while (base.getDay() === 0 || base.getDay() === 6) base.setDate(base.getDate() + 1);
-  const tz = base.getTimezoneOffset() * 60000;
-  return new Date(base.getTime() - tz).toISOString().slice(0, 10);
+  return toLocalISO(base);
 }
 
 export function getHolidayDateStr(h: { calendar_date?: unknown; date?: unknown } | null | undefined): string {

@@ -640,6 +640,7 @@ function TeamCapacityPage() {
             activeTasks: Task[];
             upcomingTasks: Task[];
             completedTodayTasks: Task[];
+            overdueTasks: Task[];
             totalPlannedHours: number;
             totalActualHours: number;
           }
@@ -651,56 +652,53 @@ function TeamCapacityPage() {
       const p = item.profile;
       const memberTasks = item.memberTasks;
 
-      // Filter tasks by active status if showActiveOnly is true (unless filtering for completed tasks)
-      const tasksToProcess = (showActiveOnly && statusFilter !== "completed")
-        ? memberTasks.filter((t) => t.status !== "Completed")
-        : memberTasks;
-
-      if (tasksToProcess.length === 0 && !showActiveOnly) {
-        const key = "unassigned / general";
-        if (!groupMap.has(key)) {
-          groupMap.set(key, { projectName: "Unassigned / General", clientName: "General Workspace", membersMap: new Map() });
-        }
-        groupMap.get(key)!.membersMap.set(p.id, {
-          profile: p,
-          title: item.title,
-          teamName: item.teamName,
-          tasks: [],
-          activeTasks: [],
-          upcomingTasks: [],
-          completedTodayTasks: [],
-          totalPlannedHours: 0,
-          totalActualHours: 0,
+      // Filter tasks strictly according to statusFilter and showActiveOnly
+      let tasksToProcess = memberTasks;
+      if (statusFilter === "completed") {
+        tasksToProcess = memberTasks.filter((t) => isTaskCompletedToday(t, todayStr));
+      } else if (statusFilter === "in_progress") {
+        tasksToProcess = memberTasks.filter((t) => t.status === "In Progress");
+      } else if (statusFilter === "to_do") {
+        tasksToProcess = memberTasks.filter((t) => t.status === "To Do" || (t.status as string) === "Pending");
+      } else if (statusFilter === "overdue") {
+        tasksToProcess = memberTasks.filter((t) => {
+          if (t.status === "Completed") return false;
+          if (!t.due_date) return false;
+          const due = formatToDateStr(t.due_date) || t.due_date.slice(0, 10);
+          return due < todayStr;
         });
-      } else {
-        tasksToProcess.forEach((t) => {
-          const rawPName = t.project_name && t.project_name.trim() ? t.project_name.trim() : "Unassigned / General";
-          const key = rawPName.toLowerCase();
-          const projClient = t.client || projects.find((pr) => pr.name?.toLowerCase() === key)?.client || "Internal Client";
-
-          if (!groupMap.has(key)) {
-            groupMap.set(key, { projectName: rawPName, clientName: projClient, membersMap: new Map() });
-          }
-          const group = groupMap.get(key)!;
-          if (!group.membersMap.has(p.id)) {
-            group.membersMap.set(p.id, {
-              profile: p,
-              title: item.title,
-              teamName: item.teamName,
-              tasks: [],
-              activeTasks: [],
-              upcomingTasks: [],
-              completedTodayTasks: [],
-              totalPlannedHours: 0,
-              totalActualHours: 0,
-            });
-          }
-          const mEntry = group.membersMap.get(p.id)!;
-          mEntry.tasks.push(t);
-          mEntry.totalPlannedHours = Math.round((mEntry.totalPlannedHours + Number(t.planned_hours || 0)) * 100) / 100;
-          mEntry.totalActualHours = Math.round((mEntry.totalActualHours + Number(t.actual_hours || 0)) * 100) / 100;
-        });
+      } else if (showActiveOnly) {
+        tasksToProcess = memberTasks.filter((t) => t.status !== "Completed");
       }
+
+      tasksToProcess.forEach((t) => {
+        const rawPName = t.project_name && t.project_name.trim() ? t.project_name.trim() : "Unassigned / General";
+        const key = rawPName.toLowerCase();
+        const projClient = t.client || projects.find((pr) => pr.name?.toLowerCase() === key)?.client || "Internal Client";
+
+        if (!groupMap.has(key)) {
+          groupMap.set(key, { projectName: rawPName, clientName: projClient, membersMap: new Map() });
+        }
+        const group = groupMap.get(key)!;
+        if (!group.membersMap.has(p.id)) {
+          group.membersMap.set(p.id, {
+            profile: p,
+            title: item.title,
+            teamName: item.teamName,
+            tasks: [],
+            activeTasks: [],
+            upcomingTasks: [],
+            completedTodayTasks: [],
+            overdueTasks: [],
+            totalPlannedHours: 0,
+            totalActualHours: 0,
+          });
+        }
+        const mEntry = group.membersMap.get(p.id)!;
+        mEntry.tasks.push(t);
+        mEntry.totalPlannedHours = Math.round((mEntry.totalPlannedHours + Number(t.planned_hours || 0)) * 100) / 100;
+        mEntry.totalActualHours = Math.round((mEntry.totalActualHours + Number(t.actual_hours || 0)) * 100) / 100;
+      });
     });
 
     const result = Array.from(groupMap.values()).map((g) => {
@@ -712,6 +710,13 @@ function TeamCapacityPage() {
         const activeTasks = isOnLeave ? [] : m.tasks.filter((t) => t.status === "In Progress");
         const upcomingTasks = m.tasks.filter((t) => t.status === "To Do" || (t.status as string) === "Pending");
         const completedTodayTasks = m.tasks.filter((t) => isTaskCompletedToday(t, todayStr));
+        const overdueTasks = m.tasks.filter((t) => {
+          if (t.status === "Completed") return false;
+          if (!t.due_date) return false;
+          const due = formatToDateStr(t.due_date) || t.due_date.slice(0, 10);
+          return due < todayStr;
+        });
+
         return {
           ...m,
           activeLeave,
@@ -720,33 +725,48 @@ function TeamCapacityPage() {
           activeTasks,
           upcomingTasks,
           completedTodayTasks,
+          overdueTasks,
         };
       });
 
-      const totalProjectTasks = membersList.reduce((sum, m) => sum + m.tasks.length, 0);
-      const activeWorkingMembersCount = membersList.filter((m) => m.activeTasks.length > 0 && !m.isOnLeave).length;
-      const totalPlannedHours = Math.round(membersList.reduce((sum, m) => sum + m.totalPlannedHours, 0) * 100) / 100;
+      // Filter members if statusFilter is active so members with 0 matching tasks for this project are omitted
+      const filteredMembersList = statusFilter === "all"
+        ? membersList
+        : membersList.filter((m) => {
+            if (statusFilter === "completed") return m.completedTodayTasks.length > 0;
+            if (statusFilter === "in_progress") return m.activeTasks.length > 0;
+            if (statusFilter === "to_do") return m.upcomingTasks.length > 0;
+            if (statusFilter === "overdue") return m.overdueTasks.length > 0;
+            return true;
+          });
+
+      const totalProjectTasks = filteredMembersList.reduce((sum, m) => sum + m.tasks.length, 0);
+      const activeWorkingMembersCount = filteredMembersList.filter((m) => m.activeTasks.length > 0 && !m.isOnLeave).length;
+      const totalPlannedHours = Math.round(filteredMembersList.reduce((sum, m) => sum + m.totalPlannedHours, 0) * 100) / 100;
 
       return {
         projectName: g.projectName,
         clientName: g.clientName,
-        members: membersList,
+        members: filteredMembersList,
         totalProjectTasks,
         activeTasksCount: activeWorkingMembersCount,
         totalPlannedHours,
       };
     });
 
-    const filteredByProj = projectFilter === "all"
-      ? result
-      : result.filter((g) => g.projectName.toLowerCase().includes(projectFilter.toLowerCase()));
+    // Omit project cards that have 0 matching members/tasks when filtering
+    let filteredByStatus = result.filter((g) => g.members.length > 0 && g.totalProjectTasks > 0);
 
-    return filteredByProj.sort((a, b) => {
+    if (projectFilter !== "all") {
+      filteredByStatus = filteredByStatus.filter((g) => g.projectName.toLowerCase().includes(projectFilter.toLowerCase()));
+    }
+
+    return filteredByStatus.sort((a, b) => {
       if (a.projectName === "Unassigned / General") return 1;
       if (b.projectName === "Unassigned / General") return -1;
       return a.projectName.localeCompare(b.projectName);
     });
-  }, [filteredMembers, projectFilter, showActiveOnly, projects, todayStr]);
+  }, [filteredMembers, projectFilter, statusFilter, showActiveOnly, projects, todayStr, activeLeavesToday]);
 
   // Pagination calculation
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
@@ -1901,13 +1921,15 @@ function TeamCapacityPage() {
                                     <div className="space-y-1.5 p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs">
                                       <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
                                         <span className="flex items-center gap-1">
-                                          <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Completed Today ({memberInfo?.completedTodayTasks.length || 0}):
+                                          <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Completed Today ({m.completedTodayTasks.length}):
                                         </span>
-                                        <span className="font-mono text-[10px] text-emerald-400 font-bold">{memberInfo?.completedTodayHours || 0}h</span>
+                                        <span className="font-mono text-[10px] text-emerald-400 font-bold">
+                                          {Math.round(m.completedTodayTasks.reduce((s, ct) => s + Number(ct.actual_hours || ct.planned_hours || 0), 0) * 10) / 10}h
+                                        </span>
                                       </div>
-                                      {memberInfo?.completedTodayTasks && memberInfo.completedTodayTasks.length > 0 ? (
+                                      {m.completedTodayTasks.length > 0 ? (
                                         <div className="space-y-1 pt-0.5 max-h-40 overflow-y-auto">
-                                          {memberInfo.completedTodayTasks.map((ct) => (
+                                          {m.completedTodayTasks.map((ct) => (
                                             <div
                                               key={ct.id}
                                               onClick={() => setInspectTaskItem({ task: ct, profile: p })}
@@ -1930,13 +1952,15 @@ function TeamCapacityPage() {
                                     <div className="space-y-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs">
                                       <div className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider flex items-center justify-between">
                                         <span className="flex items-center gap-1">
-                                          <Clock className="h-3 w-3 text-amber-400" /> Queued To Do ({memberInfo?.upcomingTasks.length || 0}):
+                                          <Clock className="h-3 w-3 text-amber-400" /> Queued To Do ({m.upcomingTasks.length}):
                                         </span>
-                                        <span className="font-mono text-[10px] text-amber-400 font-bold">{memberInfo?.plannedHours || 0}h</span>
+                                        <span className="font-mono text-[10px] text-amber-400 font-bold">
+                                          {Math.round(m.upcomingTasks.reduce((s, ut) => s + Number(ut.planned_hours || 0), 0) * 10) / 10}h
+                                        </span>
                                       </div>
-                                      {memberInfo?.upcomingTasks && memberInfo.upcomingTasks.length > 0 ? (
+                                      {m.upcomingTasks.length > 0 ? (
                                         <div className="space-y-1 pt-0.5 max-h-40 overflow-y-auto">
-                                          {memberInfo.upcomingTasks.map((td) => (
+                                          {m.upcomingTasks.map((td) => (
                                             <div
                                               key={td.id}
                                               onClick={() => setInspectTaskItem({ task: td, profile: p })}
@@ -1959,12 +1983,12 @@ function TeamCapacityPage() {
                                     <div className="space-y-1.5 p-2 rounded-md bg-rose-500/10 border border-rose-500/30 text-xs">
                                       <div className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider flex items-center justify-between">
                                         <span className="flex items-center gap-1">
-                                          <AlertOctagon className="h-3 w-3 text-rose-400" /> Overdue Tasks ({memberInfo?.overdueTasks.length || 0}):
+                                          <AlertOctagon className="h-3 w-3 text-rose-400" /> Overdue Tasks ({m.overdueTasks.length}):
                                         </span>
                                       </div>
-                                      {memberInfo?.overdueTasks && memberInfo.overdueTasks.length > 0 ? (
+                                      {m.overdueTasks.length > 0 ? (
                                         <div className="space-y-1 pt-0.5 max-h-40 overflow-y-auto">
-                                          {memberInfo.overdueTasks.map((od) => (
+                                          {m.overdueTasks.map((od) => (
                                             <div
                                               key={od.id}
                                               onClick={() => setInspectTaskItem({ task: od, profile: p })}
