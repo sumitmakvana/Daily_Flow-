@@ -43,6 +43,7 @@ import {
   RotateCcw,
   CheckSquare,
   HelpCircle,
+  CalendarDays,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -832,7 +833,7 @@ function ProjectDetailModal({
   } | null;
   onFilterByProject: (pName: string) => void;
 }) {
-  const [activeModalTab, setActiveModalTab] = useState<"members" | "tasks">("members");
+  const [activeModalTab, setActiveModalTab] = useState<"members" | "tasks" | "daily">("members");
   const [projectTasks, setProjectTasks] = useState<Array<{
     id: string;
     task_code: string | null;
@@ -846,8 +847,21 @@ function ProjectDetailModal({
     completed_at: string | null;
     assignee_name?: string;
   }>>([]);
+  const [projectWorklogs, setProjectWorklogs] = useState<Array<{
+    id: string;
+    task_id: string;
+    user_id: string;
+    work_date: string;
+    hours: number;
+    notes?: string | null;
+    task_code?: string | null;
+    task_name?: string;
+    user_name?: string;
+  }>>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
 
   const memberRows = useMemo(() => {
     if (!reportData?.rows) return [];
@@ -855,6 +869,30 @@ function ProjectDetailModal({
       (r) => !r.isTotalRow && !r.isSeparatorRow && r.projectName === projectName && r.hours > 0
     );
   }, [reportData, projectName]);
+
+  const assigneeOptions = useMemo(() => {
+    const set = new Set<string>();
+    memberRows.forEach((m) => {
+      if (m.teamMember) set.add(m.teamMember);
+    });
+    projectTasks.forEach((t) => {
+      if (t.assignee_name && t.assignee_name !== "Unassigned") set.add(t.assignee_name);
+    });
+    projectWorklogs.forEach((w) => {
+      if (w.user_name) set.add(w.user_name);
+    });
+    return Array.from(set).sort();
+  }, [memberRows, projectTasks, projectWorklogs]);
+
+  const filteredMemberRows = useMemo(() => {
+    if (assigneeFilter === "all") return memberRows;
+    return memberRows.filter((m) => m.teamMember === assigneeFilter);
+  }, [memberRows, assigneeFilter]);
+
+  const filteredProjectWorklogs = useMemo(() => {
+    if (assigneeFilter === "all") return projectWorklogs;
+    return projectWorklogs.filter((w) => w.user_name === assigneeFilter);
+  }, [projectWorklogs, assigneeFilter]);
 
   const totalProjectHours = useMemo(() => {
     return memberRows.reduce((acc, m) => acc + m.hours, 0);
@@ -903,18 +941,56 @@ function ProjectDetailModal({
         const { data: tasks, error } = await query;
         if (error) throw error;
 
-        // Filter tasks by report date bounds (from - to) if present
+        // Filter tasks and worklogs strictly by report date bounds (from - to) for the selected month/period
         const fromStr = reportData?.meta?.from;
         const toStr = reportData?.meta?.to;
-        let activePeriodTasks = tasks ?? [];
 
+        // 1. Fetch worklogs for this project's tasks within [fromStr, toStr]
+        const allTaskIds = (tasks ?? []).map((t) => t.id);
+        const activeTaskIdsFromWorklogs = new Set<string>();
+        let enrichedLogs: typeof projectWorklogs = [];
+
+        if (allTaskIds.length > 0 && fromStr && toStr) {
+          let wlQuery = supabase
+            .from("task_worklogs")
+            .select("id, task_id, user_id, work_date, hours, notes, created_at")
+            .in("task_id", allTaskIds)
+            .gte("work_date", fromStr)
+            .lte("work_date", toStr)
+            .order("work_date", { ascending: false });
+
+          const { data: wlogs } = await wlQuery;
+          if (wlogs && wlogs.length > 0) {
+            const taskMap = new Map((tasks ?? []).map((t) => [t.id, t]));
+            wlogs.forEach((w) => activeTaskIdsFromWorklogs.add(w.task_id));
+            enrichedLogs = wlogs.map((w) => {
+              const taskObj = taskMap.get(w.task_id);
+              return {
+                ...w,
+                task_code: taskObj?.task_code || "TSK-—",
+                task_name: taskObj?.task_name || "Unknown Task",
+                user_name: profileMap[w.user_id] || "Team Member",
+              };
+            });
+          }
+        }
+
+        // 2. Strict filtering of tasks belonging to the selected month/period
+        let activePeriodTasks = tasks ?? [];
         if (fromStr && toStr) {
           activePeriodTasks = activePeriodTasks.filter((t) => {
+            // Task has work logs in selected period
+            if (activeTaskIdsFromWorklogs.has(t.id)) return true;
+            // Task created in selected period
             const cDate = t.created_at ? t.created_at.slice(0, 10) : "";
-            const compDate = t.completed_at ? t.completed_at.slice(0, 10) : "";
             if (cDate && cDate >= fromStr && cDate <= toStr) return true;
+            // Task completed in selected period
+            const compDate = t.completed_at ? t.completed_at.slice(0, 10) : "";
             if (compDate && compDate >= fromStr && compDate <= toStr) return true;
-            if (!cDate || cDate <= toStr) return true;
+            // Task updated in selected period (if active)
+            const upDate = (t as any).updated_at ? (t as any).updated_at.slice(0, 10) : "";
+            if (upDate && upDate >= fromStr && upDate <= toStr && t.status !== "Completed") return true;
+
             return false;
           });
         }
@@ -935,14 +1011,23 @@ function ProjectDetailModal({
           });
         }
 
+        // Fill in user display names for worklogs
+        enrichedLogs = enrichedLogs.map((l) => ({
+          ...l,
+          user_name: profileMap[l.user_id] || l.user_name || "Team Member",
+        }));
+
         const formatted = activePeriodTasks.map((t) => ({
           ...t,
           assignee_name: t.assigned_to ? profileMap[t.assigned_to] || "Unassigned" : "Unassigned",
         }));
 
-        if (!cancelled) setProjectTasks(formatted);
+        if (!cancelled) {
+          setProjectTasks(formatted);
+          setProjectWorklogs(enrichedLogs);
+        }
       } catch (err) {
-        console.warn("Failed to fetch project tasks:", err);
+        console.warn("Failed to fetch project tasks/worklogs:", err);
       } finally {
         if (!cancelled) setLoadingTasks(false);
       }
@@ -951,22 +1036,57 @@ function ProjectDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [projectName]);
+  }, [projectName, reportData?.meta?.from, reportData?.meta?.to]);
 
   const filteredTasks = useMemo(() => {
+    let list = projectTasks;
+    if (assigneeFilter !== "all") {
+      list = list.filter((t) => t.assignee_name === assigneeFilter);
+    }
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return projectTasks;
-    return projectTasks.filter(
+    if (!q) return list;
+    return list.filter(
       (t) =>
         t.task_name.toLowerCase().includes(q) ||
         (t.task_code && t.task_code.toLowerCase().includes(q)) ||
         (t.assignee_name && t.assignee_name.toLowerCase().includes(q)) ||
         t.status.toLowerCase().includes(q)
     );
-  }, [projectTasks, searchQuery]);
+  }, [projectTasks, searchQuery, assigneeFilter]);
+
+  // Group worklogs by day
+  const groupedDailyLogs = useMemo(() => {
+    const map = new Map<string, typeof projectWorklogs>();
+    filteredProjectWorklogs.forEach((wl) => {
+      const dateKey = wl.work_date || (wl as any).created_at?.slice(0, 10) || "Unknown Date";
+      const list = map.get(dateKey) || [];
+      list.push(wl);
+      map.set(dateKey, list);
+    });
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filteredProjectWorklogs]);
+
+  // Fallback daily grouping by task created/completed date if worklogs are empty
+  const fallbackDailyTasks = useMemo(() => {
+    const fromStr = reportData?.meta?.from;
+    const toStr = reportData?.meta?.to;
+    const map = new Map<string, typeof projectTasks>();
+
+    projectTasks.forEach((t) => {
+      if (assigneeFilter !== "all" && t.assignee_name !== assigneeFilter) return;
+      const dateKey = t.completed_at ? t.completed_at.slice(0, 10) : t.created_at ? t.created_at.slice(0, 10) : "";
+      if (!dateKey) return;
+      if (fromStr && toStr && (dateKey < fromStr || dateKey > toStr)) return;
+
+      const list = map.get(dateKey) || [];
+      list.push(t);
+      map.set(dateKey, list);
+    });
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [projectTasks, assigneeFilter, reportData?.meta?.from, reportData?.meta?.to]);
 
   const exportProjectDetailsCSV = () => {
-    if (!memberRows.length && !projectTasks.length) {
+    if (!memberRows.length && !projectTasks.length && !projectWorklogs.length) {
       toast.error("No data to export");
       return;
     }
@@ -986,6 +1106,15 @@ function ProjectDetailModal({
       const pctOfProj = totalProjectHours > 0 ? Math.round((m.hours / totalProjectHours) * 100) : 0;
       csvLines.push(`"${m.teamMember}",${m.hours},${m.autoHours || 0},${pctOfProj}%`);
     });
+
+    if (projectWorklogs.length > 0) {
+      csvLines.push("");
+      csvLines.push("DAY-WISE DAILY WORKLOGS");
+      csvLines.push("Date,Team Member,Task Code,Task Name,Hours Logged,Notes");
+      projectWorklogs.forEach((w) => {
+        csvLines.push(`"${w.work_date}","${w.user_name}","${w.task_code || ''}","${(w.task_name || '').replace(/"/g, '""')}",${w.hours},"${(w.notes || '').replace(/"/g, '""')}"`);
+      });
+    }
 
     csvLines.push("");
     csvLines.push("TASKS LIST");
@@ -1019,7 +1148,7 @@ function ProjectDetailModal({
                   </span>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  Detailed resource allocation, member hours, and task breakdown for {projectName}
+                  Detailed resource allocation, day-wise work breakdown, member hours, and task status for {projectName}
                 </DialogDescription>
               </div>
             </div>
@@ -1047,7 +1176,7 @@ function ProjectDetailModal({
         </DialogHeader>
 
         {/* Modal Navigation Tabs */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border/60 bg-muted/10">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 py-2 border-b border-border/60 bg-muted/10">
           <div className="flex items-center gap-1.5 p-0.5 bg-input/40 border border-border rounded-lg">
             <button
               type="button"
@@ -1060,7 +1189,20 @@ function ProjectDetailModal({
               )}
             >
               <Users className="h-3.5 w-3.5" />
-              <span>Team Members ({memberRows.length})</span>
+              <span>Team Members ({filteredMemberRows.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveModalTab("daily")}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+                activeModalTab === "daily"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              <span>Day-wise Breakdown ({groupedDailyLogs.length || fallbackDailyTasks.length} Days)</span>
             </button>
             <button
               type="button"
@@ -1073,16 +1215,35 @@ function ProjectDetailModal({
               )}
             >
               <ListChecks className="h-3.5 w-3.5" />
-              <span>Tasks & Work Items ({projectTasks.length})</span>
+              <span>Tasks & Work Items ({filteredTasks.length})</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+            {assigneeOptions.length > 0 && (
+              <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+                <SelectTrigger className="h-7 text-xs bg-input/40 border-border text-foreground w-44 font-medium focus:ring-1 focus:ring-primary">
+                  <Filter className="h-3 w-3 mr-1 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Filter Assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="font-semibold text-xs">
+                    All Assignees ({assigneeOptions.length})
+                  </SelectItem>
+                  {assigneeOptions.map((name) => (
+                    <SelectItem key={name} value={name} className="text-xs">
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             <Button
               size="sm"
               variant="outline"
               onClick={exportProjectDetailsCSV}
-              className="h-7 text-xs font-medium border-border hover:bg-accent text-foreground cursor-pointer"
+              className="h-7 text-xs font-medium border-border hover:bg-accent text-foreground cursor-pointer shrink-0"
             >
               <Download className="h-3.5 w-3.5 mr-1" /> Export CSV
             </Button>
@@ -1094,9 +1255,9 @@ function ProjectDetailModal({
           {activeModalTab === "members" ? (
             /* TAB 1: Team Member Breakdown */
             <div className="space-y-3">
-              {memberRows.length === 0 ? (
+              {filteredMemberRows.length === 0 ? (
                 <div className="py-12 text-center text-xs text-muted-foreground italic">
-                  No member activity logged for this project in the selected period.
+                  No member activity logged for this project matching your filter.
                 </div>
               ) : (
                 <div className="border border-border/80 rounded-lg overflow-hidden bg-card">
@@ -1111,7 +1272,7 @@ function ProjectDetailModal({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/40 font-medium">
-                      {memberRows.map((m, idx) => {
+                      {filteredMemberRows.map((m, idx) => {
                         const pctOfProj = totalProjectHours > 0 ? Math.round((m.hours / totalProjectHours) * 100) : 0;
                         const initial = (m.teamMember || "U").charAt(0).toUpperCase();
 
@@ -1162,8 +1323,147 @@ function ProjectDetailModal({
                 </div>
               )}
             </div>
+          ) : activeModalTab === "daily" ? (
+            /* TAB 2: Day-wise Daily Work Breakdown */
+            <div className="space-y-4">
+              {loadingTasks ? (
+                <div className="py-12 text-center text-xs text-muted-foreground">
+                  <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
+                  Loading day-wise project activity...
+                </div>
+              ) : groupedDailyLogs.length > 0 ? (
+                groupedDailyLogs.map(([dateStr, logs]) => {
+                  const dayTotalHours = logs.reduce((acc, l) => acc + (l.hours || 0), 0);
+                  return (
+                    <div key={dateStr} className="border border-border/80 rounded-xl overflow-hidden bg-card/80 shadow-xs space-y-0">
+                      {/* Day Header */}
+                      <div className="px-4 py-2.5 bg-muted/40 border-b border-border/60 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4 text-primary" />
+                          <span className="font-mono text-xs font-bold text-foreground">{dateStr}</span>
+                          <span className="text-[11px] text-muted-foreground">({logs.length} logged entries)</span>
+                        </div>
+                        <div className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          {Math.round(dayTotalHours * 10) / 10}h Logged Today
+                        </div>
+                      </div>
+
+                      {/* Log Table */}
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                          <tr className="bg-muted/20 border-b border-border/40 text-muted-foreground font-medium text-[11px] uppercase tracking-wider">
+                            <th className="py-2 px-3 w-36">Member</th>
+                            <th className="py-2 px-3 w-28 font-mono">Task Code</th>
+                            <th className="py-2 px-3">Task & Activity</th>
+                            <th className="py-2 px-3 text-right w-24">Hours Logged</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/30 font-medium">
+                          {logs.map((log) => (
+                            <tr key={log.id} className="hover:bg-accent/30 text-foreground transition-colors">
+                              <td className="py-2 px-3 font-semibold text-foreground">
+                                {log.user_name}
+                              </td>
+                              <td className="py-2 px-3 font-mono font-semibold text-primary">
+                                {log.task_code}
+                              </td>
+                              <td className="py-2 px-3">
+                                <div className="font-medium text-foreground">{log.task_name}</div>
+                                {log.notes && (
+                                  <div className="text-[11px] text-muted-foreground italic mt-0.5">{log.notes}</div>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono font-bold text-emerald-400">
+                                {log.hours}h
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-muted/30 border-t border-border/60 text-xs font-bold font-mono">
+                            <td colSpan={3} className="py-2 px-3 text-right text-muted-foreground font-sans uppercase text-[10px] tracking-wider">
+                              Total Logged for {dateStr}:
+                            </td>
+                            <td className="py-2 px-3 text-right text-emerald-400 font-bold">
+                              {Math.round(dayTotalHours * 10) / 10}h
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  );
+                })
+              ) : fallbackDailyTasks.length > 0 ? (
+                /* Fallback Timeline by Task Date if detailed worklogs are empty */
+                <div className="space-y-3">
+                  <div className="p-3 bg-muted/20 border border-border/60 rounded-lg text-xs text-muted-foreground flex items-center justify-between">
+                    <span>Showing task creation and completion timeline per day for <strong>{projectName}</strong>:</span>
+                  </div>
+                  {fallbackDailyTasks.map(([dateStr, tasks]) => {
+                    const dayTotalHours = tasks.reduce((acc, t) => acc + (t.actual_hours ?? t.planned_hours ?? 0), 0);
+                    return (
+                      <div key={dateStr} className="border border-border/80 rounded-xl overflow-hidden bg-card/80 space-y-0 shadow-xs">
+                        {/* Day Header */}
+                        <div className="px-4 py-2 bg-muted/40 border-b border-border/60 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CalendarDays className="h-4 w-4 text-primary" />
+                            <span className="font-mono text-xs font-bold text-foreground">{dateStr}</span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-xs text-muted-foreground font-mono">{tasks.length} Tasks</span>
+                            <div className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                              {Math.round(dayTotalHours * 10) / 10}h Total
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Table */}
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead>
+                            <tr className="bg-muted/20 border-b border-border/40 text-muted-foreground text-[11px] uppercase tracking-wider">
+                              <th className="py-2 px-3 w-32 font-mono">Task Code</th>
+                              <th className="py-2 px-3">Task Title</th>
+                              <th className="py-2 px-3 w-32">Assignee</th>
+                              <th className="py-2 px-3 w-24">Status</th>
+                              <th className="py-2 px-3 text-right w-20">Hours</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/30 font-medium">
+                            {tasks.map((t) => (
+                              <tr key={t.id} className="hover:bg-accent/30 text-foreground transition-colors">
+                                <td className="py-2 px-3 font-mono font-semibold text-primary">{t.task_code || "TSK-—"}</td>
+                                <td className="py-2 px-3 font-medium text-foreground">{t.task_name}</td>
+                                <td className="py-2 px-3 text-muted-foreground">{t.assignee_name}</td>
+                                <td className="py-2 px-3"><StatusBadge status={t.status as any} /></td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-emerald-400">
+                                  {t.actual_hours ?? t.planned_hours ?? 0}h
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-muted/30 border-t border-border/60 text-xs font-bold font-mono">
+                              <td colSpan={4} className="py-2 px-3 text-right text-muted-foreground font-sans uppercase text-[10px] tracking-wider">
+                                Total Hours for {dateStr}:
+                              </td>
+                              <td className="py-2 px-3 text-right text-emerald-400 font-bold">
+                                {Math.round(dayTotalHours * 10) / 10}h
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-xs text-muted-foreground italic">
+                  No day-wise worklogs recorded for this project in the selected period.
+                </div>
+              )}
+            </div>
           ) : (
-            /* TAB 2: Tasks List */
+            /* TAB 3: Tasks List */
             <div className="space-y-3">
               {/* Task Search Bar */}
               <div className="relative">

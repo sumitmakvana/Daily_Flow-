@@ -569,14 +569,14 @@ function TasksPage() {
               </span>
             </div>
 
-            <TabsList className="bg-background/90 border border-border/80 flex overflow-x-auto justify-start sm:inline-flex scrollbar-none gap-1 h-auto p-1">
-              <TabsTrigger value="my_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 data-[state=active]:bg-accent data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold">
+            <TabsList className="bg-[#16171d]/90 border border-[#2b2d38] flex overflow-x-auto justify-start sm:inline-flex scrollbar-none gap-1 h-auto p-1 rounded-xl">
+              <TabsTrigger value="my_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 py-1 rounded-lg transition-all text-slate-400 hover:text-slate-100 data-[state=active]:bg-[#262938] data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold data-[state=active]:border data-[state=active]:border-[#3e4259] data-[state=active]:shadow-xs">
                 My Tasks ({myTasks.length})
               </TabsTrigger>
-              <TabsTrigger value="team_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 data-[state=active]:bg-accent data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold">
+              <TabsTrigger value="team_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 py-1 rounded-lg transition-all text-slate-400 hover:text-slate-100 data-[state=active]:bg-[#262938] data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold data-[state=active]:border data-[state=active]:border-[#3e4259] data-[state=active]:shadow-xs">
                 Team Tasks ({teamTasks.length})
               </TabsTrigger>
-              <TabsTrigger value="all_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 data-[state=active]:bg-accent data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold">
+              <TabsTrigger value="all_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 py-1 rounded-lg transition-all text-slate-400 hover:text-slate-100 data-[state=active]:bg-[#262938] data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold data-[state=active]:border data-[state=active]:border-[#3e4259] data-[state=active]:shadow-xs">
                 All Tasks ({sorted.length})
               </TabsTrigger>
             </TabsList>
