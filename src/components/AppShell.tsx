@@ -40,6 +40,7 @@ import { HolidayBanner } from "@/components/HolidayBanner";
 import { AnnouncementNoticeBanner } from "@/components/AnnouncementNoticeBanner";
 import { DesktopNotificationPromptBanner } from "@/components/DesktopNotificationPromptBanner";
 import { UX4GAccessibilityToolbar } from "@/components/UX4GAccessibilityToolbar";
+import { GlobalFeedbackWidget } from "@/components/GlobalFeedbackWidget";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth, signOut } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -826,9 +827,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </SheetContent>
       </Sheet>
 
-      {/* Modals */}
+      {/* Modals & Floating Widgets */}
       <NotificationsModal open={notifModalOpen} onOpenChange={setNotifModalOpen} />
       <GlobalCompleteTaskEodDialog />
+      <GlobalFeedbackWidget />
       {user && (
         <TaskFormDialog
           open={addTaskOpen}
