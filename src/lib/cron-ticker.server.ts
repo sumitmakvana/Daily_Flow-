@@ -66,7 +66,7 @@ export function startBackgroundCronTicker() {
         .eq("id", 1)
         .maybeSingle();
 
-      const morningTime = settings?.morning_digest_time ?? "10:00"; // Dynamic from UI
+      const morningTime = settings?.morning_digest_time ?? "10:30"; // Dynamic from UI
       const memberEodTime = settings?.evening_digest_time ?? "18:00"; // Dynamic from UI
       const managerReportTime = addMinutesToTime(memberEodTime, 15); // Auto 15 mins after EOD
 
