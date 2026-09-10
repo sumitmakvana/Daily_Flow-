@@ -353,10 +353,10 @@ function MyDayPage() {
   return (
     <div className="p-3 md:p-6 max-w-7xl mx-auto space-y-4">
       {/* Header Bar */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
         <div className="min-w-0">
-          <h1 className="truncate text-xl md:text-2xl font-bold tracking-tight">{greeting}</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <h1 className="truncate text-lg md:text-xl font-bold tracking-tight text-slate-100">{greeting}</h1>
+          <p className="text-[11px] text-slate-400 mt-0.5">
             {new Date().toLocaleDateString(undefined, {
               weekday: "long",
               month: "long",
@@ -366,14 +366,14 @@ function MyDayPage() {
             · {d ? `${d.priorities.length} priorities` : `${activeWorkTodayCount} active tasks`}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Board / List View Mode Toggle */}
           <div className="flex items-center p-0.5 rounded-lg bg-muted border border-border">
             <button
               type="button"
               onClick={() => setViewMode("board")}
               className={cn(
-                "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer",
+                "flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
                 viewMode === "board"
                   ? "bg-card text-foreground shadow-xs border border-border/60"
                   : "text-muted-foreground hover:text-foreground"
@@ -385,7 +385,7 @@ function MyDayPage() {
               type="button"
               onClick={() => setViewMode("list")}
               className={cn(
-                "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer",
+                "flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
                 viewMode === "list"
                   ? "bg-card text-foreground shadow-xs border border-border/60"
                   : "text-muted-foreground hover:text-foreground"
@@ -397,14 +397,14 @@ function MyDayPage() {
 
           <Button
             size="sm"
-            className="h-8 md:h-9 gap-1.5 font-medium shadow-sm"
+            className="h-8 gap-1.5 font-medium shadow-sm text-xs"
             onClick={() => {
               setIsCreatingNew(true);
               setEditingTask(null);
               setFormOpen(true);
             }}
           >
-            <Plus className="h-4 w-4" /> New Task
+            <Plus className="h-3.5 w-3.5" /> New Task
           </Button>
           <Button
             size="sm"
@@ -414,22 +414,20 @@ function MyDayPage() {
               q.refetch();
               router.invalidate();
             }}
-            className="h-8 md:h-9 gap-1.5 text-xs border-border"
+            className="h-8 gap-1.5 text-xs border-border"
           >
             <RotateCw className="h-3.5 w-3.5" /> Refresh
           </Button>
         </div>
       </header>
 
-
-
-      {/* Main Tabbed Navigation — ClickUp-style compact tab bar */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
+      {/* Main Tabbed Navigation — Single divider line under tabs, compact ClickUp style */}
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-3">
         <div className="border-b border-[#2b2c34]">
           <TabsList className="h-auto p-0 bg-transparent gap-0 rounded-none flex w-auto justify-start overflow-x-auto">
             <TabsTrigger
               value="priority"
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
             >
               <Flame className="h-3.5 w-3.5 text-rose-400" />
               <span>Priority Flow</span>
@@ -440,11 +438,11 @@ function MyDayPage() {
               )}
             </TabsTrigger>
 
-            <div className="w-px h-4 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
+            <div className="w-px h-3.5 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
 
             <TabsTrigger
               value="tasks"
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
             >
               <ListChecks className="h-3.5 w-3.5 text-blue-400" />
               <span>Work Today</span>
@@ -453,21 +451,21 @@ function MyDayPage() {
               </span>
             </TabsTrigger>
 
-            <div className="w-px h-4 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
+            <div className="w-px h-3.5 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
 
             <TabsTrigger
               value="summary"
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
             >
               <TrendingUp className="h-3.5 w-3.5 text-amber-400" />
               <span>Progress & Recap</span>
             </TabsTrigger>
 
-            <div className="w-px h-4 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
+            <div className="w-px h-3.5 bg-[#2b2c34] self-center mx-0.5 shrink-0" />
 
             <TabsTrigger
               value="risks"
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-medium text-slate-400 hover:text-slate-100 border-b-2 border-transparent data-[state=active]:border-[#7c6bff] data-[state=active]:text-slate-100 bg-transparent data-[state=active]:bg-transparent transition-all cursor-pointer shrink-0"
             >
               <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
               <span>Risks & Approvals</span>

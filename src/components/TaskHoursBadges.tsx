@@ -3,7 +3,7 @@ import { formatHoursMins } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TaskWorklog } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, AlertCircle } from "lucide-react";
 
 export interface TaskHoursData {
   planned_hours?: number | null;
@@ -157,17 +157,17 @@ export function TaskHoursBadges({ task, className }: TaskHoursBadgesProps) {
       {hasGap && (
         <span
           title={`Gap > 1.5h between auto-timer (${formatHoursMins(sysHrs)}) and user logged hours (${formatHoursMins(logged)})`}
-          className="text-rose-400 ml-0.5 font-bold text-[9px]"
+          className="text-amber-400/90 ml-0.5 font-medium text-[10px] inline-flex items-center gap-1"
         >
-          ⚠️ Gap
+          <AlertTriangle className="h-3 w-3 text-amber-400/90" /> Gap
         </span>
       )}
       {isOverrun && (
         <span
           title={`Overrun: Planned ${plan}h target exceeded by total spent ${formatHoursMins(logged || sysHrs)}`}
-          className="text-amber-400 ml-0.5 font-bold text-[9px]"
+          className="text-rose-400/90 ml-0.5 font-medium text-[10px] inline-flex items-center gap-1"
         >
-          🚨 Overrun
+          <AlertCircle className="h-3 w-3 text-rose-400/90" /> Overrun
         </span>
       )}
     </div>

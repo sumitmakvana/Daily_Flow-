@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,6 +134,20 @@ export function TaskCard({
     setInlineNote("");
     setCompleteModalOpen(true);
   };
+  const [descOpen, setDescOpen] = useState(false);
+  const descTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleDescEnter = () => {
+    if (descTimerRef.current) clearTimeout(descTimerRef.current);
+    setDescOpen(true);
+  };
+
+  const handleDescLeave = () => {
+    descTimerRef.current = setTimeout(() => {
+      setDescOpen(false);
+    }, 150);
+  };
+
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [expandedRemarks, setExpandedRemarks] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -257,7 +271,12 @@ export function TaskCard({
         }}
       >
         {/* Top-Right Hover Quick Action Bar (Matching Screenshots 1, 4, 5) */}
-        <div className="absolute right-2 top-2 flex items-center gap-1 bg-[#282930] p-1 rounded-lg border border-[#3b3c46] shadow-md z-20 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150">
+        <div
+          className={cn(
+            "absolute right-2 top-2 flex items-center gap-1 bg-[#282930] p-1 rounded-lg border border-[#3b3c46] shadow-md z-20 transition-opacity duration-150",
+            completeModalOpen ? "opacity-100 pointer-events-auto" : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+          )}
+        >
           <TooltipProvider delayDuration={100}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -265,15 +284,24 @@ export function TaskCard({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    openCompleteModal();
+                    if (completeModalOpen) {
+                      setCompleteModalOpen(false);
+                    } else {
+                      openCompleteModal();
+                    }
                   }}
-                  className="h-6 w-6 grid place-items-center rounded hover:bg-[#383a45] text-slate-300 hover:text-emerald-400 transition-colors"
+                  className={cn(
+                    "h-6 w-6 grid place-items-center rounded transition-colors cursor-pointer",
+                    completeModalOpen
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "hover:bg-[#383a45] text-slate-300 hover:text-emerald-400"
+                  )}
                 >
                   <Check className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" className="bg-[#1e1f24] text-slate-100 border border-slate-700 text-[11px] font-medium py-1 px-2 z-50">
-                Mark complete
+                {completeModalOpen ? "Close complete panel" : "Mark complete"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -468,41 +496,62 @@ export function TaskCard({
               </div>
             </div>
 
-            {/* Description lines indicator (ClickUp style ≡) with Rich Popover Preview (Screenshot 3) */}
+            {/* Description lines indicator (ClickUp style ≡) with Rich Popover Preview on Hover & Click */}
             {task.remarks && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-200 select-none group/desc cursor-pointer"
-                  >
-                    <span className="font-bold tracking-tighter text-slate-400 group-hover/desc:text-[#5C8EFA]">≡</span>
-                    <span className="text-[10px] text-slate-400/80 line-clamp-1 group-hover/desc:text-slate-200 transition-colors">
-                      {task.remarks.slice(0, 40)}{task.remarks.length > 40 ? "..." : ""}
-                    </span>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-80 p-3.5 bg-[#141518] border border-[#2b2c34] shadow-2xl rounded-xl text-slate-100 text-xs space-y-2.5 z-50">
-                  <div className="font-semibold text-slate-200 flex items-center justify-between border-b border-slate-800 pb-1.5">
-                    <span className="flex items-center gap-1.5 text-slate-300 font-medium">
-                      📝 Description
-                    </span>
+              <div
+                className="inline-block"
+                onMouseEnter={handleDescEnter}
+                onMouseLeave={handleDescLeave}
+              >
+                <Popover open={descOpen} onOpenChange={setDescOpen}>
+                  <PopoverTrigger asChild>
                     <button
                       type="button"
-                      onClick={() => setDetailModalOpen(true)}
-                      className="text-[11px] text-[#5C8EFA] hover:underline font-medium"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDescOpen((prev) => !prev);
+                      }}
+                      className={cn(
+                        "mt-1 flex items-center gap-1.5 text-[11px] select-none group/desc cursor-pointer py-0.5 px-1 rounded transition-colors",
+                        descOpen ? "bg-[#252730] text-[#5C8EFA]" : "text-slate-400 hover:text-slate-200"
+                      )}
                     >
-                      Full Details ↗
+                      <span className="font-bold tracking-tighter text-slate-400 group-hover/desc:text-[#5C8EFA]">≡</span>
+                      <span className="text-[10px] text-slate-400/80 line-clamp-1 group-hover/desc:text-slate-200 transition-colors max-w-[200px]">
+                        {task.remarks.slice(0, 45)}{task.remarks.length > 45 ? "..." : ""}
+                      </span>
                     </button>
-                  </div>
-                  <div className="p-2 rounded-lg bg-[#1b1c21] border border-slate-800 text-slate-200 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto font-sans text-xs">
-                    {task.remarks}
-                  </div>
-                </PopoverContent>
-              </Popover>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    side="bottom"
+                    sideOffset={6}
+                    onMouseEnter={handleDescEnter}
+                    onMouseLeave={handleDescLeave}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-96 max-w-[90vw] p-3.5 bg-[#16171c] border border-[#2b2c34] shadow-2xl rounded-xl text-slate-100 text-xs space-y-3 z-50"
+                  >
+                    <div className="font-semibold text-slate-200 flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="flex items-center gap-1.5 text-slate-300 font-semibold text-xs">
+                        <FileText className="h-3.5 w-3.5 text-[#5C8EFA]" /> Description
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDescOpen(false);
+                          setDetailModalOpen(true);
+                        }}
+                        className="text-[11px] text-[#5C8EFA] hover:text-blue-400 hover:underline font-medium cursor-pointer"
+                      >
+                        Full Details ↗
+                      </button>
+                    </div>
+                    <div className="p-3 rounded-lg bg-[#1c1d23] border border-[#282932] text-slate-200 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto font-sans text-xs select-text tracking-normal">
+                      {task.remarks}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             )}
 
             {/* Bottom Metadata Row (User Profile Popover, Due Date Tooltip, Priority Flag Popover) */}
@@ -595,20 +644,6 @@ export function TaskCard({
                       type="button"
                       onClick={() => {
                         tasksService.setPriority(task, "High", userId);
-                        toast.success("Priority set to Urgent");
-                        onChanged();
-                      }}
-                      className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Flag className="h-3.5 w-3.5 text-rose-500 fill-rose-500/20" /> Urgent
-                      </span>
-                      {task.priority === "High" && <Check className="h-3.5 w-3.5 text-slate-200" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        tasksService.setPriority(task, "High", userId);
                         toast.success("Priority set to High");
                         onChanged();
                       }}
@@ -647,17 +682,6 @@ export function TaskCard({
                       </span>
                       {task.priority === "Low" && <Check className="h-3.5 w-3.5 text-slate-200" />}
                     </button>
-
-                    <div className="pt-2 border-t border-[#2e3038] px-2 text-[11px] text-slate-400">
-                      <div className="mb-1">Add to Personal Priorities</div>
-                      <div className="flex items-center gap-1.5">
-                        <Avatar className="h-5 w-5 bg-slate-200 text-slate-900 font-bold text-[9px] flex items-center justify-center">
-                          <AvatarFallback className="text-[9px] font-bold text-slate-900">
-                            {assignee ? assignee.display_name.slice(0, 2).toUpperCase() : "SM"}
-                          </AvatarFallback>
-                        </Avatar>
-                      </div>
-                    </div>
                   </PopoverContent>
                 </Popover>
 
@@ -670,80 +694,83 @@ export function TaskCard({
             </div>
           </div>
         </div>
-
-        {/* Complete Task Modal */}
-        <Dialog open={completeModalOpen} onOpenChange={(o) => { if (!inlineBusy) setCompleteModalOpen(o); }}>
-          <DialogContent hideCloseButton className="max-w-sm w-[92vw] p-0 bg-[#18191e] border border-[#2b2c34] shadow-2xl rounded-2xl overflow-hidden">
-            <div className="px-5 pt-5 pb-4 space-y-4">
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-full bg-emerald-500/15 flex items-center justify-center">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-100">Complete Task</div>
-                    <div className="text-[11px] text-slate-400 truncate max-w-[180px]">{task.task_name}</div>
-                  </div>
-                </div>
-                <TaskHoursBadges task={task} variant="badges" />
+        {/* Inline Expandable Completion Panel (matching screenshot design) */}
+        {completeModalOpen && (
+          <div
+            className="mt-2.5 p-3 rounded-xl bg-[#141519] border border-slate-500/40 shadow-inner flex flex-col gap-2.5 animate-in fade-in slide-in-from-top-1 duration-150 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header row with title, cancel and Save button */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                <span className="text-xs font-bold text-slate-100 truncate">Log Hours & Complete</span>
               </div>
-
-              {/* Hours Input */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block">
-                  Today's Worked Hours
-                </label>
-                <Input
-                  type="text"
-                  placeholder="e.g. 1.5, 45m, 1h 30m"
-                  className="h-9 text-sm font-bold text-emerald-400 bg-[#111215] border-[#2b2c34] text-right focus-visible:ring-1 focus-visible:ring-emerald-500/50 placeholder:text-slate-600"
-                  value={inlineHours}
-                  onChange={(e) => setInlineHours(e.target.value)}
-                  disabled={inlineBusy}
-                  autoFocus
-                />
-              </div>
-
-              {/* Note Input */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block">
-                  Note <span className="normal-case font-normal text-slate-500">(optional)</span>
-                </label>
-                <Input
-                  type="text"
-                  placeholder="Add a quick note..."
-                  className="h-9 text-xs bg-[#111215] border-[#2b2c34] text-slate-200 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-slate-500/50"
-                  value={inlineNote}
-                  onChange={(e) => setInlineNote(e.target.value)}
-                  disabled={inlineBusy}
-                />
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-2 pt-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={inlineBusy}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
                   onClick={() => setCompleteModalOpen(false)}
-                  className="flex-1 h-9 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#23242a] border border-[#2b2c34]"
+                  className="h-6 w-6 grid place-items-center text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded cursor-pointer transition-colors"
+                  title="Cancel"
                 >
-                  Cancel
-                </Button>
+                  <X className="h-3.5 w-3.5" />
+                </button>
                 <Button
                   size="sm"
                   disabled={inlineBusy}
                   onClick={handleInlineSubmit}
-                  className="flex-1 h-9 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm"
+                  className="h-7 px-3 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white gap-1 rounded-lg shadow-sm cursor-pointer"
                 >
-                  {inlineBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                  Save & Complete
+                  {inlineBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  <span>Save ↵</span>
                 </Button>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
+
+            {/* Worked Hours & Completion Note Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
+                  <span>Worked Hours</span>
+                  {planned > 0 && <span className="text-[10px] text-slate-500 font-mono">Plan: {planned}h</span>}
+                </div>
+                <Input
+                  type="text"
+                  placeholder="e.g. 1.5, 45m"
+                  className="h-8 text-xs font-bold text-emerald-400 bg-[#090a0d] border-[#2b2c34] focus-visible:ring-1 focus-visible:ring-emerald-500/50 placeholder:text-slate-600"
+                  value={inlineHours}
+                  onChange={(e) => setInlineHours(e.target.value)}
+                  disabled={inlineBusy}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !inlineBusy) {
+                      handleInlineSubmit();
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-400 block">
+                  Note <span className="font-normal text-slate-500 text-[10px]">(optional)</span>
+                </label>
+                <Input
+                  type="text"
+                  placeholder="What did you finish?"
+                  className="h-8 text-xs bg-[#090a0d] border-[#2b2c34] text-slate-200 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-slate-500/50"
+                  value={inlineNote}
+                  onChange={(e) => setInlineNote(e.target.value)}
+                  disabled={inlineBusy}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !inlineBusy) {
+                      handleInlineSubmit();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       <BlockerDialog
