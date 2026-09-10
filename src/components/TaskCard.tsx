@@ -475,9 +475,6 @@ export function TaskCard({
             <div className="flex items-start justify-between gap-2 pr-24 transition-all">
               <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setDetailModalOpen(true)}>
                 <div className="flex items-start gap-1.5">
-                  <span className="text-sm shrink-0 select-none mt-0.5">
-                    {task.type_id ? "📝" : task.priority === "High" ? "⚡" : "📌"}
-                  </span>
                   <div className="min-w-0 flex-1">
                     <div
                       title={task.task_name}
