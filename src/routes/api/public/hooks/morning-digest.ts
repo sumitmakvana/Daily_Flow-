@@ -61,7 +61,7 @@ export const Route = createFileRoute("/api/public/hooks/morning-digest")({
           supabaseAdmin.from("work_settings").select("morning_digest_time").eq("id", 1).maybeSingle(),
         ]);
 
-        const morningTime = settings?.morning_digest_time ?? "10:00";
+        const morningTime = settings?.morning_digest_time ?? "10:30";
         if (currentLocalTime !== morningTime && !force) {
           return Response.json({
             ok: true,
