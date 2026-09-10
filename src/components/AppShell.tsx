@@ -38,6 +38,7 @@ import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { HolidayBanner } from "@/components/HolidayBanner";
 import { AnnouncementNoticeBanner } from "@/components/AnnouncementNoticeBanner";
+import { DesktopNotificationPromptBanner } from "@/components/DesktopNotificationPromptBanner";
 import { UX4GAccessibilityToolbar } from "@/components/UX4GAccessibilityToolbar";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth, signOut } from "@/hooks/use-auth";
@@ -248,6 +249,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background font-sans">
+      {/* Desktop Notification Banner */}
+      <DesktopNotificationPromptBanner />
+
       {/* UX4G Accessibility Toolbar */}
       <UX4GAccessibilityToolbar isOpen={accessibilityOpen} onOpenChange={setAccessibilityOpen} />
 
