@@ -472,12 +472,11 @@ export function TaskCard({
           {/* Main Content Area */}
           <div className="min-w-0 flex-1">
             {/* Header Row: Title */}
-            <div className="flex items-start justify-between gap-2 pr-24 transition-all">
+            <div className="flex items-start justify-between gap-2 pr-28 md:pr-32 transition-all">
               <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setDetailModalOpen(true)}>
                 <div className="flex items-start gap-1.5">
                   <div className="min-w-0 flex-1">
                     <div
-                      title={task.task_name}
                       className="font-semibold text-slate-100 leading-snug hover:text-[#5C8EFA] transition-colors text-xs md:text-sm line-clamp-2"
                     >
                       {task.task_name}
@@ -554,7 +553,7 @@ export function TaskCard({
             {/* Bottom Metadata Row (User Profile Popover, Due Date Tooltip, Priority Flag Popover) */}
             <div className="mt-2 flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-slate-800/60">
               <div className="flex items-center gap-1.5 flex-wrap">
-                {/* User Profile Card Popover (Screenshot 1) */}
+                {/* User Profile Card Popover */}
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
@@ -567,7 +566,7 @@ export function TaskCard({
                           <AvatarImage src={assignee.avatar_url} />
                         ) : (
                           <AvatarFallback className="text-[9px] font-bold text-slate-200 bg-slate-700">
-                            {assignee ? assignee.display_name.slice(0, 2).toUpperCase() : "SM"}
+                            {assignee ? (assignee.display_name.trim().split(/\s+/).length >= 2 ? (assignee.display_name.trim().split(/\s+/)[0][0] + assignee.display_name.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase() : assignee.display_name.slice(0, 2).toUpperCase()) : "U"}
                           </AvatarFallback>
                         )}
                       </Avatar>
@@ -577,35 +576,38 @@ export function TaskCard({
                   <PopoverContent align="start" className="w-64 p-4 bg-[#141518] border border-[#2a2c34] shadow-2xl rounded-2xl space-y-3 z-50 text-slate-100">
                     <div className="flex items-start justify-between">
                       <div>
-                        <div className="text-xs font-semibold text-slate-400">You</div>
-                        <div className="text-sm font-bold text-slate-100">{assignee?.display_name || "SUMIT MAKVANA"}</div>
+                        <div className="text-xs font-semibold text-slate-400">
+                          {assignee ? (assignee.id === userId ? "You (Assignee)" : "Assignee") : "Unassigned"}
+                        </div>
+                        <div className="text-sm font-bold text-slate-100">
+                          {assignee?.display_name || "Unassigned"}
+                        </div>
                       </div>
                       <div className="relative">
-                        <Avatar className="h-10 w-10 border-2 border-slate-700 bg-slate-200 text-slate-900 text-sm font-bold flex items-center justify-center">
-                          {assignee ? assignee.display_name.slice(0, 2).toUpperCase() : "SM"}
+                        <Avatar className="h-10 w-10 border-2 border-slate-700 bg-slate-800 text-slate-100 text-sm font-bold flex items-center justify-center">
+                          {assignee?.avatar_url ? (
+                            <AvatarImage src={assignee.avatar_url} />
+                          ) : (
+                            <AvatarFallback className="text-xs font-bold text-slate-200 bg-slate-700">
+                              {assignee ? (assignee.display_name.trim().split(/\s+/).length >= 2 ? (assignee.display_name.trim().split(/\s+/)[0][0] + assignee.display_name.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase() : assignee.display_name.slice(0, 2).toUpperCase()) : "U"}
+                            </AvatarFallback>
+                          )}
                         </Avatar>
                         <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#141518]" />
                       </div>
                     </div>
 
                     <div className="space-y-1.5 text-xs text-slate-300">
-                      <div className="flex items-center gap-2 text-slate-400">
-                        <Mail className="h-3.5 w-3.5" />
-                        <span className="truncate">{assignee?.email || "sumitmakvana535@gmail.com"}</span>
-                      </div>
+                      {assignee?.email && (
+                        <div className="flex items-center gap-2 text-slate-400">
+                          <Mail className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{assignee.email}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 text-slate-400 font-mono text-[11px]">
-                        <Clock className="h-3.5 w-3.5" />
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
                         <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} local time</span>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <Button size="sm" variant="outline" className="h-7 text-xs flex-1 bg-[#23252c] border-[#343742] text-slate-200 hover:bg-[#2c2e37]">
-                        <MessageSquare className="h-3 w-3 mr-1" /> Chat
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs flex-1 bg-[#23252c] border-[#343742] text-slate-200 hover:bg-[#2c2e37]">
-                        <UserIcon className="h-3 w-3 mr-1" /> View profile
-                      </Button>
                     </div>
                   </PopoverContent>
                 </Popover>
