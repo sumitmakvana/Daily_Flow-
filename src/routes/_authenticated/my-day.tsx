@@ -376,7 +376,7 @@ function MyDayPage() {
       {/* Header Bar */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
         <div className="min-w-0">
-          <h1 className="truncate text-lg md:text-xl font-bold tracking-tight text-slate-100">{greeting}</h1>
+          <h1 className="truncate text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-100">{greeting}</h1>
           <p className="text-[11px] text-slate-400 mt-0.5">
             {new Date().toLocaleDateString(undefined, {
               weekday: "long",
@@ -387,7 +387,7 @@ function MyDayPage() {
             · {d ? `${d.priorities.length} priorities` : `${activeWorkTodayCount} active tasks`}
           </p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
           {/* Board / List View Mode Toggle */}
           <div className="flex items-center p-0.5 rounded-lg bg-muted border border-border">
             <button
