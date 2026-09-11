@@ -755,7 +755,7 @@ export function TaskCard({
               </div>
 
               <div className="flex items-center gap-1 ml-auto">
-                <TaskHoursBadges task={task} />
+                <TaskHoursBadges task={task} onToggleTimer={handleStartOrResumeWithCheck} />
               </div>
             </div>
           </div>

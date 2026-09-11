@@ -52,7 +52,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Profile, Task } from "@/lib/types";
-import { isToday, isOverdue } from "@/lib/format";
+import { isToday, isOverdue, toLocalISO } from "@/lib/format";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { getTodayDateStr, isTaskCompletedToday } from "@/lib/task-date-utils";
 import { toast } from "sonner";
@@ -225,15 +225,36 @@ function MyDayPage() {
   // Load raw tasks for the task sections
   const loadTasks = useCallback(async () => {
     if (!user) return;
-    const [{ data: t }, { data: p }] = await Promise.all([
+    const [{ data: t }, { data: p }, { data: w }] = await Promise.all([
       supabase
         .from("tasks")
         .select("*")
         .eq("assigned_to", user.id)
         .order("due_date", { ascending: true, nullsFirst: false }),
       supabase.from("profiles").select("id,display_name,avatar_url"),
+      supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
     ]);
-    setTasks((t ?? []) as Task[]);
+
+    const worklogsByTask = new Map<string, any[]>();
+    const todayStr = toLocalISO(new Date());
+    for (const item of w || []) {
+      const list = worklogsByTask.get(item.task_id) || [];
+      list.push(item);
+      worklogsByTask.set(item.task_id, list);
+    }
+
+    const enrichedTasks = ((t ?? []) as Task[]).map((task) => {
+      const logs = worklogsByTask.get(task.id) || [];
+      const todayLogs = logs.filter((x) => x.work_date === todayStr);
+      const todaySys = todayLogs.reduce((sum, x) => sum + Number(x.system_hours || 0), 0);
+      return {
+        ...task,
+        today_system_hours: todaySys,
+        worklogs: logs,
+      };
+    });
+
+    setTasks(enrichedTasks);
     setProfiles((p ?? []) as Profile[]);
   }, [user?.id]);
 
