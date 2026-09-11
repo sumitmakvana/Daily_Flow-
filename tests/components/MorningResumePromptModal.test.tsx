@@ -35,10 +35,10 @@ describe("MorningResumePromptModal Component", () => {
     localStorage.clear();
     render(<MorningResumePromptModal />);
 
-    expect(await screen.findByText(/Resume Yesterday's Active Task\?/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Unified Morning Digest/i)).toBeInTheDocument();
     expect(screen.getByText("TSK-102")).toBeInTheDocument();
     expect(screen.getByText("V2: Column Wise in UI, CSV Lat Long")).toBeInTheDocument();
-    expect(screen.getByText(/Resume Timer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Keep Paused/i)).toBeInTheDocument();
+    expect(screen.getByText("Yesterday's Paused")).toBeInTheDocument();
+    expect(screen.getByText(/Start Counter Now/i)).toBeInTheDocument();
   });
 });

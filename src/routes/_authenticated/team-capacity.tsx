@@ -63,7 +63,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import type { Profile, Task, Project, TaskStatus } from "@/lib/types";
-import { formatHoursMins } from "@/lib/format";
+import { formatHoursMins, toLocalISO } from "@/lib/format";
 import { getTodayDateStr, formatToDateStr, isTaskCompletedToday } from "@/lib/task-date-utils";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -248,7 +248,7 @@ function TeamCapacityPage() {
       if (!rawTasks || rawTasks.length === 0) return [];
 
       const worklogsByTask = new Map<string, any[]>();
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = toLocalISO(new Date());
 
       for (const w of worklogsData || []) {
         const list = worklogsByTask.get(w.task_id) || [];

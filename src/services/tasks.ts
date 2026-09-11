@@ -206,6 +206,25 @@ export const tasksService = {
     }
   },
 
+  async queryTasks(params: { assignedTo?: string; limit?: number }): Promise<Task[]> {
+    try {
+      let query = supabase.from("tasks").select("*");
+      if (params.assignedTo) {
+        query = query.eq("assigned_to", params.assignedTo);
+      }
+      query = query.order("updated_at", { ascending: false });
+      if (params.limit) {
+        query = query.limit(params.limit);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as Task[];
+    } catch (err) {
+      console.warn("[tasksService.queryTasks] failed:", (err as Error).message);
+      return [];
+    }
+  },
+
   async switchActiveTask(oldTask: Task, newTask: Task, userId: string): Promise<{ stoppedTask: Task; startedTask: Task }> {
     const stoppedTask = await this.update(oldTask, { status: "To Do", started_at: null } as Partial<Task>, userId);
     const startedTask = await this.resumeTimer(newTask, userId);

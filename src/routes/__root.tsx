@@ -35,14 +35,45 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       </div>
     </div>
   ),
-  errorComponent: ({ error }) => (
-    <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
-      <div className="text-center max-w-md">
-        <h1 className="text-xl font-semibold">Something went wrong</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+  errorComponent: ({ error }) => {
+    const isChunkError =
+      error?.message?.includes("Failed to fetch dynamically imported module") ||
+      error?.message?.includes("Importing a module script failed");
+
+    if (isChunkError && typeof window !== "undefined") {
+      if (!sessionStorage.getItem("chunk_reload_attempted")) {
+        sessionStorage.setItem("chunk_reload_attempted", "true");
+        window.location.reload();
+        return null;
+      }
+    }
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-xl font-semibold">
+            {isChunkError ? "A new update is available" : "Something went wrong"}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {isChunkError
+              ? "Please reload the page to get the latest version."
+              : error.message}
+          </p>
+          {isChunkError && (
+            <button
+              onClick={() => {
+                sessionStorage.removeItem("chunk_reload_attempted");
+                window.location.reload();
+              }}
+              className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              Reload Page
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  ),
+    );
+  },
 });
 
 function RootShell({ children }: { children: React.ReactNode }) {
@@ -95,6 +126,19 @@ function RootComponent() {
       }
     }
   }, [router.state.location]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const handlePreloadError = () => {
+        if (!sessionStorage.getItem("chunk_reload_attempted")) {
+          sessionStorage.setItem("chunk_reload_attempted", "true");
+          window.location.reload();
+        }
+      };
+      window.addEventListener("vite:preloadError", handlePreloadError);
+      return () => window.removeEventListener("vite:preloadError", handlePreloadError);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
