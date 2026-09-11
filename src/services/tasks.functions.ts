@@ -28,11 +28,15 @@ export const createTaskFn = createServerFn({ method: "POST" })
         updated_by: context.userId,
       };
 
-      // Clean up auto-generated/system columns that shouldn't be explicitly inserted as null/empty
-      const keysToClean = ["id", "task_code", "created_at", "updated_at", "version"];
+      // Clean up auto-generated/system columns and virtual fields that shouldn't be explicitly inserted
+      const keysToClean = ["id", "task_code", "created_at", "updated_at", "version", "today_system_hours", "worklogs"];
       for (const key of keysToClean) {
-        if (key in payload && (payload[key] === null || payload[key] === undefined || payload[key] === "")) {
-          delete payload[key];
+        if (key in payload) {
+          if (key === "today_system_hours" || key === "worklogs") {
+            delete payload[key];
+          } else if (payload[key] === null || payload[key] === undefined || payload[key] === "") {
+            delete payload[key];
+          }
         }
       }
 
@@ -234,6 +238,8 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       delete patch.created_at;
       delete patch.updated_at;
       delete patch.version;
+      delete patch.today_system_hours;
+      delete patch.worklogs;
 
       const keys = Object.keys(patch);
       if (keys.length === 0) throw new Error("Empty task patch");
