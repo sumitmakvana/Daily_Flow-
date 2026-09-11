@@ -276,7 +276,7 @@ export function TaskCard({
         <div
           className={cn(
             "absolute right-2 top-2 flex items-center gap-1 bg-[#282930] p-1 rounded-lg border border-[#3b3c46] shadow-md z-20 transition-opacity duration-150",
-            completeModalOpen ? "opacity-100 pointer-events-auto" : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+            completeModalOpen ? "opacity-100 pointer-events-auto" : "opacity-100 pointer-events-auto md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto"
           )}
         >
           <TooltipProvider delayDuration={100}>
@@ -464,7 +464,7 @@ export function TaskCard({
             <div
               className={cn(
                 "pt-0.5 shrink-0 transition-opacity duration-150 cursor-pointer select-none",
-                selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                selected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
               )}
               onClick={(e) => {
                 e.stopPropagation();
@@ -488,7 +488,7 @@ export function TaskCard({
           {/* Main Content Area */}
           <div className="min-w-0 flex-1">
             {/* Header Row: Title */}
-            <div className="flex items-start justify-between gap-2 pr-28 md:pr-32 transition-all">
+            <div className="flex items-start justify-between gap-2 pr-[7.5rem] md:pr-32 transition-all">
               <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setDetailModalOpen(true)}>
                 <div className="flex items-start gap-1.5">
                   <div className="min-w-0 flex-1">
@@ -659,6 +659,11 @@ export function TaskCard({
                           onClick={async (e) => {
                             e.stopPropagation();
                             if (!userId) return;
+                            // If "Completed" is clicked, open the Log Hours modal instead of directly setting status
+                            if (s === "Completed") {
+                              openCompleteModal();
+                              return;
+                            }
                             try {
                               await tasksService.setStatus(task, s as TaskStatus, userId);
                               toast.success(`Status updated to ${label}`);

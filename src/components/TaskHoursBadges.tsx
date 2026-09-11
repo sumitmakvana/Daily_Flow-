@@ -32,7 +32,12 @@ function formatHHMMSS(totalSecs: number): string {
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
+import { useAuth } from "@/hooks/use-auth";
+
 export function TaskHoursBadges({ task, className, onToggleTimer }: TaskHoursBadgesProps) {
+  const { isManager, isAdmin } = useAuth();
+  const isManagerOrAdmin = isManager || isAdmin;
+
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
 
@@ -141,7 +146,7 @@ export function TaskHoursBadges({ task, className, onToggleTimer }: TaskHoursBad
             <PopoverTrigger asChild>
               <button
                 type="button"
-                title={timerTitle}
+                title={popoverOpen ? undefined : timerTitle}
                 onClick={(e) => {
                   e.stopPropagation();
                   setPopoverOpen((prev) => !prev);
@@ -261,8 +266,8 @@ export function TaskHoursBadges({ task, className, onToggleTimer }: TaskHoursBad
                   <div className="font-mono text-xs font-semibold text-foreground">{formatHoursMins(sysHrs)}</div>
                 </div>
               </div>
-              {/* Manager Audit: Target vs Logged */}
-              {(plan > 0 || logged > 0 || hasGap || isOverrun) && (
+              {/* Manager Audit: Target vs Logged (visible for Managers & Admins only) */}
+              {isManagerOrAdmin && (plan > 0 || logged > 0 || hasGap || isOverrun) && (
                 <div className="mt-2 pt-2 border-t border-border/40 space-y-1">
                   <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                     <span>Audit Breakdown</span>
@@ -290,8 +295,8 @@ export function TaskHoursBadges({ task, className, onToggleTimer }: TaskHoursBad
                 </div>
               )}
 
-              {/* Worklog History List (for Managers & Admins) */}
-              {worklogs.length > 0 && (
+              {/* Worklog History List (visible for Managers & Admins only) */}
+              {isManagerOrAdmin && worklogs.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-border/40 space-y-1">
                   <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                     <span>Daily History Log</span>

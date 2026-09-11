@@ -427,8 +427,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Search className="h-4 w-4" />
             </button>
 
-            {/* Realtime Sync Status Badge */}
-            <SyncStatusBadge />
+            {/* Realtime Sync Status Badge - hidden on mobile for space */}
+            <span className="hidden sm:inline-flex">
+              <SyncStatusBadge />
+            </span>
 
             {/* Notifications Icon Button */}
             <button
@@ -467,7 +469,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <span className="text-xs font-semibold max-w-[120px] truncate hidden sm:inline-block">
                       {displayName}
                     </span>
-                    <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-white transition-colors" />
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-white transition-colors hidden sm:block" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
@@ -536,20 +538,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </DropdownMenu>
             ) : null}
 
-            {/* Mobile Drawer Button */}
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden flex items-center justify-center h-8 w-8 rounded text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
           </div>
         </div>
       </header>
 
-      {/* 2. SECONDARY NAVIGATION BAR - Unified App Theme Background */}
-      <nav className="sticky top-14 z-20 bg-background border-b border-border/60 text-foreground transform-gpu">
+      {/* 2. SECONDARY NAVIGATION BAR - Desktop only (mobile uses bottom nav + drawer) */}
+      <nav className="sticky top-14 z-20 bg-background border-b border-border/60 text-foreground transform-gpu hidden md:block">
         <div className="flex h-10 items-center px-2 md:px-4 w-full justify-between overflow-x-auto no-scrollbar scrollbar-none">
           
           {/* Main Horizontal Links */}
@@ -605,7 +599,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* MOBILE BOTTOM NAVIGATION BAR */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-[#1A2336] bg-[#0B111E]/95 backdrop-blur md:hidden">
-        <div className="grid grid-cols-5 h-14">
+        <div
+          className="h-14 grid"
+          style={{ gridTemplateColumns: `repeat(${mobileBottomNav.length + 1}, minmax(0, 1fr))` }}
+        >
           {mobileBottomNav.map((n) => {
             const active = location.pathname === n.to || location.pathname.startsWith(n.to + "/");
             return (

@@ -40,6 +40,7 @@ export function MorningResumePromptModal() {
   const [otherTasks, setOtherTasks] = useState<Task[]>([]);
   const [displayName, setDisplayName] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
   const checkAndOpenDigestModal = async () => {
     if (!user) return;
@@ -414,42 +415,93 @@ export function MorningResumePromptModal() {
                     </Button>
                   </div>
 
-                  <div className="space-y-1.5 max-h-[140px] sm:max-h-[170px] overflow-y-auto pr-1">
-                    {otherTasks.map((task, idx) => (
-                      <div
-                        key={task.id}
-                        onClick={() => {
-                          setFocusTask(task);
-                          setIsPausedTask(Number(task.system_hours ?? 0) > 0 || task.started_at !== null);
-                        }}
-                        className="p-2 sm:p-2.5 rounded-lg border border-border/60 bg-background/60 hover:bg-accent/40 cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 sm:gap-3 transition-colors text-xs group"
-                      >
-                        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 w-full sm:w-auto">
-                          <span className="w-4 sm:w-5 h-4 sm:h-5 rounded-full bg-muted text-muted-foreground font-mono text-[9px] sm:text-[10px] font-bold flex items-center justify-center group-hover:bg-primary/20 group-hover:text-primary transition-colors shrink-0">
-                            {idx + 2}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                              {task.task_name}
-                            </div>
-                            {task.project_name && (
-                              <div className="text-[10px] text-muted-foreground font-mono truncate">
-                                Project: {task.project_name}
+                  <div className="space-y-1.5 max-h-[180px] sm:max-h-[170px] overflow-y-auto pr-1">
+                    {otherTasks.map((task, idx) => {
+                      const isExpanded = expandedTaskId === task.id;
+                      return (
+                        <div
+                          key={task.id}
+                          onClick={() => {
+                            // Toggle expand on tap; on desktop this also sets focus
+                            if (expandedTaskId === task.id) {
+                              setExpandedTaskId(null);
+                            } else {
+                              setExpandedTaskId(task.id);
+                              setFocusTask(task);
+                              setIsPausedTask(Number(task.system_hours ?? 0) > 0 || task.started_at !== null);
+                            }
+                          }}
+                          className={`p-2.5 sm:p-2.5 rounded-lg border cursor-pointer flex flex-col transition-all text-xs group ${
+                            isExpanded
+                              ? "bg-accent/50 border-primary/40 shadow-sm"
+                              : "border-border/60 bg-background/60 hover:bg-accent/40"
+                          }`}
+                        >
+                          {/* Top Row: Number, Name, Priority */}
+                          <div className="flex items-center justify-between gap-2 w-full">
+                            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+                              <span className={`w-5 h-5 sm:w-5 sm:h-5 rounded-full font-mono text-[10px] font-bold flex items-center justify-center shrink-0 transition-colors ${
+                                isExpanded
+                                  ? "bg-primary/20 text-primary"
+                                  : "bg-muted text-muted-foreground group-hover:bg-primary/20 group-hover:text-primary"
+                              }`}>
+                                {idx + 2}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className={`font-semibold truncate transition-colors ${
+                                  isExpanded ? "text-primary" : "text-foreground group-hover:text-primary"
+                                }`}>
+                                  {task.task_name}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        </div>
+                            </div>
 
-                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                          <PriorityBadge priority={task.priority} className="text-[10px]" />
-                          {task.planned_hours ? (
-                            <span className="text-[10px] font-mono text-muted-foreground">
-                              Plan: {task.planned_hours}h
-                            </span>
-                          ) : null}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <PriorityBadge priority={task.priority} className="text-[10px]" />
+                              {task.planned_hours && !isExpanded ? (
+                                <span className="text-[10px] font-mono text-muted-foreground hidden sm:inline">
+                                  Plan: {task.planned_hours}h
+                                </span>
+                              ) : null}
+                              <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 ${
+                                isExpanded ? "rotate-90" : ""
+                              }`} />
+                            </div>
+                          </div>
+
+                          {/* Expanded Content (visible on tap / mobile) */}
+                          {isExpanded && (
+                            <div className="mt-2 pt-2 border-t border-border/50 space-y-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                              {task.project_name && (
+                                <div className="text-[10px] sm:text-[11px] text-muted-foreground font-mono">
+                                  Project: <span className="text-foreground/90 font-medium">{task.project_name}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center flex-wrap gap-2">
+                                {task.planned_hours ? (
+                                  <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                                    Plan: {task.planned_hours}h
+                                  </span>
+                                ) : null}
+                                <TaskHoursBadges task={task} className="text-[10px]" />
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartCounterForTask(task);
+                                }}
+                                disabled={busy}
+                                className="h-8 w-full text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all active:scale-[0.98] rounded-lg justify-center"
+                              >
+                                <Play className="h-3.5 w-3.5 fill-white" /> Start Timer for this Task
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
