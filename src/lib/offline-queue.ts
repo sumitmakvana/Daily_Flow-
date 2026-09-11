@@ -153,13 +153,19 @@ export const offlineQueue = {
 async function executeOp(op: QueueOp): Promise<void> {
   switch (op.kind) {
     case "task.create": {
-      const { error } = await supabase.from("tasks").insert(op.payload as never);
+      const payload = { ...(op.payload as Record<string, unknown>) };
+      delete payload.today_system_hours;
+      delete payload.worklogs;
+      const { error } = await supabase.from("tasks").insert(payload as never);
       if (error) throw error;
       return;
     }
     case "task.update": {
       const { id, patch } = op.payload as { id: string; patch: Record<string, unknown> };
-      const { error } = await supabase.from("tasks").update(patch as never).eq("id", id);
+      const cleanedPatch = { ...(patch as Record<string, unknown>) };
+      delete cleanedPatch.today_system_hours;
+      delete cleanedPatch.worklogs;
+      const { error } = await supabase.from("tasks").update(cleanedPatch as never).eq("id", id);
       if (error) throw error;
       return;
     }

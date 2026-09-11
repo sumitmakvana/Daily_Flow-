@@ -45,11 +45,15 @@ export const tasksService = {
     }
     const cleanedPayload = { ...payload };
 
-    // Clean up empty/nullish system-generated primary keys and codes
-    const keysToClean = ["id", "task_code", "created_at", "updated_at", "version"];
+    // Clean up empty/nullish system-generated primary keys and codes, and virtual fields
+    const keysToClean = ["id", "task_code", "created_at", "updated_at", "version", "today_system_hours", "worklogs"];
     for (const key of keysToClean) {
-      if (key in cleanedPayload && (cleanedPayload[key as keyof Task] === null || cleanedPayload[key as keyof Task] === undefined || (cleanedPayload[key as keyof Task] as unknown) === "")) {
-        delete cleanedPayload[key as keyof Task];
+      if (key in cleanedPayload) {
+        if (key === "today_system_hours" || key === "worklogs") {
+          delete cleanedPayload[key as keyof Task];
+        } else if (cleanedPayload[key as keyof Task] === null || cleanedPayload[key as keyof Task] === undefined || (cleanedPayload[key as keyof Task] as unknown) === "") {
+          delete cleanedPayload[key as keyof Task];
+        }
       }
     }
 
@@ -98,6 +102,8 @@ export const tasksService = {
       (globalThis as any).__test_user_id = _userId;
     }
     const cleanedPatch = { ...patch };
+    delete (cleanedPatch as Record<string, unknown>).today_system_hours;
+    delete (cleanedPatch as Record<string, unknown>).worklogs;
     const effectiveStart = cleanedPatch.start_date !== undefined ? cleanedPatch.start_date : task.start_date;
     const effectiveDue = cleanedPatch.due_date !== undefined ? cleanedPatch.due_date : task.due_date;
     if (effectiveStart && effectiveDue && effectiveDue < effectiveStart) {
