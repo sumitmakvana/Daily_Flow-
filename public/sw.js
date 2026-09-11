@@ -1,9 +1,9 @@
-const CACHE_NAME = 'execution-os-cache-v1';
+const CACHE_NAME = 'execution-os-cache-v2';
 const ASSETS_TO_CACHE = [
-  '/',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
+  '/icon.svg',
 ];
 
 self.addEventListener('install', (event) => {
@@ -21,6 +21,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -35,7 +36,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
-  
+
   // Do not intercept external requests, auth routes, API endpoints, or database queries
   if (url.origin !== self.location.origin) return;
   if (
@@ -44,42 +45,57 @@ self.addEventListener('fetch', (event) => {
     url.pathname.includes('/auth/')
   ) return;
 
+  const isHTMLRequest =
+    event.request.mode === 'navigate' ||
+    (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'));
+
+  // 1. For HTML document requests: NETWORK FIRST
+  if (isHTMLRequest) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          return networkResponse;
+        })
+        .catch(async () => {
+          // If offline, fall back to cached page/shell if available
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          return caches.match('/');
+        })
+    );
+    return;
+  }
+
+  // 2. For static assets (images, icons, manifest): Cache / Network
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Serve cached resource, but fetch update in background (Stale While Revalidate)
         fetch(event.request)
           .then((networkResponse) => {
-            if (networkResponse.status === 200) {
+            if (networkResponse && networkResponse.status === 200) {
               caches.open(CACHE_NAME).then((cache) => {
                 cache.put(event.request, networkResponse);
               });
             }
           })
-          .catch(() => {/* Ignore background fetch failures */});
+          .catch(() => {/* Offline fallback */});
         return cachedResponse;
       }
 
-      return fetch(event.request)
-        .then((networkResponse) => {
-          // Check if response is valid for caching
-          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-            return networkResponse;
-          }
-
+      return fetch(event.request).then((networkResponse) => {
+        if (
+          networkResponse &&
+          networkResponse.status === 200 &&
+          networkResponse.type === 'basic' &&
+          !url.pathname.endsWith('.html')
+        ) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
           });
-
-          return networkResponse;
-        })
-        .catch(async () => {
-          // If offline and requesting a page/document, fall back to / (index shell)
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/');
-          }
-        });
+        }
+        return networkResponse;
+      });
     })
   );
 });
@@ -105,4 +121,5 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
 
