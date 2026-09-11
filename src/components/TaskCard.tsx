@@ -664,13 +664,7 @@ export function TaskCard({
                               openCompleteModal();
                               return;
                             }
-                            try {
-                              await tasksService.setStatus(task, s as TaskStatus, userId);
-                              toast.success(`Status updated to ${label}`);
-                              onChanged();
-                            } catch (err: any) {
-                              toast.error(err?.message || "Failed to update status");
-                            }
+                            await setStatus(s as TaskStatus);
                           }}
                           className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer"
                         >
