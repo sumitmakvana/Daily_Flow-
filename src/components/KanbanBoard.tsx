@@ -1,9 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import { Plus, CheckCircle2, PlayCircle, AlertOctagon, CircleDashed } from "lucide-react";
 import { TaskCard } from "./TaskCard";
 import type { Profile, Task, TaskStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { isTaskCompletedToday } from "@/lib/task-date-utils";
+import { tasksService, TaskConflictError } from "@/services/tasks";
+import { completeEodStore } from "@/services/complete-eod-store";
+import { ActiveTaskConflictModal } from "./ActiveTaskConflictModal";
+import { toast } from "sonner";
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -24,7 +28,14 @@ export function KanbanBoard({
   onAddTask,
   completedTodayOnly = true,
 }: KanbanBoardProps) {
-  // Define columns matching requested sequence (TO DO, IN PROGRESS, COMPLETE, BLOCKED)
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [dropTargetStatus, setDropTargetStatus] = useState<TaskStatus | null>(null);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [existingActiveTask, setExistingActiveTask] = useState<Task | null>(null);
+  const [pendingActiveTask, setPendingActiveTask] = useState<Task | null>(null);
+  const [switchBusy, setSwitchBusy] = useState(false);
+
+  // Define visible board columns. In Review is intentionally omitted from My Day kanban.
   const columns: {
     key: TaskStatus;
     label: string;
@@ -62,6 +73,70 @@ export function KanbanBoard({
     },
   ];
 
+  const finishDrag = () => {
+    setDraggingTaskId(null);
+    setDropTargetStatus(null);
+  };
+
+  const handleDropStatus = async (task: Task, status: TaskStatus) => {
+    if (!userId || task.status === status) return;
+
+    if (status === "Completed") {
+      completeEodStore.open(task, onChanged);
+      return;
+    }
+
+    try {
+      if (status === "In Progress") {
+        const currentActive = await tasksService.getActiveTask(userId);
+        if (currentActive && currentActive.id !== task.id) {
+          setExistingActiveTask(currentActive);
+          setPendingActiveTask(task);
+          setConflictModalOpen(true);
+          return;
+        }
+      }
+
+      await tasksService.setStatus(task, status, userId);
+      toast.success(`${task.task_code} moved to ${status}`);
+      onChanged();
+    } catch (error) {
+      if (error instanceof TaskConflictError) {
+        toast.error(error.message);
+        onChanged();
+      } else {
+        toast.error((error as Error).message || "Failed to update task status");
+      }
+    }
+  };
+
+  const handleConfirmSwitch = async () => {
+    if (!existingActiveTask || !pendingActiveTask || !userId) return;
+
+    setSwitchBusy(true);
+    try {
+      await tasksService.switchActiveTask(existingActiveTask, pendingActiveTask, userId);
+      toast.success(
+        `Stopped ${existingActiveTask.task_code || "active task"} - Started ${
+          pendingActiveTask.task_code || "new task"
+        }`,
+      );
+      setConflictModalOpen(false);
+      setExistingActiveTask(null);
+      setPendingActiveTask(null);
+      onChanged();
+    } catch (error) {
+      if (error instanceof TaskConflictError) {
+        toast.error(error.message);
+        onChanged();
+      } else {
+        toast.error((error as Error).message || "Failed to switch active task");
+      }
+    } finally {
+      setSwitchBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       {/* Dynamic Grid Columns Container (Fits on screen without horizontal scroll) */}
@@ -80,7 +155,29 @@ export function KanbanBoard({
           return (
             <div
               key={col.key}
-              className="flex flex-col bg-[#141518] border border-[#23242a] rounded-2xl p-2.5 min-w-0 w-full shrink-0 shadow-lg space-y-2.5"
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDropTargetStatus(col.key);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setDropTargetStatus((current) => (current === col.key ? null : current));
+                }
+              }}
+              onDrop={async (event) => {
+                event.preventDefault();
+                const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
+                finishDrag();
+                const droppedTask = tasks.find((task) => task.id === taskId);
+                if (droppedTask) {
+                  await handleDropStatus(droppedTask, col.key);
+                }
+              }}
+              className={cn(
+                "flex flex-col bg-[#141518] border border-[#23242a] rounded-2xl p-2.5 min-w-0 w-full shrink-0 shadow-lg space-y-2.5 transition-colors",
+                dropTargetStatus === col.key && "border-primary/70 bg-primary/5",
+              )}
             >
               {/* Column Header Bar (Screenshot 4) */}
               <div className="flex items-center justify-between gap-2 px-1 pt-0.5">
@@ -109,18 +206,32 @@ export function KanbanBoard({
               </div>
 
               {/* Column Cards List */}
-              <div className="space-y-2.5 max-h-[calc(100vh-280px)] overflow-y-auto pr-0.5">
+              <div className="space-y-2.5 max-h-[calc(100vh-280px)] min-h-24 overflow-y-auto pr-0.5">
                 {colTasks.map((t) => (
-                  <TaskCard
+                  <div
                     key={t.id}
-                    task={t}
-                    assignee={profiles.find((p) => p.id === t.assigned_to)}
-                    profiles={profiles}
-                    userId={userId}
-                    canManage={isManager}
-                    onChanged={onChanged}
-                    hideStatusBadge={true}
-                  />
+                    draggable={!!userId}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", t.id);
+                      setDraggingTaskId(t.id);
+                    }}
+                    onDragEnd={finishDrag}
+                    className={cn(
+                      "rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-primary",
+                      draggingTaskId === t.id && "opacity-50",
+                    )}
+                  >
+                    <TaskCard
+                      task={t}
+                      assignee={profiles.find((p) => p.id === t.assigned_to)}
+                      profiles={profiles}
+                      userId={userId}
+                      canManage={isManager}
+                      onChanged={onChanged}
+                      hideStatusBadge={true}
+                    />
+                  </div>
                 ))}
               </div>
 
@@ -139,6 +250,21 @@ export function KanbanBoard({
           );
         })}
       </div>
+
+      <ActiveTaskConflictModal
+        open={conflictModalOpen}
+        onOpenChange={(open) => {
+          setConflictModalOpen(open);
+          if (!open) {
+            setExistingActiveTask(null);
+            setPendingActiveTask(null);
+          }
+        }}
+        activeTask={existingActiveTask}
+        newTask={pendingActiveTask}
+        onConfirm={handleConfirmSwitch}
+        isSubmitting={switchBusy}
+      />
     </div>
   );
 }
