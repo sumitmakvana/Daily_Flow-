@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -105,16 +105,38 @@ export function TaskDetailModal({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [timerSeconds, setTimerSeconds] = useState(0);
 
+  const prevTaskIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (task) {
-      setRemarksValue(task.remarks || "");
-      setEstimateValue(task.planned_hours ? String(task.planned_hours) : "");
-      setTitleValue(task.task_name || "");
-      if (task.id) {
-        attachmentsService.list(task.id).then(setAttachments).catch(() => {});
+      const isNewTask = prevTaskIdRef.current !== task.id;
+      prevTaskIdRef.current = task.id;
+
+      if (isNewTask) {
+        setIsEditingRemarks(false);
+        setIsEditingEstimate(false);
+        setIsEditingTitle(false);
+        setRemarksValue(task.remarks || "");
+        setEstimateValue(task.planned_hours ? String(task.planned_hours) : "");
+        setTitleValue(task.task_name || "");
+        if (task.id) {
+          attachmentsService.list(task.id).then(setAttachments).catch(() => {});
+        }
+      } else {
+        if (!isEditingRemarks) {
+          setRemarksValue(task.remarks || "");
+        }
+        if (!isEditingEstimate) {
+          setEstimateValue(task.planned_hours ? String(task.planned_hours) : "");
+        }
+        if (!isEditingTitle) {
+          setTitleValue(task.task_name || "");
+        }
       }
+    } else {
+      prevTaskIdRef.current = null;
     }
-  }, [task]);
+  }, [task, isEditingRemarks, isEditingEstimate, isEditingTitle]);
 
   useEffect(() => {
     if (!task?.started_at || task.status !== "In Progress") {
