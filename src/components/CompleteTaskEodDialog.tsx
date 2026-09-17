@@ -58,7 +58,7 @@ export function CompleteTaskEodDialog({
       pendingFiles.forEach((x) => URL.revokeObjectURL(x.previewUrl));
       setPendingFiles([]);
     }
-  }, [open, defaultFill]);
+  }, [open]);
 
   const addPendingFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;

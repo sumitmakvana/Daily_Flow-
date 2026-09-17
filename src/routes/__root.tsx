@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { auth } from "@/integrations/backend/auth";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
+import { LoadingProvider } from "@/components/GlobalLoader";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -172,8 +173,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
-      <Toaster position="top-right" />
+      <LoadingProvider>
+        <Outlet />
+        <Toaster position="top-right" />
+      </LoadingProvider>
     </QueryClientProvider>
   );
 }

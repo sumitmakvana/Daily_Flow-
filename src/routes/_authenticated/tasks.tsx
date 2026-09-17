@@ -25,23 +25,29 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { tasksService } from "@/services/tasks";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { useGlobalLoader } from "@/components/GlobalLoader";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
   validateSearch: (
     search: Record<string, unknown>,
   ): {
+    taskId?: string;
     highlightId?: string;
     create?: boolean;
     search?: string;
     assignee?: string;
     tab?: string;
+    status?: string;
   } => ({
+    taskId: typeof search.taskId === "string" ? search.taskId : undefined,
     highlightId: typeof search.highlightId === "string" ? search.highlightId : undefined,
     create: search.create === true || search.create === "true" || undefined,
     search: typeof search.search === "string" ? search.search : undefined,
     assignee: typeof search.assignee === "string" ? search.assignee : undefined,
     tab: typeof search.tab === "string" ? search.tab : undefined,
+    status: typeof search.status === "string" ? search.status : undefined,
   }),
   component: TasksPage,
 });
@@ -107,28 +113,39 @@ function groupTasksByWhatsAppDay(taskList: Task[], sortBy: string = "newest") {
 
 function TasksPage() {
   const { user, isManager } = useAuth();
-  const { highlightId, create, search: searchParam, assignee: assigneeParam, tab: tabParam } = Route.useSearch();
+  const { taskId, highlightId, create, search: searchParam, assignee: assigneeParam, tab: tabParam, status: statusParam } = Route.useSearch();
   const navigate = useNavigate({ from: "/tasks" });
+  const { showLoader, hideLoader } = useGlobalLoader();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [q, setQ] = useState(searchParam || "");
 
-  const [status, setStatus] = useState<string>(ALL);
+  const [status, setStatus] = useState<string>(statusParam || ALL);
   const [priority, setPriority] = useState<string>(ALL);
   const [assignee, setAssignee] = useState<string>(assigneeParam || ALL);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
 
   // New UI feature states
   const [activeTab, setActiveTab] = useState<string>(
-    tabParam === "all" || tabParam === "all_tasks" || assigneeParam || searchParam
+    tabParam === "all" || tabParam === "all_tasks" || assigneeParam || searchParam || taskId
       ? "all_tasks"
       : tabParam === "team" || tabParam === "team_tasks"
         ? "team_tasks"
         : "my_tasks",
   );
+
+  useEffect(() => {
+    if (statusParam !== undefined) {
+      setStatus(statusParam || ALL);
+      if (statusParam && statusParam !== ALL) {
+        setActiveTab("all_tasks");
+      }
+    }
+  }, [statusParam]);
 
   useEffect(() => {
     if (searchParam !== undefined) {
@@ -163,7 +180,7 @@ function TasksPage() {
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [confirmDeleteAllText, setConfirmDeleteAllText] = useState("");
 
-  // Highlight state — React state (not classList) so Tailwind v4 includes the classes
+  // Highlight state
   const [activeHighlight, setActiveHighlight] = useState<string | null>(null);
 
   const nameOf = (id: string | null) => (id ? profiles.find((p) => p.id === id)?.display_name ?? "" : "");
@@ -207,40 +224,59 @@ function TasksPage() {
   };
 
   const load = async () => {
-    const [{ data: t }, { data: p }, { data: e }, { data: w }] = await Promise.all([
-      supabase.from("tasks").select("*").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id,display_name,avatar_url"),
-      supabase.from("profile_emails" as never).select("id,email") as never,
-      supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
-    ]);
+    try {
+      showLoader("Loading Tasks & Team Members...", "Retrieving latest task records...");
+      const [{ data: t }, { data: p }, { data: e }, { data: w }] = await Promise.all([
+        supabase.from("tasks").select("*").order("created_at", { ascending: false }),
+        supabase.from("profiles").select("id,display_name,avatar_url"),
+        supabase.from("profile_emails" as never).select("id,email") as never,
+        supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
+      ]);
 
-    const worklogsByTask = new Map<string, any[]>();
-    const todayStr = new Date().toISOString().slice(0, 10);
-    for (const item of w || []) {
-      const list = worklogsByTask.get(item.task_id) || [];
-      list.push(item);
-      worklogsByTask.set(item.task_id, list);
+      const worklogsByTask = new Map<string, any[]>();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      for (const item of w || []) {
+        const list = worklogsByTask.get(item.task_id) || [];
+        list.push(item);
+        worklogsByTask.set(item.task_id, list);
+      }
+
+      const enrichedTasks = ((t ?? []) as Task[]).map((task) => {
+        const logs = worklogsByTask.get(task.id) || [];
+        const todayLogs = logs.filter((x) => x.work_date === todayStr);
+        const todaySys = todayLogs.reduce((sum, x) => sum + Number(x.system_hours || 0), 0);
+        return {
+          ...task,
+          today_system_hours: todaySys,
+          worklogs: logs,
+        };
+      });
+
+      setTasks(enrichedTasks);
+      setProfiles((p ?? []) as Profile[]);
+      const map: Record<string, string> = {};
+      for (const row of ((e ?? []) as Array<{ id: string; email: string }>)) map[row.id] = row.email;
+      setEmails(map);
+    } catch (err) {
+      console.error("Failed to load tasks:", err);
+    } finally {
+      hideLoader();
     }
-
-    const enrichedTasks = ((t ?? []) as Task[]).map((task) => {
-      const logs = worklogsByTask.get(task.id) || [];
-      const todayLogs = logs.filter((x) => x.work_date === todayStr);
-      const todaySys = todayLogs.reduce((sum, x) => sum + Number(x.system_hours || 0), 0);
-      return {
-        ...task,
-        today_system_hours: todaySys,
-        worklogs: logs,
-      };
-    });
-
-    setTasks(enrichedTasks);
-    setProfiles((p ?? []) as Profile[]);
-    const map: Record<string, string> = {};
-    for (const row of ((e ?? []) as Array<{ id: string; email: string }>)) map[row.id] = row.email;
-    setEmails(map);
   };
+
   useEffect(() => { load(); }, []);
   useRealtimeTasks(load, "tasks-page-rt");
+
+  // Auto-open TaskDetailModal when taskId or highlightId query parameter is present
+  useEffect(() => {
+    const targetId = taskId || highlightId;
+    if (!targetId || tasks.length === 0) return;
+
+    const matchedTask = tasks.find((t) => t.id === targetId);
+    if (matchedTask) {
+      setSelectedDetailTask(matchedTask);
+    }
+  }, [taskId, highlightId, tasks]);
 
   // Selection handlers
   const handleToggleSelect = (id: string) => {
@@ -396,8 +432,9 @@ function TasksPage() {
         const assigneeName = nameOf(t.assigned_to);
         const assigneeEmail = t.assigned_to ? emails[t.assigned_to] ?? "" : "";
         const reviewerName = nameOf(t.reviewer);
-        const combinedText = `${t.task_code || ""} ${t.task_name || ""} ${t.client || ""} ${t.project_name || ""} ${assigneeName} ${assigneeEmail} ${reviewerName}`.toLowerCase();
-        if (!combinedText.includes(q.toLowerCase())) return false;
+        const combinedText = `${t.task_code || ""} ${t.task_name || ""} ${t.client || ""} ${t.project_name || ""} ${t.remarks || ""} ${t.status || ""} ${t.priority || ""} ${assigneeName} ${assigneeEmail} ${reviewerName}`.toLowerCase();
+        const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+        if (!tokens.every((token) => combinedText.includes(token))) return false;
       }
       
       // Date filters
@@ -905,6 +942,23 @@ function TasksPage() {
 
       <TaskFormDialog open={dialogOpen} onOpenChange={setDialogOpen} userId={user.id} onSaved={load} />
       <CSVImportDialog open={importOpen} onOpenChange={setImportOpen} profiles={profiles} userId={user.id} isManager={isManager} onDone={load} />
+      
+      {/* Search & Direct Navigation Task Detail Modal */}
+      {selectedDetailTask && (
+        <TaskDetailModal
+          task={selectedDetailTask}
+          open={!!selectedDetailTask}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedDetailTask(null);
+            }
+          }}
+          profiles={profiles}
+          userId={user.id}
+          canManage={isManager}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }

@@ -50,6 +50,7 @@ import { NotificationsModal } from "@/components/NotificationsModal";
 import { useBrowserNotifications } from "@/hooks/use-browser-notifications";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
+import { GlobalSearchModal } from "@/components/GlobalSearchModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,97 +93,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [notifModalOpen, setNotifModalOpen] = useState(false);
   const [accessibilityOpen, setAccessibilityOpen] = useState(false);
   const [addTaskOpen, setAddTaskOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   
-  // Interactive Live Search States
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<{
-    tasks: Array<{ id: string; task_name: string; task_code: string | null; status: string }>;
-    members: Array<{ id: string; display_name: string | null; email: string | null; avatar_url: string | null }>;
-  }>({ tasks: [], members: [] });
-
-  const searchContainerRef = useRef<HTMLDivElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-
   const [profile, setProfile] = useState<{
     display_name: string | null;
     email: string | null;
     avatar_url: string | null;
   } | null>(null);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = searchQuery.trim();
-    if (!q) return;
-    setSearchFocused(false);
-    navigate({
-      to: "/tasks",
-      search: { search: q, tab: "all_tasks" } as any,
-    });
-  };
-
-  // Global Ctrl+K Shortcut Handler
+  // Global Ctrl+K Shortcut Handler for ClickUp Command Modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        searchInputRef.current?.focus();
+        setSearchModalOpen(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Handle click outside to close search dropdown
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
-        setSearchFocused(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
-  // Debounced Live Search Fetching
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (q.length < 1) {
-      setSearchResults({ tasks: [], members: [] });
-      setIsSearching(false);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const [{ data: tasksData }, { data: membersData }] = await Promise.all([
-          supabase
-            .from("tasks")
-            .select("id, task_name, task_code, status")
-            .or(`task_name.ilike.%${q}%,task_code.ilike.%${q}%,project_name.ilike.%${q}%,client.ilike.%${q}%`)
-            .limit(5),
-          supabase
-            .from("profiles")
-            .select("id, display_name, email, avatar_url")
-            .or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
-            .limit(5),
-        ]);
-
-        setSearchResults({
-          tasks: (tasksData ?? []) as any,
-          members: (membersData ?? []) as any,
-        });
-      } catch (err) {
-        console.warn("Search error:", err);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 200);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   useEffect(() => {
     if (!user) {
@@ -278,140 +209,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </Link>
 
-          {/* Center Interactive Live Search Bar */}
-          <div ref={searchContainerRef} className="hidden md:flex flex-1 max-w-xl mx-2 lg:mx-6 relative items-center">
-            <form onSubmit={handleSearchSubmit} className="w-full relative flex items-center">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                placeholder="Search by Team Member Name or Task (Ctrl+K)"
-                className="w-full bg-[#070B14] text-slate-100 placeholder:text-slate-500 pl-10 pr-16 py-1.5 rounded-md text-xs sm:text-sm font-normal border border-[#1A2538] focus:outline-none focus:border-[#5C8EFA] focus:ring-1 focus:ring-[#5C8EFA] shadow-inner transition-all"
-              />
-              {searchQuery ? (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 transition-colors"
-                  title="Clear search"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              ) : (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-medium text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700 pointer-events-none">
+          {/* Center ClickUp-Style Command Search Bar */}
+          <div className="hidden md:flex flex-1 max-w-xl mx-2 lg:mx-6 relative items-center">
+            <button
+              type="button"
+              onClick={() => setSearchModalOpen(true)}
+              className="w-full bg-[#070B14] hover:bg-[#0D1525] text-slate-100 pl-10 pr-4 py-1.5 rounded-lg text-xs sm:text-sm font-normal border border-[#1A2538] hover:border-slate-700/80 shadow-inner transition-all flex items-center justify-between text-left group cursor-pointer"
+            >
+              <div className="flex items-center gap-2 text-slate-400 group-hover:text-slate-200">
+                <Search className="h-4 w-4 text-slate-400 group-hover:text-indigo-400 transition-colors" />
+                <span className="truncate">Search tasks, team members...</span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] font-mono font-medium text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">
                   Ctrl K
                 </span>
-              )}
-            </form>
-
-            {/* Live Search Results Dropdown Popup */}
-            {searchFocused && searchQuery.trim().length >= 1 && (
-              <div className="absolute top-full left-0 right-0 mt-1.5 bg-[#0B1220] border border-slate-700/80 rounded-lg shadow-2xl overflow-hidden z-50 divide-y divide-slate-800/80 animate-in fade-in slide-in-from-top-1 duration-150">
-                {isSearching ? (
-                  <div className="p-3.5 text-xs text-slate-400 flex items-center justify-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-[#5C8EFA]" />
-                    <span>Searching tasks and team members...</span>
-                  </div>
-                ) : (
-                  <>
-                    {/* Tasks Section */}
-                    <div className="p-2 space-y-1">
-                      <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                        <span>Tasks</span>
-                        <span className="text-slate-500">{searchResults.tasks.length} matches</span>
-                      </div>
-                      {searchResults.tasks.length === 0 ? (
-                        <p className="px-2 py-1 text-xs text-slate-500 italic">No matching tasks</p>
-                      ) : (
-                        searchResults.tasks.map((t) => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => {
-                              setSearchFocused(false);
-                              navigate({ to: "/tasks", search: { highlightId: t.id, tab: "all_tasks" } as any });
-                            }}
-                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs hover:bg-[#141F36] transition-colors text-left group"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <ListChecks className="h-3.5 w-3.5 text-[#5C8EFA] shrink-0" />
-                              <span className="truncate text-slate-200 group-hover:text-white font-medium">
-                                {t.task_name}
-                              </span>
-                            </div>
-                            {t.task_code && (
-                              <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded shrink-0 ml-2 border border-slate-700">
-                                {t.task_code}
-                              </span>
-                            )}
-                          </button>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Team Members Section */}
-                    <div className="p-2 space-y-1">
-                      <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                        <span>Team Members</span>
-                        <span className="text-slate-500">{searchResults.members.length} matches</span>
-                      </div>
-                      {searchResults.members.length === 0 ? (
-                        <p className="px-2 py-1 text-xs text-slate-500 italic">No matching team members</p>
-                      ) : (
-                        searchResults.members.map((m) => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => {
-                              setSearchFocused(false);
-                              navigate({
-                                to: "/tasks",
-                                search: { assignee: m.id, tab: "all_tasks" } as any,
-                              });
-                            }}
-                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs hover:bg-[#141F36] transition-colors text-left group"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              {m.avatar_url ? (
-                                <img src={m.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" />
-                              ) : (
-                                <div className="h-5 w-5 rounded-full bg-indigo-500/20 text-[#5C8EFA] flex items-center justify-center text-[10px] font-bold shrink-0">
-                                  {(m.display_name || m.email || "U").charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <div className="truncate text-slate-200 group-hover:text-white font-medium">
-                                  {m.display_name || m.email}
-                                </div>
-                              </div>
-                            </div>
-                            <span className="text-[10px] text-[#5C8EFA] opacity-0 group-hover:opacity-100 transition-opacity font-medium">
-                              View Tasks ↗
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Footer View All Search Results */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchFocused(false);
-                        navigate({ to: "/tasks", search: { search: searchQuery.trim(), tab: "all_tasks" } as any });
-                      }}
-                      className="w-full px-3 py-2 text-center text-xs font-semibold text-[#5C8EFA] bg-[#070B14] hover:bg-[#141F36] transition-colors flex items-center justify-center gap-1"
-                    >
-                      <span>Press Enter or click to view all search results</span>
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
               </div>
-            )}
+            </button>
           </div>
 
           {/* Right Header Options */}
@@ -420,7 +234,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Mobile Search Button */}
             <button
               type="button"
-              onClick={() => navigate({ to: "/tasks" })}
+              onClick={() => setSearchModalOpen(true)}
               className="md:hidden flex items-center justify-center h-8 w-8 rounded text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
               title="Search"
             >
@@ -826,6 +640,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Modals & Floating Widgets */}
       <NotificationsModal open={notifModalOpen} onOpenChange={setNotifModalOpen} />
+      <GlobalSearchModal
+        open={searchModalOpen}
+        onOpenChange={setSearchModalOpen}
+        onOpenCreateTask={() => setAddTaskOpen(true)}
+      />
       <GlobalCompleteTaskEodDialog />
       <GlobalFeedbackWidget />
       {user && (
