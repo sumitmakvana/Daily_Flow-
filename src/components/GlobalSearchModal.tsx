@@ -48,6 +48,7 @@ export function GlobalSearchModal({ open, onOpenChange, onOpenCreateTask }: Glob
   }>({ tasks: [], members: [] });
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const justClosedDetailRef = useRef(false);
 
   // Focus input & load profiles + recent tasks on open
   useEffect(() => {
@@ -219,9 +220,17 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
     }
   };
 
+  const handleModalOpenChange = (newOpen: boolean) => {
+    if (!newOpen && (selectedTaskForModal || justClosedDetailRef.current)) {
+      // Do not close global search modal if task detail modal is open or was just closed
+      return;
+    }
+    onOpenChange(newOpen);
+  };
+
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleModalOpenChange}>
         <DialogContent className="max-w-2xl p-0 gap-0 bg-[#090D16] border border-slate-800/80 shadow-2xl rounded-2xl overflow-hidden text-slate-100 z-50">
           
           <DialogTitle className="sr-only">Search and Command Center</DialogTitle>
@@ -560,7 +569,13 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
           task={selectedTaskForModal}
           open={!!selectedTaskForModal}
           onOpenChange={(open) => {
-            if (!open) setSelectedTaskForModal(null);
+            if (!open) {
+              justClosedDetailRef.current = true;
+              setSelectedTaskForModal(null);
+              setTimeout(() => {
+                justClosedDetailRef.current = false;
+              }, 400);
+            }
           }}
           profiles={profiles}
           onTaskUpdated={loadRecentData}
