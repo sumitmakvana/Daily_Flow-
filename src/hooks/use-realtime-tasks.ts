@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export type RealtimeScope =
@@ -17,6 +17,11 @@ export function useRealtimeTasks(
   channelName = "tasks-rt",
   scope: RealtimeScope = { kind: "all" },
 ) {
+  const savedCallback = useRef(onChange);
+  useEffect(() => {
+    savedCallback.current = onChange;
+  }, [onChange]);
+
   useEffect(() => {
     const base = { event: "*" as const, schema: "public", table: "tasks" };
     let filter: string | undefined;
@@ -27,7 +32,7 @@ export function useRealtimeTasks(
 
     const ch = supabase
       .channel(channelName)
-      .on("postgres_changes", filter ? { ...base, filter } : base, () => onChange())
+      .on("postgres_changes", filter ? { ...base, filter } : base, () => savedCallback.current())
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
@@ -35,3 +40,4 @@ export function useRealtimeTasks(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelName, scope.kind, "userId" in scope ? scope.userId : "", "ids" in scope ? scope.ids.join(",") : ""]);
 }
+
