@@ -10,23 +10,16 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Upload, Download, Trash2, Calendar, ArrowUpDown, Copy, Filter, RotateCcw } from "lucide-react";
+import { Plus, Search, Upload, Download, Calendar, ArrowUpDown, Copy, Filter, RotateCcw, List, ChevronLeft, ChevronRight, CheckCircle2, Clock, Layers, User, Users } from "lucide-react";
 import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task } from "@/lib/types";
 import { getDefaultStartDate } from "@/lib/format";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { tasksService } from "@/services/tasks";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
-import { useGlobalLoader } from "@/components/GlobalLoader";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
@@ -56,7 +49,7 @@ const ALL = "__all";
 
 function getTaskDayLabel(isoDate: string | null | undefined): { key: string; label: string; dateObj: Date | null } {
   if (!isoDate) {
-    return { key: "999_no_date", label: "No Due Date", dateObj: null };
+    return { key: "999_no_date", label: "No Date", dateObj: null };
   }
 
   const d = new Date(isoDate.length === 10 ? `${isoDate}T00:00:00` : isoDate);
@@ -111,25 +104,48 @@ function groupTasksByWhatsAppDay(taskList: Task[], sortBy: string = "newest") {
     });
 }
 
+function getPageNumbers(current: number, total: number): Array<number | "..."> {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 3) {
+    return [1, 2, 3, 4, "...", total];
+  }
+  if (current >= total - 2) {
+    return [1, "...", total - 3, total - 2, total - 1, total];
+  }
+  return [1, "...", current - 1, current, current + 1, "...", total];
+}
+
 function TasksPage() {
   const { user, isManager } = useAuth();
   const { taskId, highlightId, create, search: searchParam, assignee: assigneeParam, tab: tabParam, status: statusParam } = Route.useSearch();
   const navigate = useNavigate({ from: "/tasks" });
-  const { showLoader, hideLoader } = useGlobalLoader();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [q, setQ] = useState(searchParam || "");
+  const [initialLoading, setInitialLoading] = useState(true);
 
-  const [status, setStatus] = useState<string>(statusParam || ALL);
-  const [priority, setPriority] = useState<string>(ALL);
+  // Multi-select Checkbox Filter States
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(statusParam && statusParam !== ALL ? [statusParam] : []));
+  const [selectedPriorities, setSelectedPriorities] = useState<Set<string>>(new Set());
   const [assignee, setAssignee] = useState<string>(assigneeParam || ALL);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
 
-  // New UI feature states
+  // Pagination states
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageInput, setPageInput] = useState<string>("1");
+
+  // Date Filter state
+  const [dateFilter, setDateFilter] = useState<string>(ALL);
+  const [sortBy, setSortBy] = useState<string>("newest");
+
+  // Tab state
   const [activeTab, setActiveTab] = useState<string>(
     tabParam === "all" || tabParam === "all_tasks" || assigneeParam || searchParam || taskId
       ? "all_tasks"
@@ -139,11 +155,9 @@ function TasksPage() {
   );
 
   useEffect(() => {
-    if (statusParam !== undefined) {
-      setStatus(statusParam || ALL);
-      if (statusParam && statusParam !== ALL) {
-        setActiveTab("all_tasks");
-      }
+    if (statusParam !== undefined && statusParam !== ALL) {
+      setSelectedStatuses(new Set([statusParam]));
+      setActiveTab("all_tasks");
     }
   }, [statusParam]);
 
@@ -174,21 +188,16 @@ function TasksPage() {
       setActiveTab("my_tasks");
     }
   }, [tabParam]);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
-  const [dateFilter, setDateFilter] = useState<string>(ALL);
-  const [sortBy, setSortBy] = useState<string>("newest");
-  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
-  const [confirmDeleteAllText, setConfirmDeleteAllText] = useState("");
 
-  // Highlight state
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [activeHighlight, setActiveHighlight] = useState<string | null>(null);
 
   const nameOf = (id: string | null) => (id ? profiles.find((p) => p.id === id)?.display_name ?? "" : "");
 
   const activeFilterCount = [
     q ? 1 : 0,
-    status !== ALL ? 1 : 0,
-    priority !== ALL ? 1 : 0,
+    selectedStatuses.size > 0 ? 1 : 0,
+    selectedPriorities.size > 0 ? 1 : 0,
     assignee !== ALL ? 1 : 0,
     dateFilter !== ALL ? 1 : 0,
     sortBy !== "newest" ? 1 : 0,
@@ -196,8 +205,8 @@ function TasksPage() {
 
   const handleClearAllFilters = () => {
     setQ("");
-    setStatus(ALL);
-    setPriority(ALL);
+    setSelectedStatuses(new Set());
+    setSelectedPriorities(new Set());
     setAssignee(ALL);
     setDateFilter(ALL);
     setSortBy("newest");
@@ -214,18 +223,21 @@ function TasksPage() {
       status: t.status,
       assigned_to: nameOf(t.assigned_to),
       reviewer: nameOf(t.reviewer),
+      start_date: t.start_date ?? "",
       due_date: t.due_date ?? "",
       planned_hours: t.planned_hours ?? "",
       actual_hours: t.actual_hours ?? "",
       remarks: t.remarks ?? "",
     }));
-    const cols = ["task_code","task_name","client","project_name","priority","status","assigned_to","reviewer","due_date","planned_hours","actual_hours","remarks"];
+    const cols = ["task_code","task_name","client","project_name","priority","status","assigned_to","reviewer","start_date","due_date","planned_hours","actual_hours","remarks"];
     downloadCSV(`tasks-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows, cols));
   };
 
-  const load = async () => {
+  const load = async (silent = false) => {
     try {
-      showLoader("Loading Tasks & Team Members...", "Retrieving latest task records...");
+      if (!silent && tasks.length === 0) {
+        setInitialLoading(true);
+      }
       const [{ data: t }, { data: p }, { data: e }, { data: w }] = await Promise.all([
         supabase.from("tasks").select("*").order("created_at", { ascending: false }),
         supabase.from("profiles").select("id,display_name,avatar_url"),
@@ -260,12 +272,42 @@ function TasksPage() {
     } catch (err) {
       console.error("Failed to load tasks:", err);
     } finally {
-      hideLoader();
+      setInitialLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
-  useRealtimeTasks(load, "tasks-page-rt");
+  useEffect(() => { load(false); }, []);
+  useRealtimeTasks(() => load(true), "tasks-page-rt");
+
+  // Active tab base tasks before status/priority filters are applied
+  const tabBaseTasks = useMemo(() => {
+    if (activeTab === "my_tasks") {
+      return tasks.filter((t) => t.assigned_to === user?.id);
+    }
+    if (activeTab === "team_tasks") {
+      return tasks.filter((t) => t.assigned_to !== user?.id);
+    }
+    return tasks;
+  }, [tasks, activeTab, user?.id]);
+
+  // Calculate live count metrics for sidebar filters scoped to current tab
+  const statusCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of TASK_STATUSES) map[s] = 0;
+    for (const t of tabBaseTasks) {
+      if (t.status && map[t.status] !== undefined) map[t.status]++;
+    }
+    return map;
+  }, [tabBaseTasks]);
+
+  const priorityCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of TASK_PRIORITIES) map[p] = 0;
+    for (const t of tabBaseTasks) {
+      if (t.priority && map[t.priority] !== undefined) map[t.priority]++;
+    }
+    return map;
+  }, [tabBaseTasks]);
 
   // Auto-open TaskDetailModal when taskId or highlightId query parameter is present
   useEffect(() => {
@@ -302,7 +344,7 @@ function TasksPage() {
       await Promise.all(ids.map((id) => tasksService.delete(id)));
       toast.success(`Successfully deleted ${ids.length} tasks`);
       setSelectedTaskIds(new Set());
-      load();
+      load(true);
     } catch (err) {
       toast.error("Failed to delete tasks: " + (err as Error).message);
     }
@@ -314,7 +356,7 @@ function TasksPage() {
       await Promise.all(tasksToUpdate.map((t) => tasksService.setStatus(t, "Completed", user?.id || "")));
       toast.success(`Successfully completed ${tasksToUpdate.length} tasks`);
       setSelectedTaskIds(new Set());
-      load();
+      load(true);
     } catch (err) {
       toast.error("Failed to update tasks: " + (err as Error).message);
     }
@@ -331,7 +373,7 @@ function TasksPage() {
       );
       toast.success(`Successfully reassigned ${tasksToUpdate.length} tasks`);
       setSelectedTaskIds(new Set());
-      load();
+      load(true);
     } catch (err) {
       toast.error("Failed to reassign tasks: " + (err as Error).message);
     }
@@ -351,7 +393,7 @@ function TasksPage() {
       );
       toast.success(`Successfully updated project for ${tasksToUpdate.length} tasks`);
       setSelectedTaskIds(new Set());
-      load();
+      load(true);
     } catch (err) {
       toast.error("Failed to update project: " + (err as Error).message);
     }
@@ -389,26 +431,13 @@ function TasksPage() {
       );
       toast.success(`Successfully duplicated ${tasksToDuplicate.length} tasks`);
       setSelectedTaskIds(new Set());
-      load();
+      load(true);
     } catch (err) {
       toast.error("Failed to duplicate tasks: " + (err as Error).message);
     }
   };
 
-  const handleDeleteAll = async () => {
-    try {
-      await Promise.all(tasks.map((t) => tasksService.delete(t.id)));
-      toast.success("All tasks deleted successfully");
-      setConfirmDeleteAllText("");
-      setDeleteAllOpen(false);
-      setSelectedTaskIds(new Set());
-      load();
-    } catch (err) {
-      toast.error("Failed to delete tasks: " + (err as Error).message);
-    }
-  };
-
-  // Base filtered list with date filters
+  // Base filtered list with multi-select status/priority & date filters
   const filtered = useMemo(() => {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
@@ -425,8 +454,8 @@ function TasksPage() {
     const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
 
     return tasks.filter((t) => {
-      if (status !== ALL && t.status !== status) return false;
-      if (priority !== ALL && t.priority !== priority) return false;
+      if (selectedStatuses.size > 0 && !selectedStatuses.has(t.status)) return false;
+      if (selectedPriorities.size > 0 && !selectedPriorities.has(t.priority)) return false;
       if (assignee !== ALL && t.assigned_to !== assignee) return false;
       if (q) {
         const assigneeName = nameOf(t.assigned_to);
@@ -437,21 +466,20 @@ function TasksPage() {
         if (!tokens.every((token) => combinedText.includes(token))) return false;
       }
       
-      // Date filters
-      if (dateFilter === "today" && t.due_date !== todayStr && t.start_date !== todayStr) return false;
-      if (dateFilter === "tomorrow" && t.due_date !== tomorrowStr && t.start_date !== tomorrowStr) return false;
+      const targetDt = t.due_date || t.start_date;
+      if (dateFilter === "today" && targetDt !== todayStr) return false;
+      if (dateFilter === "tomorrow" && targetDt !== tomorrowStr) return false;
       if (dateFilter === "this_week") {
-        const dt = t.due_date || t.start_date;
-        if (!dt || dt < startOfWeekStr || dt > endOfWeekStr) return false;
+        if (!targetDt || targetDt < startOfWeekStr || targetDt > endOfWeekStr) return false;
       }
       if (dateFilter === "overdue") {
-        if (!t.due_date || t.due_date >= todayStr || t.status === "Completed") return false;
+        if (!targetDt || targetDt >= todayStr || t.status === "Completed") return false;
       }
-      if (dateFilter === "no_due_date" && t.due_date) return false;
+      if (dateFilter === "no_due_date" && targetDt) return false;
 
       return true;
     });
-  }, [tasks, q, status, priority, assignee, dateFilter]);
+  }, [tasks, q, selectedStatuses, selectedPriorities, assignee, dateFilter]);
 
   // Sort tasks
   const sorted = useMemo(() => {
@@ -463,14 +491,18 @@ function TasksPage() {
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       }
       if (sortBy === "due_soon") {
-        if (!a.due_date) return 1;
-        if (!b.due_date) return -1;
-        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        const dtA = a.due_date || a.start_date;
+        const dtB = b.due_date || b.start_date;
+        if (!dtA) return 1;
+        if (!dtB) return -1;
+        return new Date(dtA).getTime() - new Date(dtB).getTime();
       }
       if (sortBy === "due_late") {
-        if (!a.due_date) return 1;
-        if (!b.due_date) return -1;
-        return new Date(b.due_date).getTime() - new Date(a.due_date).getTime();
+        const dtA = a.due_date || a.start_date;
+        const dtB = b.due_date || b.start_date;
+        if (!dtA) return 1;
+        if (!dtB) return -1;
+        return new Date(dtB).getTime() - new Date(dtA).getTime();
       }
       return 0;
     });
@@ -491,6 +523,22 @@ function TasksPage() {
     if (activeTab === "team_tasks") return teamTasks;
     return sorted;
   }, [activeTab, myTasks, teamTasks, sorted]);
+
+  // Reset pagination page to 1 when filters or tabs change
+  useEffect(() => {
+    setCurrentPage(1);
+    setPageInput("1");
+  }, [q, selectedStatuses, selectedPriorities, assignee, dateFilter, activeTab, pageSize, sortBy]);
+
+  // Compute pagination parameters
+  const totalItems = currentTabTasks.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const validatedPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedTasks = useMemo(() => {
+    const start = (validatedPage - 1) * pageSize;
+    return currentTabTasks.slice(start, start + pageSize);
+  }, [currentTabTasks, validatedPage, pageSize]);
 
   // Switch tab automatically if we have a highlightId from My Day/Notification
   useEffect(() => {
@@ -553,7 +601,7 @@ function TasksPage() {
         profiles={profiles}
         userId={user.id}
         canManage={isManager}
-        onChanged={load}
+        onChanged={() => load(true)}
         selected={selectedTaskIds.has(t.id)}
         onSelectToggle={() => handleToggleSelect(t.id)}
       />
@@ -589,88 +637,178 @@ function TasksPage() {
     );
   };
 
-  return (
-    <div className="max-w-7xl mx-auto px-3 md:px-6 py-5 space-y-5 pb-24">
-      
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        
-        {/* Sticky Top Header Bar with Title, Tabs & Actions */}
-        <div className="sticky top-[96px] z-15 transform-gpu bg-card/95 border border-border/80 p-3.5 rounded-xl shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-3 backdrop-blur mb-5">
-          
-          {/* Left: Title + My Tasks / Team Tasks / All Tasks Tabs */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 pr-2 border-r border-border/60">
-              <h1 className="text-xl font-bold tracking-tight text-foreground">Tasks</h1>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#5C8EFA]/20 text-[#5C8EFA] border border-[#5C8EFA]/30">
-                {sorted.length}
-              </span>
+  // Render skeleton rows for fast initial loading UX
+  const renderSkeletons = () => (
+    <div className="space-y-3 py-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="rounded-xl border border border-slate-800/80 bg-[#121624] p-4 space-y-3 animate-pulse">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-4 w-4 rounded bg-slate-800" />
+              <Skeleton className="h-4 w-40 sm:w-60 rounded bg-slate-800" />
+              <Skeleton className="h-5 w-16 rounded bg-slate-800" />
+              <Skeleton className="h-5 w-16 rounded bg-slate-800" />
             </div>
+            <Skeleton className="h-5 w-24 rounded bg-slate-800" />
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-6 w-6 rounded-full bg-slate-800" />
+              <Skeleton className="h-3 w-28 rounded bg-slate-800" />
+            </div>
+            <Skeleton className="h-3 w-20 rounded bg-slate-800" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
-            <TabsList className="bg-[#16171d]/90 border border-[#2b2d38] flex overflow-x-auto justify-start sm:inline-flex scrollbar-none gap-1 h-auto p-1 rounded-xl">
-              <TabsTrigger value="my_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 py-1 rounded-lg transition-all text-slate-400 hover:text-slate-100 data-[state=active]:bg-[#262938] data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold data-[state=active]:border data-[state=active]:border-[#3e4259] data-[state=active]:shadow-xs">
-                My Tasks ({myTasks.length})
-              </TabsTrigger>
-              <TabsTrigger value="team_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 py-1 rounded-lg transition-all text-slate-400 hover:text-slate-100 data-[state=active]:bg-[#262938] data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold data-[state=active]:border data-[state=active]:border-[#3e4259] data-[state=active]:shadow-xs">
-                Team Tasks ({teamTasks.length})
-              </TabsTrigger>
-              <TabsTrigger value="all_tasks" className="text-xs shrink-0 whitespace-nowrap px-3 py-1 rounded-lg transition-all text-slate-400 hover:text-slate-100 data-[state=active]:bg-[#262938] data-[state=active]:text-[#5C8EFA] data-[state=active]:font-bold data-[state=active]:border data-[state=active]:border-[#3e4259] data-[state=active]:shadow-xs">
-                All Tasks ({sorted.length})
-              </TabsTrigger>
-            </TabsList>
+  const overdueCount = tasks.filter((t) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const dt = t.due_date || t.start_date;
+    return dt && dt < today && t.status !== "Completed";
+  }).length;
+
+  return (
+    <div className="max-w-7xl mx-auto px-3 md:px-6 py-4 text-slate-100 flex flex-col h-[calc(100vh-105px)] overflow-hidden w-full">
+      
+      {/* Top Main Title & Subtitle + Top Right KPI Metric Summary Cards */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 select-none shrink-0 mb-3">
+        
+        {/* Left Title & Subtitle matching screenshot */}
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-white">Tasks</h1>
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#1e2d4a] text-[#5C8EFA] border border-[#2b3e66]">
+              {tasks.length}
+            </span>
+          </div>
+          <p className="text-xs text-[#8a99ad] mt-1 font-medium">Plan, track and get things done</p>
+        </div>
+
+        {/* Top Right KPI Metric Summary Cards matching screenshot */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
+          <div className="bg-[#181a20] border border-[#262936] rounded-xl px-3.5 py-2.5 flex items-center gap-3 min-w-[130px]">
+            <div className="h-8 w-8 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
+              <Layers className="h-4 w-4 text-[#5C8EFA]" />
+            </div>
+            <div>
+              <p className="text-base font-bold text-white leading-none">{tasks.length}</p>
+              <p className="text-[11px] text-[#8a99ad] mt-1 font-medium">Total Tasks</p>
+            </div>
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-            <Button size="sm" variant="outline" className="h-8 border-border bg-background hover:bg-accent text-foreground" onClick={() => setImportOpen(true)} title="Import CSV">
-              <Upload className="h-3.5 w-3.5 mr-1 text-[#5C8EFA]" /> Import
+          <div className="bg-[#181a20] border border-[#262936] rounded-xl px-3.5 py-2.5 flex items-center gap-3 min-w-[130px]">
+            <div className="h-8 w-8 rounded-lg bg-[#5C8EFA]/15 flex items-center justify-center shrink-0">
+              <User className="h-4 w-4 text-[#5C8EFA]" />
+            </div>
+            <div>
+              <p className="text-base font-bold text-white leading-none">
+                {tasks.filter((t) => t.assigned_to === user.id).length}
+              </p>
+              <p className="text-[11px] text-[#8a99ad] mt-1 font-medium">My Tasks</p>
+            </div>
+          </div>
+
+          <div className="bg-[#181a20] border border-[#262936] rounded-xl px-3.5 py-2.5 flex items-center gap-3 min-w-[130px]">
+            <div className="h-8 w-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+              <Users className="h-4 w-4 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-base font-bold text-white leading-none">
+                {tasks.filter((t) => t.assigned_to !== user.id).length}
+              </p>
+              <p className="text-[11px] text-[#8a99ad] mt-1 font-medium">Team Tasks</p>
+            </div>
+          </div>
+
+          <div className="bg-[#181a20] border border-[#262936] rounded-xl px-3.5 py-2.5 flex items-center gap-3 min-w-[130px]">
+            <div className="h-8 w-8 rounded-lg bg-rose-500/15 flex items-center justify-center shrink-0">
+              <Clock className="h-4 w-4 text-rose-400" />
+            </div>
+            <div>
+              <p className="text-base font-bold text-rose-400 leading-none">{overdueCount}</p>
+              <p className="text-[11px] text-[#8a99ad] mt-1 font-medium">Overdue</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        
+        {/* Header Navigation Bar with Tabs & Header Actions */}
+        <div className="bg-[#181a20] border border-[#262936] p-2.5 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 mb-3">
+          
+          {/* Tabs: My Tasks (82), Team Tasks (653), All Tasks (735) matching screenshot */}
+          <TabsList className="bg-transparent border-none flex overflow-x-auto justify-start scrollbar-none gap-2 h-auto p-0">
+            <TabsTrigger
+              value="my_tasks"
+              className="text-xs px-3.5 py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer"
+            >
+              My Tasks ({myTasks.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="team_tasks"
+              className="text-xs px-3.5 py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer"
+            >
+              Team Tasks ({teamTasks.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="all_tasks"
+              className="text-xs px-3.5 py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer"
+            >
+              All Tasks ({sorted.length})
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Right Header Actions: Import, Export, + New task matching screenshot */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Button size="sm" variant="outline" className="h-8 text-xs border-[#262936] bg-[#111319] hover:bg-[#222530] text-slate-200 cursor-pointer" onClick={() => setImportOpen(true)}>
+              <Upload className="h-3.5 w-3.5 mr-1.5 text-[#5C8EFA]" /> Import
             </Button>
-            <Button size="sm" variant="outline" className="h-8 border-border bg-background hover:bg-accent text-foreground" onClick={exportCSV} title="Export filtered tasks">
-              <Download className="h-3.5 w-3.5 mr-1 text-[#5C8EFA]" /> Export
+            <Button size="sm" variant="outline" className="h-8 text-xs border-[#262936] bg-[#111319] hover:bg-[#222530] text-slate-200 cursor-pointer" onClick={exportCSV}>
+              <Download className="h-3.5 w-3.5 mr-1.5 text-[#5C8EFA]" /> Export
             </Button>
-            <Button size="sm" variant="ghost" className="h-8 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300" onClick={() => setDeleteAllOpen(true)} title="Delete all tasks">
-              <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete All
-            </Button>
-            <Button size="sm" className="h-8 bg-[#5C8EFA] hover:bg-[#4A7DE7] text-[#0A0F1D] font-bold" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1 text-[#0A0F1D]" /> New task
+            <Button size="sm" variant="outline" className="h-8 text-xs border-[#35394b] bg-[#252834] hover:bg-[#2f3342] text-[#5C8EFA] font-bold px-3 cursor-pointer" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1 text-[#5C8EFA]" /> New task
             </Button>
           </div>
         </div>
 
-        {/* 2-Column Main Layout: Left Sidebar Filters + Right Task Cards */}
-        <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* 2-Column Layout: Left Sidebar Filters + Right Task List */}
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-5 items-stretch overflow-hidden">
           
-          {/* LEFT SIDEBAR FILTER PANEL */}
-          <aside className="w-full lg:w-64 shrink-0 bg-card border border-border/80 rounded-xl p-4 space-y-4 shadow-2xs lg:sticky lg:top-[168px] transform-gpu">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+          {/* LEFT SIDEBAR FILTER PANEL matching screenshot */}
+          <aside className="w-full lg:w-64 shrink-0 bg-[#181a20] border border-[#262936] rounded-xl p-4 space-y-4 overflow-y-auto custom-scrollbar h-auto lg:h-full max-h-[280px] lg:max-h-none">
+            
+            {/* Header: Filters + Reset link matching screenshot */}
+            <div className="flex items-center justify-between border-b border-[#262936] pb-3">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-[#5C8EFA]" />
-                <span className="font-bold text-sm text-foreground">Filters</span>
+                <span className="font-bold text-sm text-white">Filters</span>
                 {activeFilterCount > 0 && (
-                  <span className="text-[10px] font-bold bg-[#5C8EFA] text-[#0A0F1D] px-1.5 py-0.2 rounded-full">
+                  <span className="text-[10px] font-bold bg-[#252834] text-[#5C8EFA] border border-[#35394b] px-1.5 py-0.2 rounded-full">
                     {activeFilterCount}
                   </span>
                 )}
               </div>
-              {activeFilterCount > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearAllFilters}
-                  className="text-xs font-semibold text-[#5C8EFA] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  <span>Clear all</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="text-xs font-semibold text-[#5C8EFA] hover:underline cursor-pointer"
+              >
+                Reset
+              </button>
             </div>
 
-            <div className="space-y-3.5">
-              {/* Search Input */}
+            <div className="space-y-4 text-xs">
+              {/* Search Box matching screenshot */}
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Search</label>
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a99ad]" />
                   <Input
-                    className="pl-8 h-8 text-xs bg-background/80 border-input text-foreground placeholder:text-muted-foreground focus:border-[#5C8EFA]"
+                    className="pl-8 h-8 text-xs bg-[#111319] border-[#262936] text-white placeholder:text-[#8a99ad] focus:border-[#5C8EFA]"
                     placeholder="Search tasks..."
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
@@ -678,46 +816,75 @@ function TasksPage() {
                 </div>
               </div>
 
-              {/* Status Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Status</label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="h-8 w-full text-xs bg-background/80 border-input text-foreground">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border text-popover-foreground">
-                    <SelectItem value={ALL}>All Statuses</SelectItem>
-                    {TASK_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Status Checkbox Filter matching screenshot */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block mb-1">Status</span>
+                {TASK_STATUSES.map((s) => {
+                  const checked = selectedStatuses.has(s);
+                  return (
+                    <label key={s} className="flex items-center justify-between text-xs text-slate-300 hover:text-white cursor-pointer py-0.5 select-none">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setSelectedStatuses((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(s);
+                              else next.delete(s);
+                              return next;
+                            });
+                          }}
+                          className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-900 text-[#5C8EFA] accent-[#5C8EFA] cursor-pointer"
+                        />
+                        <span>{s}</span>
+                      </div>
+                      <span className="text-[11px] font-mono text-[#8a99ad]">{statusCounts[s] || 0}</span>
+                    </label>
+                  );
+                })}
               </div>
 
-              {/* Priority Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Priority</label>
-                <Select value={priority} onValueChange={setPriority}>
-                  <SelectTrigger className="h-8 w-full text-xs bg-background/80 border-input text-foreground">
-                    <SelectValue placeholder="Priority" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border text-popover-foreground">
-                    <SelectItem value={ALL}>All Priorities</SelectItem>
-                    {TASK_PRIORITIES.map((p) => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Priority Checkbox Filter matching screenshot */}
+              <div className="space-y-1.5 pt-2 border-t border-[#262936]">
+                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block mb-1">Priority</span>
+                {TASK_PRIORITIES.map((p) => {
+                  const checked = selectedPriorities.has(p);
+                  return (
+                    <label key={p} className="flex items-center justify-between text-xs text-slate-300 hover:text-white cursor-pointer py-0.5 select-none">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setSelectedPriorities((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(p);
+                              else next.delete(p);
+                              return next;
+                            });
+                          }}
+                          className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-900 text-[#5C8EFA] accent-[#5C8EFA] cursor-pointer"
+                        />
+                        <span>{p}</span>
+                      </div>
+                      <span className="text-[11px] font-mono text-[#8a99ad]">{priorityCounts[p] || 0}</span>
+                    </label>
+                  );
+                })}
               </div>
 
-              {/* Assignee Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Assignee</label>
+              {/* Assignee Filter matching screenshot */}
+              <div className="space-y-1 pt-2 border-t border-[#262936]">
+                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Assignee</span>
                 <Select value={assignee} onValueChange={setAssignee}>
-                  <SelectTrigger className="h-8 w-full text-xs bg-background/80 border-input text-foreground">
-                    <SelectValue placeholder="Assignee" />
+                  <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
+                    <div className="flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-[#8a99ad]" />
+                      <SelectValue placeholder="Assignee" />
+                    </div>
                   </SelectTrigger>
-                  <SelectContent className="bg-popover border-border text-popover-foreground">
+                  <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
                     <SelectItem value={ALL}>All Assignees</SelectItem>
                     {profiles.map((p) => (
                       <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
@@ -726,111 +893,208 @@ function TasksPage() {
                 </Select>
               </div>
 
-              {/* Date Filter */}
+              {/* Due Date Filter matching screenshot */}
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Due Date</label>
+                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Due Date</span>
                 <Select value={dateFilter} onValueChange={setDateFilter}>
-                  <SelectTrigger className="h-8 w-full text-xs bg-background/80 border-input text-foreground">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3 shrink-0 text-[#5C8EFA]" />
+                  <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-[#5C8EFA]" />
                       <SelectValue placeholder="Date" />
                     </div>
                   </SelectTrigger>
-                  <SelectContent className="bg-popover border-border text-popover-foreground">
+                  <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
                     <SelectItem value={ALL}>All Dates</SelectItem>
                     <SelectItem value="today">Today</SelectItem>
                     <SelectItem value="tomorrow">Tomorrow</SelectItem>
                     <SelectItem value="this_week">This Week</SelectItem>
                     <SelectItem value="overdue">Overdue</SelectItem>
-                    <SelectItem value="no_due_date">No Due Date</SelectItem>
+                    <SelectItem value="no_due_date">No Date</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Sort Order */}
+              {/* Sort By Filter matching screenshot */}
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Sort By</label>
+                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Sort By</span>
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="h-8 w-full text-xs bg-background/80 border-input text-foreground">
-                    <div className="flex items-center gap-1">
-                      <ArrowUpDown className="h-3 w-3 shrink-0 text-[#5C8EFA]" />
+                  <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowUpDown className="h-3.5 w-3.5 text-[#5C8EFA]" />
                       <SelectValue placeholder="Sort By" />
                     </div>
                   </SelectTrigger>
-                  <SelectContent className="bg-popover border-border text-popover-foreground">
+                  <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
                     <SelectItem value="newest">Newest Created</SelectItem>
                     <SelectItem value="oldest">Oldest Created</SelectItem>
-                    <SelectItem value="due_soon">Due Date (Soonest)</SelectItem>
-                    <SelectItem value="due_late">Due Date (Latest)</SelectItem>
+                    <SelectItem value="due_soon">Date (Soonest)</SelectItem>
+                    <SelectItem value="due_late">Date (Latest)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
           </aside>
 
-          {/* RIGHT CONTENT PANEL: Task Cards List */}
-          <div className="flex-1 min-w-0 space-y-4 w-full">
+          {/* RIGHT MAIN PANEL: Task List + Page Size Header + Bottom Pagination matching screenshot */}
+          <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-transparent">
             
-            {/* Select All Checkbox bar */}
-            <div className="flex items-center justify-end px-1 select-none">
-              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors select-none">
-                <input
-                  type="checkbox"
-                  checked={currentTabTasks.length > 0 && currentTabTasks.every(t => selectedTaskIds.has(t.id))}
-                  ref={el => {
-                    if (el) {
-                      const someSelected = currentTabTasks.some(t => selectedTaskIds.has(t.id));
-                      const allSelected = currentTabTasks.every(t => selectedTaskIds.has(t.id));
-                      el.indeterminate = someSelected && !allSelected;
-                    }
-                  }}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    const newSelection = new Set(selectedTaskIds);
-                    currentTabTasks.forEach(t => {
-                      if (checked) {
-                        newSelection.add(t.id);
-                      } else {
-                        newSelection.delete(t.id);
-                      }
-                    });
-                    setSelectedTaskIds(newSelection);
-                  }}
-                  className="h-3.5 w-3.5 rounded border-input bg-background text-[#5C8EFA] accent-[#5C8EFA] cursor-pointer"
-                />
-                Select All
-              </label>
+            {/* List Header Toolbar matching screenshot */}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1 shrink-0 pb-2">
+              <div className="text-xs text-[#8a99ad] font-medium">
+                Showing {totalItems === 0 ? 0 : (validatedPage - 1) * pageSize + 1}–{Math.min(validatedPage * pageSize, totalItems)} of {totalItems} tasks
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* List View Indicator Pill */}
+                <div className="inline-flex items-center bg-[#111319] p-0.5 rounded-lg border border-[#262936]">
+                  <span className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md bg-[#252834] text-[#5C8EFA] border border-[#35394b]">
+                    <List className="h-3.5 w-3.5" /> List
+                  </span>
+                </div>
+
+                {/* Items Per Page Selector matching screenshot */}
+                <Select value={String(pageSize)} onValueChange={(val) => setPageSize(Number(val))}>
+                  <SelectTrigger className="h-8 text-xs bg-[#181a20] border-[#262936] text-slate-200 w-[120px]">
+                    <SelectValue placeholder="Per page" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
+                    <SelectItem value="25">25 per page</SelectItem>
+                    <SelectItem value="50">50 per page</SelectItem>
+                    <SelectItem value="100">100 per page</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <TabsContent value="my_tasks" className="mt-0">
-              {myTasks.length > 0 ? (
-                renderWhatsAppGroupedTasks(myTasks)
+            {/* Task List Content - ONLY THIS AREA SCROLLS */}
+            <TabsContent value="my_tasks" className="flex-1 min-h-0 overflow-y-auto pr-1.5 custom-scrollbar space-y-3 mt-0 focus-visible:outline-none">
+              {initialLoading ? (
+                renderSkeletons()
+              ) : paginatedTasks.length > 0 ? (
+                renderWhatsAppGroupedTasks(paginatedTasks)
               ) : (
-                <p className="text-sm text-muted-foreground italic py-12 text-center bg-card/40 rounded-xl border border-dashed border-border/80">
+                <p className="text-sm text-[#8a99ad] italic py-12 text-center bg-[#181a20]/60 rounded-xl border border-dashed border-[#262936]">
                   No tasks assigned to you.
                 </p>
               )}
             </TabsContent>
 
-            <TabsContent value="team_tasks" className="mt-0">
-              {teamTasks.length > 0 ? (
-                renderWhatsAppGroupedTasks(teamTasks)
+            <TabsContent value="team_tasks" className="flex-1 min-h-0 overflow-y-auto pr-1.5 custom-scrollbar space-y-3 mt-0 focus-visible:outline-none">
+              {initialLoading ? (
+                renderSkeletons()
+              ) : paginatedTasks.length > 0 ? (
+                renderWhatsAppGroupedTasks(paginatedTasks)
               ) : (
-                <p className="text-sm text-muted-foreground italic py-12 text-center bg-card/40 rounded-xl border border-dashed border-border/80">
+                <p className="text-sm text-[#8a99ad] italic py-12 text-center bg-[#181a20]/60 rounded-xl border border-dashed border-[#262936]">
                   No team tasks found.
                 </p>
               )}
             </TabsContent>
 
-            <TabsContent value="all_tasks" className="mt-0">
-              {sorted.length > 0 ? (
-                renderWhatsAppGroupedTasks(sorted)
+            <TabsContent value="all_tasks" className="flex-1 min-h-0 overflow-y-auto pr-1.5 custom-scrollbar space-y-3 mt-0 focus-visible:outline-none">
+              {initialLoading ? (
+                renderSkeletons()
+              ) : paginatedTasks.length > 0 ? (
+                renderWhatsAppGroupedTasks(paginatedTasks)
               ) : (
-                <p className="text-sm text-muted-foreground italic py-12 text-center bg-card/40 rounded-xl border border-dashed border-border/80">
+                <p className="text-sm text-[#8a99ad] italic py-12 text-center bg-[#181a20]/60 rounded-xl border border-dashed border-[#262936]">
                   No tasks match the filters.
                 </p>
               )}
             </TabsContent>
+
+            {/* BOTTOM PAGINATION CONTROLS FOOTER matching screenshot - STICKY AT BOTTOM */}
+            {!initialLoading && totalPages > 1 && (
+              <div className="shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 mt-2 border-t border-[#262936] bg-[#181a20]/95 backdrop-blur z-10 select-none text-xs">
+                <div className="text-[#8a99ad] font-medium">
+                  Showing {(validatedPage - 1) * pageSize + 1}–{Math.min(validatedPage * pageSize, totalItems)} of {totalItems} tasks
+                </div>
+
+                {/* Page Number Buttons matching screenshot */}
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={validatedPage <= 1}
+                    onClick={() => {
+                      const p = validatedPage - 1;
+                      setCurrentPage(p);
+                      setPageInput(String(p));
+                    }}
+                    className="h-8 w-8 p-0 border-[#262936] bg-[#111319] text-slate-300 hover:bg-[#222530] cursor-pointer"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  {getPageNumbers(validatedPage, totalPages).map((p, idx) =>
+                    p === "..." ? (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-[#8a99ad]">...</span>
+                    ) : (
+                      <Button
+                        key={`page-${p}`}
+                        size="sm"
+                        variant={validatedPage === p ? "default" : "outline"}
+                        onClick={() => {
+                          setCurrentPage(Number(p));
+                          setPageInput(String(p));
+                        }}
+                        className={cn(
+                          "h-8 min-w-[32px] px-2 text-xs font-semibold cursor-pointer border-[#262936]",
+                          validatedPage === p
+                            ? "bg-[#252834] text-[#5C8EFA] hover:bg-[#2f3342] border-[#35394b] font-bold"
+                            : "bg-[#111319] text-slate-300 hover:bg-[#222530]"
+                        )}
+                      >
+                        {p}
+                      </Button>
+                    )
+                  )}
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={validatedPage >= totalPages}
+                    onClick={() => {
+                      const p = validatedPage + 1;
+                      setCurrentPage(p);
+                      setPageInput(String(p));
+                    }}
+                    className="h-8 w-8 p-0 border-[#262936] bg-[#111319] text-slate-300 hover:bg-[#222530] cursor-pointer"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Go To Page Input matching screenshot */}
+                <div className="flex items-center gap-2 text-[#8a99ad]">
+                  <span>Go to page</span>
+                  <Input
+                    className="h-8 w-14 text-xs text-center bg-[#111319] border-[#262936] text-white font-mono"
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const num = parseInt(pageInput, 10);
+                        if (!isNaN(num) && num >= 1 && num <= totalPages) {
+                          setCurrentPage(num);
+                        } else {
+                          setPageInput(String(validatedPage));
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      const num = parseInt(pageInput, 10);
+                      if (!isNaN(num) && num >= 1 && num <= totalPages) {
+                        setCurrentPage(num);
+                      } else {
+                        setPageInput(String(validatedPage));
+                      }
+                    }}
+                  />
+                  <span>of {totalPages}</span>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
@@ -904,44 +1168,8 @@ function TasksPage() {
         </div>
       )}
 
-      {/* Delete All Confirm Dialog */}
-      <AlertDialog open={deleteAllOpen} onOpenChange={setDeleteAllOpen}>
-        <AlertDialogContent className="bg-[#0B1220] border-slate-800 text-slate-100">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete All Tasks?</AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-400">
-              This action will permanently delete all tasks in the system. This cannot be undone.
-              To confirm this action, please type <strong className="text-white font-semibold">DELETE ALL</strong> below:
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-2">
-            <Input
-              placeholder="Type DELETE ALL"
-              value={confirmDeleteAllText}
-              onChange={(e) => setConfirmDeleteAllText(e.target.value)}
-              className="h-9 bg-[#070B14] border-slate-700 text-white placeholder:text-slate-500"
-            />
-          </div>
-          <AlertDialogFooter>
-            <Button variant="ghost" className="text-slate-300 hover:bg-slate-800" onClick={() => {
-              setDeleteAllOpen(false);
-              setConfirmDeleteAllText("");
-            }}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={confirmDeleteAllText !== "DELETE ALL"}
-              onClick={handleDeleteAll}
-            >
-              Delete All Tasks
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <TaskFormDialog open={dialogOpen} onOpenChange={setDialogOpen} userId={user.id} onSaved={load} />
-      <CSVImportDialog open={importOpen} onOpenChange={setImportOpen} profiles={profiles} userId={user.id} isManager={isManager} onDone={load} />
+      <TaskFormDialog open={dialogOpen} onOpenChange={setDialogOpen} userId={user.id} onSaved={() => load(true)} />
+      <CSVImportDialog open={importOpen} onOpenChange={setImportOpen} profiles={profiles} userId={user.id} isManager={isManager} onDone={() => load(true)} />
       
       {/* Search & Direct Navigation Task Detail Modal */}
       {selectedDetailTask && (
@@ -956,7 +1184,7 @@ function TasksPage() {
           profiles={profiles}
           userId={user.id}
           canManage={isManager}
-          onChanged={load}
+          onChanged={() => load(true)}
         />
       )}
     </div>
