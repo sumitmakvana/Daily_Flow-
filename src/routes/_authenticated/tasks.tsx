@@ -16,6 +16,7 @@ import { getDefaultStartDate } from "@/lib/format";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { downloadCSV, toCSV } from "@/lib/csv";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { tasksService } from "@/services/tasks";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -134,6 +135,7 @@ function TasksPage() {
   const [assignee, setAssignee] = useState<string>(assigneeParam || ALL);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
 
   // Pagination states
@@ -669,66 +671,220 @@ function TasksPage() {
     return dt && dt < today && t.status !== "Completed";
   }).length;
 
+  const renderFilterControls = () => (
+    <div className="space-y-4 text-xs">
+      {/* Header: Filters + Reset link */}
+      <div className="flex items-center justify-between border-b border-[#262936] pb-3">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-[#5C8EFA]" />
+          <span className="font-bold text-sm text-white">Filters</span>
+          {activeFilterCount > 0 && (
+            <span className="text-[10px] font-bold bg-[#252834] text-[#5C8EFA] border border-[#35394b] px-1.5 py-0.2 rounded-full">
+              {activeFilterCount}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleClearAllFilters}
+          className="text-xs font-semibold text-[#5C8EFA] hover:underline cursor-pointer"
+        >
+          Reset
+        </button>
+      </div>
+
+      <div className="space-y-4 text-xs">
+        {/* Search Box */}
+        <div className="space-y-1">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a99ad]" />
+            <Input
+              className="pl-8 h-8 text-xs bg-[#111319] border-[#262936] text-white placeholder:text-[#8a99ad] focus:border-[#5C8EFA]"
+              placeholder="Search tasks..."
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Status Checkbox Filter */}
+        <div className="space-y-1.5 pt-1">
+          <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block mb-1">Status</span>
+          {TASK_STATUSES.map((s) => {
+            const checked = selectedStatuses.has(s);
+            return (
+              <label key={s} className="flex items-center justify-between text-xs text-slate-300 hover:text-white cursor-pointer py-0.5 select-none">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      setSelectedStatuses((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(s);
+                        else next.delete(s);
+                        return next;
+                      });
+                    }}
+                    className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-900 text-[#5C8EFA] accent-[#5C8EFA] cursor-pointer"
+                  />
+                  <span>{s}</span>
+                </div>
+                <span className="text-[11px] font-mono text-[#8a99ad]">{statusCounts[s] || 0}</span>
+              </label>
+            );
+          })}
+        </div>
+
+        {/* Priority Checkbox Filter */}
+        <div className="space-y-1.5 pt-2 border-t border-[#262936]">
+          <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block mb-1">Priority</span>
+          {TASK_PRIORITIES.map((p) => {
+            const checked = selectedPriorities.has(p);
+            return (
+              <label key={p} className="flex items-center justify-between text-xs text-slate-300 hover:text-white cursor-pointer py-0.5 select-none">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      setSelectedPriorities((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(p);
+                        else next.delete(p);
+                        return next;
+                      });
+                    }}
+                    className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-900 text-[#5C8EFA] accent-[#5C8EFA] cursor-pointer"
+                  />
+                  <span>{p}</span>
+                </div>
+                <span className="text-[11px] font-mono text-[#8a99ad]">{priorityCounts[p] || 0}</span>
+              </label>
+            );
+          })}
+        </div>
+
+        {/* Assignee Filter */}
+        <div className="space-y-1 pt-2 border-t border-[#262936]">
+          <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Assignee</span>
+          <Select value={assignee} onValueChange={setAssignee}>
+            <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
+              <div className="flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-[#8a99ad]" />
+                <SelectValue placeholder="Assignee" />
+              </div>
+            </SelectTrigger>
+            <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
+              <SelectItem value={ALL}>All Assignees</SelectItem>
+              {profiles.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Due Date Filter */}
+        <div className="space-y-1">
+          <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Due Date</span>
+          <Select value={dateFilter} onValueChange={setDateFilter}>
+            <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-[#5C8EFA]" />
+                <SelectValue placeholder="Date" />
+              </div>
+            </SelectTrigger>
+            <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
+              <SelectItem value={ALL}>All Dates</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="tomorrow">Tomorrow</SelectItem>
+              <SelectItem value="this_week">This Week</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="no_due_date">No Date</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Sort By Filter */}
+        <div className="space-y-1">
+          <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Sort By</span>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
+              <div className="flex items-center gap-1.5">
+                <ArrowUpDown className="h-3.5 w-3.5 text-[#5C8EFA]" />
+                <SelectValue placeholder="Sort By" />
+              </div>
+            </SelectTrigger>
+            <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
+              <SelectItem value="newest">Newest Created</SelectItem>
+              <SelectItem value="oldest">Oldest Created</SelectItem>
+              <SelectItem value="due_soon">Date (Soonest)</SelectItem>
+              <SelectItem value="due_late">Date (Latest)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="max-w-7xl mx-auto px-3 md:px-6 py-4 text-slate-100 flex flex-col h-[calc(100vh-105px)] overflow-hidden w-full">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 py-2 sm:py-3 text-slate-100 flex flex-col h-full lg:h-[calc(100vh-105px)] overflow-y-auto lg:overflow-hidden w-full pb-16 md:pb-4">
       
-      {/* Top Main Title & Subtitle + Top Right KPI Metric Summary Cards */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 select-none shrink-0 mb-3">
-        
-        {/* Left Title & Subtitle matching screenshot */}
+      {/* Top Header Row & KPI Metric Cards */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 select-none shrink-0 mb-2 sm:mb-3">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-white">Tasks</h1>
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#1e2d4a] text-[#5C8EFA] border border-[#2b3e66]">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Tasks</h1>
+            <span className="text-[11px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-[#1e2d4a] text-[#5C8EFA] border border-[#2b3e66]">
               {tasks.length}
             </span>
           </div>
-          <p className="text-xs text-[#8a99ad] mt-1 font-medium">Plan, track and get things done</p>
+          <p className="text-[11px] sm:text-xs text-[#8a99ad] mt-0.5 font-medium">Plan, track and get things done</p>
         </div>
 
-        {/* Top Right KPI Metric Summary Cards matching screenshot */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
-          <div className="bg-[#181a20] border border-[#262936] rounded-xl px-3.5 py-2.5 flex items-center gap-3 min-w-[130px]">
-            <div className="h-8 w-8 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
-              <Layers className="h-4 w-4 text-[#5C8EFA]" />
+        {/* KPI Summary Cards - compact micro-cards on mobile */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2.5 shrink-0">
+          <div className="bg-[#181a20] border border-[#262936] rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 flex items-center gap-2 sm:gap-3">
+            <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-md sm:rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
+              <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#5C8EFA]" />
             </div>
             <div>
-              <p className="text-base font-bold text-white leading-none">{tasks.length}</p>
-              <p className="text-[11px] text-[#8a99ad] mt-1 font-medium">Total Tasks</p>
+              <p className="text-xs sm:text-base font-bold text-white leading-none">{tasks.length}</p>
+              <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">Total Tasks</p>
             </div>
           </div>
 
-          <div className="bg-[#181a20] border border-[#262936] rounded-xl px-3.5 py-2.5 flex items-center gap-3 min-w-[130px]">
-            <div className="h-8 w-8 rounded-lg bg-[#5C8EFA]/15 flex items-center justify-center shrink-0">
-              <User className="h-4 w-4 text-[#5C8EFA]" />
+          <div className="bg-[#181a20] border border-[#262936] rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 flex items-center gap-2 sm:gap-3">
+            <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-md sm:rounded-lg bg-[#5C8EFA]/15 flex items-center justify-center shrink-0">
+              <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#5C8EFA]" />
             </div>
             <div>
-              <p className="text-base font-bold text-white leading-none">
+              <p className="text-xs sm:text-base font-bold text-white leading-none">
                 {tasks.filter((t) => t.assigned_to === user.id).length}
               </p>
-              <p className="text-[11px] text-[#8a99ad] mt-1 font-medium">My Tasks</p>
+              <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">My Tasks</p>
             </div>
           </div>
 
-          <div className="bg-[#181a20] border border-[#262936] rounded-xl px-3.5 py-2.5 flex items-center gap-3 min-w-[130px]">
-            <div className="h-8 w-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
-              <Users className="h-4 w-4 text-emerald-400" />
+          <div className="bg-[#181a20] border border-[#262936] rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 flex items-center gap-2 sm:gap-3">
+            <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-md sm:rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+              <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400" />
             </div>
             <div>
-              <p className="text-base font-bold text-white leading-none">
+              <p className="text-xs sm:text-base font-bold text-white leading-none">
                 {tasks.filter((t) => t.assigned_to !== user.id).length}
               </p>
-              <p className="text-[11px] text-[#8a99ad] mt-1 font-medium">Team Tasks</p>
+              <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">Team Tasks</p>
             </div>
           </div>
 
-          <div className="bg-[#181a20] border border-[#262936] rounded-xl px-3.5 py-2.5 flex items-center gap-3 min-w-[130px]">
-            <div className="h-8 w-8 rounded-lg bg-rose-500/15 flex items-center justify-center shrink-0">
-              <Clock className="h-4 w-4 text-rose-400" />
+          <div className="bg-[#181a20] border border-[#262936] rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 flex items-center gap-2 sm:gap-3">
+            <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-md sm:rounded-lg bg-rose-500/15 flex items-center justify-center shrink-0">
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-400" />
             </div>
             <div>
-              <p className="text-base font-bold text-rose-400 leading-none">{overdueCount}</p>
-              <p className="text-[11px] text-[#8a99ad] mt-1 font-medium">Overdue</p>
+              <p className="text-xs sm:text-base font-bold text-rose-400 leading-none">{overdueCount}</p>
+              <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">Overdue</p>
             </div>
           </div>
         </div>
@@ -737,209 +893,93 @@ function TasksPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
         
-        {/* Header Navigation Bar with Tabs & Header Actions */}
-        <div className="bg-[#181a20] border border-[#262936] p-2.5 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 mb-3">
+        {/* Navigation Bar with Tabs & Actions */}
+        <div className="bg-[#181a20] border border-[#262936] p-2 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 mb-2 sm:mb-3">
           
-          {/* Tabs: My Tasks (82), Team Tasks (653), All Tasks (735) matching screenshot */}
-          <TabsList className="bg-transparent border-none flex overflow-x-auto justify-start scrollbar-none gap-2 h-auto p-0">
+          {/* Tabs List */}
+          <TabsList className="bg-transparent border-none flex overflow-x-auto justify-start scrollbar-none gap-1 sm:gap-2 h-auto p-0 w-full sm:w-auto">
             <TabsTrigger
               value="my_tasks"
-              className="text-xs px-3.5 py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer"
+              className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
               My Tasks ({myTasks.length})
             </TabsTrigger>
             <TabsTrigger
               value="team_tasks"
-              className="text-xs px-3.5 py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer"
+              className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
               Team Tasks ({teamTasks.length})
             </TabsTrigger>
             <TabsTrigger
               value="all_tasks"
-              className="text-xs px-3.5 py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer"
+              className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
               All Tasks ({sorted.length})
             </TabsTrigger>
           </TabsList>
 
-          {/* Right Header Actions: Import, Export, + New task matching screenshot */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <Button size="sm" variant="outline" className="h-8 text-xs border-[#262936] bg-[#111319] hover:bg-[#222530] text-slate-200 cursor-pointer" onClick={() => setImportOpen(true)}>
-              <Upload className="h-3.5 w-3.5 mr-1.5 text-[#5C8EFA]" /> Import
+          {/* Actions Bar */}
+          <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-between sm:justify-end">
+            
+            {/* Mobile Filter Button (< lg) */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setMobileFilterOpen(true)}
+              className="lg:hidden h-7 sm:h-8 text-xs border-[#262936] bg-[#111319] hover:bg-[#222530] text-slate-200 cursor-pointer px-2.5"
+            >
+              <Filter className="h-3.5 w-3.5 mr-1 text-[#5C8EFA]" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="ml-1 text-[10px] font-bold bg-[#5C8EFA] text-[#0A0F1D] px-1.5 py-0.2 rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
             </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs border-[#262936] bg-[#111319] hover:bg-[#222530] text-slate-200 cursor-pointer" onClick={exportCSV}>
-              <Download className="h-3.5 w-3.5 mr-1.5 text-[#5C8EFA]" /> Export
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs border-[#35394b] bg-[#252834] hover:bg-[#2f3342] text-[#5C8EFA] font-bold px-3 cursor-pointer" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1 text-[#5C8EFA]" /> New task
-            </Button>
+
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Button size="sm" variant="outline" className="h-7 sm:h-8 text-xs border-[#262936] bg-[#111319] hover:bg-[#222530] text-slate-200 cursor-pointer px-2 sm:px-3" onClick={() => setImportOpen(true)}>
+                <Upload className="h-3.5 w-3.5 sm:mr-1.5 text-[#5C8EFA]" />
+                <span className="hidden xs:inline">Import</span>
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 sm:h-8 text-xs border-[#262936] bg-[#111319] hover:bg-[#222530] text-slate-200 cursor-pointer px-2 sm:px-3" onClick={exportCSV}>
+                <Download className="h-3.5 w-3.5 sm:mr-1.5 text-[#5C8EFA]" />
+                <span className="hidden xs:inline">Export</span>
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 sm:h-8 text-xs border-[#35394b] bg-[#252834] hover:bg-[#2f3342] text-[#5C8EFA] font-bold px-2.5 sm:px-3 cursor-pointer whitespace-nowrap" onClick={() => setDialogOpen(true)}>
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 text-[#5C8EFA]" />
+                <span>New task</span>
+              </Button>
+            </div>
+
           </div>
         </div>
 
-        {/* 2-Column Layout: Left Sidebar Filters + Right Task List */}
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-5 items-stretch overflow-hidden">
+        {/* 2-Column Layout: Left Desktop Sidebar Filters + Right Task List */}
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 lg:gap-5 items-stretch overflow-hidden">
           
-          {/* LEFT SIDEBAR FILTER PANEL matching screenshot */}
-          <aside className="w-full lg:w-64 shrink-0 bg-[#181a20] border border-[#262936] rounded-xl p-4 space-y-4 overflow-y-auto custom-scrollbar h-auto lg:h-full max-h-[280px] lg:max-h-none">
-            
-            {/* Header: Filters + Reset link matching screenshot */}
-            <div className="flex items-center justify-between border-b border-[#262936] pb-3">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-[#5C8EFA]" />
-                <span className="font-bold text-sm text-white">Filters</span>
-                {activeFilterCount > 0 && (
-                  <span className="text-[10px] font-bold bg-[#252834] text-[#5C8EFA] border border-[#35394b] px-1.5 py-0.2 rounded-full">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={handleClearAllFilters}
-                className="text-xs font-semibold text-[#5C8EFA] hover:underline cursor-pointer"
-              >
-                Reset
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              {/* Search Box matching screenshot */}
-              <div className="space-y-1">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a99ad]" />
-                  <Input
-                    className="pl-8 h-8 text-xs bg-[#111319] border-[#262936] text-white placeholder:text-[#8a99ad] focus:border-[#5C8EFA]"
-                    placeholder="Search tasks..."
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Status Checkbox Filter matching screenshot */}
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block mb-1">Status</span>
-                {TASK_STATUSES.map((s) => {
-                  const checked = selectedStatuses.has(s);
-                  return (
-                    <label key={s} className="flex items-center justify-between text-xs text-slate-300 hover:text-white cursor-pointer py-0.5 select-none">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            setSelectedStatuses((prev) => {
-                              const next = new Set(prev);
-                              if (e.target.checked) next.add(s);
-                              else next.delete(s);
-                              return next;
-                            });
-                          }}
-                          className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-900 text-[#5C8EFA] accent-[#5C8EFA] cursor-pointer"
-                        />
-                        <span>{s}</span>
-                      </div>
-                      <span className="text-[11px] font-mono text-[#8a99ad]">{statusCounts[s] || 0}</span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {/* Priority Checkbox Filter matching screenshot */}
-              <div className="space-y-1.5 pt-2 border-t border-[#262936]">
-                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block mb-1">Priority</span>
-                {TASK_PRIORITIES.map((p) => {
-                  const checked = selectedPriorities.has(p);
-                  return (
-                    <label key={p} className="flex items-center justify-between text-xs text-slate-300 hover:text-white cursor-pointer py-0.5 select-none">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            setSelectedPriorities((prev) => {
-                              const next = new Set(prev);
-                              if (e.target.checked) next.add(p);
-                              else next.delete(p);
-                              return next;
-                            });
-                          }}
-                          className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-900 text-[#5C8EFA] accent-[#5C8EFA] cursor-pointer"
-                        />
-                        <span>{p}</span>
-                      </div>
-                      <span className="text-[11px] font-mono text-[#8a99ad]">{priorityCounts[p] || 0}</span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {/* Assignee Filter matching screenshot */}
-              <div className="space-y-1 pt-2 border-t border-[#262936]">
-                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Assignee</span>
-                <Select value={assignee} onValueChange={setAssignee}>
-                  <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
-                    <div className="flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5 text-[#8a99ad]" />
-                      <SelectValue placeholder="Assignee" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
-                    <SelectItem value={ALL}>All Assignees</SelectItem>
-                    {profiles.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Due Date Filter matching screenshot */}
-              <div className="space-y-1">
-                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Due Date</span>
-                <Select value={dateFilter} onValueChange={setDateFilter}>
-                  <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-[#5C8EFA]" />
-                      <SelectValue placeholder="Date" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
-                    <SelectItem value={ALL}>All Dates</SelectItem>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="tomorrow">Tomorrow</SelectItem>
-                    <SelectItem value="this_week">This Week</SelectItem>
-                    <SelectItem value="overdue">Overdue</SelectItem>
-                    <SelectItem value="no_due_date">No Date</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Sort By Filter matching screenshot */}
-              <div className="space-y-1">
-                <span className="text-[11px] font-semibold text-[#8a99ad] uppercase tracking-wider block">Sort By</span>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="h-8 w-full text-xs bg-[#111319] border-[#262936] text-slate-200">
-                    <div className="flex items-center gap-1.5">
-                      <ArrowUpDown className="h-3.5 w-3.5 text-[#5C8EFA]" />
-                      <SelectValue placeholder="Sort By" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
-                    <SelectItem value="newest">Newest Created</SelectItem>
-                    <SelectItem value="oldest">Oldest Created</SelectItem>
-                    <SelectItem value="due_soon">Date (Soonest)</SelectItem>
-                    <SelectItem value="due_late">Date (Latest)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          {/* DESKTOP SIDEBAR FILTER PANEL (Hidden on mobile < lg) */}
+          <aside className="hidden lg:block w-64 shrink-0 bg-[#181a20] border border-[#262936] rounded-xl p-4 overflow-y-auto custom-scrollbar h-full">
+            {renderFilterControls()}
           </aside>
 
-          {/* RIGHT MAIN PANEL: Task List + Page Size Header + Bottom Pagination matching screenshot */}
+          {/* MOBILE SLIDE-OVER FILTER SHEET (< lg) */}
+          <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
+            <SheetContent side="left" className="w-80 p-4 bg-[#181a20] text-slate-100 border-r border-[#262936] overflow-y-auto custom-scrollbar">
+              <SheetHeader className="mb-3 text-left">
+                <SheetTitle className="text-white text-base font-bold flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-[#5C8EFA]" /> Filter Tasks
+                </SheetTitle>
+              </SheetHeader>
+              {renderFilterControls()}
+            </SheetContent>
+          </Sheet>
+
+          {/* RIGHT MAIN PANEL: Task List + Page Size Header + Bottom Pagination */}
           <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-transparent">
             
-            {/* List Header Toolbar matching screenshot */}
-            <div className="flex flex-wrap items-center justify-between gap-3 px-1 shrink-0 pb-2">
+            {/* List Header Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 shrink-0 pb-2">
               <div className="text-xs text-[#8a99ad] font-medium">
                 Showing {totalItems === 0 ? 0 : (validatedPage - 1) * pageSize + 1}–{Math.min(validatedPage * pageSize, totalItems)} of {totalItems} tasks
               </div>

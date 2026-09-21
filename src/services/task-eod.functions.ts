@@ -119,8 +119,8 @@ export const upsertTaskEodFn = createServerFn({ method: "POST" })
          ON CONFLICT (task_id, user_id, submission_date)
          DO UPDATE SET
             progress_status = EXCLUDED.progress_status,
-            actual_hours    = EXCLUDED.actual_hours,
-            note            = EXCLUDED.note,
+            actual_hours    = CASE WHEN EXCLUDED.actual_hours > 0 THEN EXCLUDED.actual_hours ELSE task_eod_submissions.actual_hours END,
+            note            = COALESCE(EXCLUDED.note, task_eod_submissions.note),
             submitted_at    = now()
          RETURNING *`,
         [data.taskId, context.userId, data.progressStatus, data.actualHours, data.note ?? null],

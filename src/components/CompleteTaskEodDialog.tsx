@@ -40,8 +40,13 @@ export function CompleteTaskEodDialog({
 
   const planned = Number(task.planned_hours ?? 0);
   const currentActual = Number(task.actual_hours ?? 0);
-  const remaining = Math.max(0, planned - currentActual);
-  const defaultFill = sysHrs > 0 ? sysHrs : (remaining > 0 ? remaining : (planned > 0 ? planned : 1));
+
+  // If timer is running, default to running timer hours.
+  // If task has 0 actual hours logged so far, fallback to planned hours or 0.
+  // If task ALREADY has actual hours logged, default to 0 so we don't double-log previous hours.
+  const defaultFill = runningSys > 0 
+    ? runningSys 
+    : (currentActual === 0 ? (planned > 0 ? planned : 0) : 0);
 
   const [hours, setHours] = useState<string>(String(defaultFill));
   const [note, setNote] = useState<string>("");
@@ -58,7 +63,7 @@ export function CompleteTaskEodDialog({
       pendingFiles.forEach((x) => URL.revokeObjectURL(x.previewUrl));
       setPendingFiles([]);
     }
-  }, [open]);
+  }, [open, task.id, defaultFill]);
 
   const addPendingFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
@@ -171,11 +176,16 @@ export function CompleteTaskEodDialog({
           </div>
 
           {/* Hours Input & Quick Fill Presets */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <label className="font-medium text-foreground flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5 text-primary" /> Today's Logged Hours:
+          <div className="space-y-2 border border-border/70 bg-card/60 p-3 rounded-xl">
+            <div className="flex items-center justify-between text-xs">
+              <label className="font-semibold text-foreground flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-primary" /> Log Additional Hours:
               </label>
+              {currentActual > 0 && (
+                <span className="text-[11px] text-muted-foreground font-medium">
+                  Logged so far: <strong className="text-foreground">{currentActual}h</strong>
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -189,8 +199,17 @@ export function CompleteTaskEodDialog({
                 onChange={(e) => setHours(e.target.value)}
                 disabled={busy}
               />
-              <span className="text-xs text-muted-foreground">hours</span>
+              <span className="text-xs text-muted-foreground font-medium">hrs today</span>
             </div>
+
+            {currentActual > 0 && (
+              <div className="text-[11px] text-muted-foreground pt-1 flex justify-between border-t border-border/40">
+                <span>Total after save:</span>
+                <span className="font-semibold text-primary">
+                  {Math.round((currentActual + Number(hours || 0)) * 100) / 100}h
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Remarks / Note with Image & Screenshot Attachments */}

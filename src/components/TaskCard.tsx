@@ -117,8 +117,6 @@ export function TaskCard({
 
   const planned = Number(task.planned_hours ?? 0);
   const currentActual = Number(task.actual_hours ?? 0);
-  const remaining = Math.max(0, planned - currentActual);
-  const defaultFill = remaining > 0 ? remaining : planned > 0 ? planned : 1;
 
   const [completeModalOpen, setCompleteModalOpen] = useState(false);
   const [inlineHours, setInlineHours] = useState<string>("");
@@ -126,13 +124,19 @@ export function TaskCard({
   const [inlineBusy, setInlineBusy] = useState(false);
 
   const openCompleteModal = () => {
-    const baseSys = Number((task as any).system_hours ?? 0);
     const runningSys = (task as any).started_at
       ? Math.min(8.0, Math.max(0, (Date.now() - new Date((task as any).started_at).getTime()) / 3600000))
       : 0;
-    const sysHrs = baseSys + runningSys;
-    const fillVal = sysHrs > 0 ? sysHrs : defaultFill;
-    setInlineHours(formatHoursMins(fillVal));
+    
+    // Default fill calculation:
+    // If timer is running, use runningSys.
+    // If task has 0 actual hours logged so far, fallback to planned hours.
+    // If task ALREADY has actual hours logged, default to 0 to prevent double-logging.
+    const fillVal = runningSys > 0 
+      ? runningSys 
+      : (currentActual === 0 ? (planned > 0 ? planned : 0) : 0);
+
+    setInlineHours(fillVal > 0 ? formatHoursMins(fillVal) : "0");
     setInlineNote("");
     setCompleteModalOpen(true);
   };
@@ -231,7 +235,7 @@ export function TaskCard({
     if (!userId) return;
     setInlineBusy(true);
     try {
-      const hrs = parseHoursOrMins(inlineHours) || defaultFill;
+      const hrs = parseHoursOrMins(inlineHours) || 0;
       await tasksService.setStatus(task, "Completed", userId);
       if (hrs > 0 || inlineNote.trim()) {
         await taskEodService.submit(task.id, "done", hrs, inlineNote.trim() || null);
