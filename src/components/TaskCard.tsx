@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ import {
   Play,
   Pause,
   PauseCircle,
+  ArrowRight,
   CheckCircle2,
   AlertOctagon,
   MoreHorizontal,
@@ -117,6 +118,11 @@ export function TaskCard({
 
   const planned = Number(task.planned_hours ?? 0);
   const currentActual = Number(task.actual_hours ?? 0);
+
+  const creator = useMemo(() => {
+    if (!task.created_by) return null;
+    return profiles.find((p) => p.id === task.created_by) || null;
+  }, [task.created_by, profiles]);
 
   const [completeModalOpen, setCompleteModalOpen] = useState(false);
   const [inlineHours, setInlineHours] = useState<string>("");
@@ -579,32 +585,74 @@ export function TaskCard({
                     <button
                       type="button"
                       onClick={(e) => e.stopPropagation()}
-                      className="relative shrink-0 group/avatar cursor-pointer"
+                      className="relative shrink-0 group/avatar cursor-pointer flex items-center gap-1"
                     >
-                      <Avatar className="h-5 w-5 border border-slate-700 bg-slate-800 shrink-0">
-                        {assignee?.avatar_url ? (
-                          <AvatarImage src={assignee.avatar_url} />
-                        ) : (
-                          <AvatarFallback className="text-[9px] font-bold text-slate-200 bg-slate-700">
-                            {assignee ? (assignee.display_name.trim().split(/\s+/).length >= 2 ? (assignee.display_name.trim().split(/\s+/)[0][0] + assignee.display_name.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase() : assignee.display_name.slice(0, 2).toUpperCase()) : "U"}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
+                      {creator && creator.id !== assignee?.id ? (
+                        <>
+                          <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Avatar className="h-5 w-5 border border-amber-500/50 bg-amber-500/10 shrink-0">
+                                  {creator.avatar_url ? (
+                                    <AvatarImage src={creator.avatar_url} />
+                                  ) : (
+                                    <AvatarFallback className="text-[9px] font-bold text-amber-300 bg-amber-950/60">
+                                      {(creator.display_name.trim().split(/\s+/).length >= 2 ? (creator.display_name.trim().split(/\s+/)[0][0] + creator.display_name.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase() : creator.display_name.slice(0, 2).toUpperCase())}
+                                    </AvatarFallback>
+                                  )}
+                                </Avatar>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="bg-[#1e1f24] text-amber-300 border border-amber-500/30 text-[11px] font-medium py-1 px-2 z-50">
+                                Assigned by {creator.display_name}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+
+                          <ArrowRight className="h-2.5 w-2.5 text-slate-500 shrink-0" />
+
+                          <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Avatar className="h-5 w-5 border border-slate-700 bg-slate-800 shrink-0">
+                                  {assignee?.avatar_url ? (
+                                    <AvatarImage src={assignee.avatar_url} />
+                                  ) : (
+                                    <AvatarFallback className="text-[9px] font-bold text-slate-200 bg-slate-700">
+                                      {assignee ? (assignee.display_name.trim().split(/\s+/).length >= 2 ? (assignee.display_name.trim().split(/\s+/)[0][0] + assignee.display_name.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase() : assignee.display_name.slice(0, 2).toUpperCase()) : "U"}
+                                    </AvatarFallback>
+                                  )}
+                                </Avatar>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="bg-[#1e1f24] text-slate-100 border border-slate-700 text-[11px] font-medium py-1 px-2 z-50">
+                                Assignee: {assignee?.display_name || "Unassigned"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </>
+                      ) : (
+                        <Avatar className="h-5 w-5 border border-slate-700 bg-slate-800 shrink-0">
+                          {assignee?.avatar_url ? (
+                            <AvatarImage src={assignee.avatar_url} />
+                          ) : (
+                            <AvatarFallback className="text-[9px] font-bold text-slate-200 bg-slate-700">
+                              {assignee ? (assignee.display_name.trim().split(/\s+/).length >= 2 ? (assignee.display_name.trim().split(/\s+/)[0][0] + assignee.display_name.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase() : assignee.display_name.slice(0, 2).toUpperCase()) : "U"}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                      )}
                       <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-1 ring-[#1e1f23]" />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-64 p-4 bg-[#141518] border border-[#2a2c34] shadow-2xl rounded-2xl space-y-3 z-50 text-slate-100">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="text-xs font-semibold text-slate-400">
-                          {assignee ? (assignee.id === userId ? "You (Assignee)" : "Assignee") : "Unassigned"}
+                    <div className="space-y-2.5">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Assignee</div>
+                          <div className="text-sm font-bold text-slate-100">
+                            {assignee?.display_name || "Unassigned"}
+                          </div>
                         </div>
-                        <div className="text-sm font-bold text-slate-100">
-                          {assignee?.display_name || "Unassigned"}
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <Avatar className="h-10 w-10 border-2 border-slate-700 bg-slate-800 text-slate-100 text-sm font-bold flex items-center justify-center">
+                        <Avatar className="h-8 w-8 border border-slate-700 bg-slate-800 text-slate-100 text-xs font-bold shrink-0">
                           {assignee?.avatar_url ? (
                             <AvatarImage src={assignee.avatar_url} />
                           ) : (
@@ -613,11 +661,32 @@ export function TaskCard({
                             </AvatarFallback>
                           )}
                         </Avatar>
-                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#141518]" />
                       </div>
+
+                      {creator && (
+                        <div className="pt-2 border-t border-slate-800 flex items-start justify-between">
+                          <div>
+                            <div className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1">
+                              <UserCheck className="h-3 w-3" /> Assigned By
+                            </div>
+                            <div className="text-xs font-semibold text-slate-200">
+                              {creator.display_name}
+                            </div>
+                          </div>
+                          <Avatar className="h-7 w-7 border border-amber-500/40 bg-amber-500/10 text-amber-300 text-xs font-bold shrink-0">
+                            {creator.avatar_url ? (
+                              <AvatarImage src={creator.avatar_url} />
+                            ) : (
+                              <AvatarFallback className="text-[10px] font-bold text-amber-300 bg-amber-950/60">
+                                {(creator.display_name.trim().split(/\s+/).length >= 2 ? (creator.display_name.trim().split(/\s+/)[0][0] + creator.display_name.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase() : creator.display_name.slice(0, 2).toUpperCase())}
+                              </AvatarFallback>
+                            )}
+                          </Avatar>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="space-y-1.5 text-xs text-slate-300">
+                    <div className="space-y-1.5 text-xs text-slate-300 pt-1">
                       {assignee?.email && (
                         <div className="flex items-center gap-2 text-slate-400">
                           <Mail className="h-3.5 w-3.5 shrink-0" />

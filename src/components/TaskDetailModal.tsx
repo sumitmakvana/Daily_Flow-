@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,7 @@ import {
   Pause,
   AlertOctagon,
   User,
+  UserCheck,
   Copy,
   Check,
   X,
@@ -309,6 +310,10 @@ export function TaskDetailModal({
 
   const taskOverdue = isOverdue(task.due_date, task.status);
   const currentAssignedProfile = profiles.find((p) => p.id === task.assigned_to) || assignedProfile;
+  const creatorProfile = useMemo(() => {
+    if (!task.created_by) return null;
+    return profiles.find((p) => p.id === task.created_by) || null;
+  }, [task.created_by, profiles]);
 
   const formatTicker = (totalSec: number) => {
     const hrs = Math.floor(totalSec / 3600);
@@ -580,6 +585,26 @@ export function TaskDetailModal({
                 </DropdownMenu>
               </div>
             </div>
+
+            {creatorProfile && creatorProfile.id !== currentAssignedProfile?.id && (
+              <div className="grid grid-cols-[130px_1fr] items-center text-xs gap-2">
+                <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                  <UserCheck className="h-3.5 w-3.5 text-amber-400" /> Assigned By
+                </span>
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-5 w-5 border border-amber-500/40 shrink-0">
+                    {creatorProfile.avatar_url ? (
+                      <AvatarImage src={creatorProfile.avatar_url} />
+                    ) : (
+                      <AvatarFallback className="text-[9px] font-bold bg-amber-500/20 text-amber-300">
+                        {creatorProfile.display_name.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                  <span className="font-semibold text-foreground">{creatorProfile.display_name}</span>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-[130px_1fr] items-center text-xs gap-2">
               <span className="text-muted-foreground font-medium flex items-center gap-1.5">
