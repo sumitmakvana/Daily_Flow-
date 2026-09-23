@@ -108,6 +108,11 @@ export function TaskDetailModal({
 
   const prevTaskIdRef = useRef<string | null>(null);
 
+  const creatorProfile = useMemo(() => {
+    if (!task?.created_by) return null;
+    return profiles.find((p) => p.id === task.created_by) || null;
+  }, [task?.created_by, profiles]);
+
   useEffect(() => {
     if (task) {
       const isNewTask = prevTaskIdRef.current !== task.id;
@@ -310,10 +315,6 @@ export function TaskDetailModal({
 
   const taskOverdue = isOverdue(task.due_date, task.status);
   const currentAssignedProfile = profiles.find((p) => p.id === task.assigned_to) || assignedProfile;
-  const creatorProfile = useMemo(() => {
-    if (!task.created_by) return null;
-    return profiles.find((p) => p.id === task.created_by) || null;
-  }, [task.created_by, profiles]);
 
   const formatTicker = (totalSec: number) => {
     const hrs = Math.floor(totalSec / 3600);
