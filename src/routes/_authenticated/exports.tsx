@@ -45,6 +45,7 @@ import {
   CheckSquare,
   HelpCircle,
   CalendarDays,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -769,7 +770,10 @@ function ExportsPage() {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setSelectedProjectModal(row.projectName)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProjectModal(row.projectName);
+                              }}
                               className="font-medium text-foreground hover:text-primary hover:underline cursor-pointer text-left select-none"
                               title={`Click to view project details for ${row.projectName}`}
                             >
@@ -1187,6 +1191,7 @@ function ProjectDetailModal({
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
+        hideCloseButton
         overlayClassName="z-50"
         onPointerDownOutside={(e) => {
           if (hasChildModalRef.current) {
@@ -1227,6 +1232,20 @@ function ProjectDetailModal({
                 </DialogDescription>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onClose();
+              }}
+              className="rounded-lg p-1 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors cursor-pointer shrink-0"
+              title="Close Modal"
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </button>
           </div>
 
           {/* Quick Metrics Bar */}
@@ -1884,6 +1903,7 @@ function MemberTasksModal({
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
+        hideCloseButton
         overlayClassName="z-[60]"
         onPointerDownOutside={(e) => {
           e.preventDefault();
@@ -1931,8 +1951,23 @@ function MemberTasksModal({
                 </DialogDescription>
               </div>
             </div>
-            <div className="px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-mono text-xs shrink-0">
-              Total Tasks: {memberTasks.length}
+            <div className="flex items-center gap-2">
+              <div className="px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-mono text-xs shrink-0">
+                Total Tasks: {memberTasks.length}
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onClose();
+                }}
+                className="rounded-lg p-1 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors cursor-pointer shrink-0"
+                title="Close Modal"
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </button>
             </div>
           </div>
         </DialogHeader>

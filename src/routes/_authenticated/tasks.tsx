@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { TaskCard } from "@/components/TaskCard";
@@ -312,13 +312,18 @@ function TasksPage() {
   }, [tabBaseTasks]);
 
   // Auto-open TaskDetailModal when taskId or highlightId query parameter is present
+  const autoOpenedTargetIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     const targetId = taskId || highlightId;
     if (!targetId || tasks.length === 0) return;
 
-    const matchedTask = tasks.find((t) => t.id === targetId);
-    if (matchedTask) {
-      setSelectedDetailTask(matchedTask);
+    if (autoOpenedTargetIdRef.current !== targetId) {
+      const matchedTask = tasks.find((t) => t.id === targetId);
+      if (matchedTask) {
+        autoOpenedTargetIdRef.current = targetId;
+        setSelectedDetailTask(matchedTask);
+      }
     }
   }, [taskId, highlightId, tasks]);
 
@@ -1219,6 +1224,17 @@ function TasksPage() {
           onOpenChange={(open) => {
             if (!open) {
               setSelectedDetailTask(null);
+              autoOpenedTargetIdRef.current = null;
+              if (taskId || highlightId) {
+                navigate({
+                  search: (prev) => ({
+                    ...prev,
+                    taskId: undefined,
+                    highlightId: undefined,
+                  }),
+                  replace: true,
+                });
+              }
             }
           }}
           profiles={profiles}
