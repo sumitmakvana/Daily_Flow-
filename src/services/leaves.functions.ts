@@ -234,12 +234,13 @@ export const createLeaveFn = createServerFn({ method: "POST" })
           [context.userId]
         );
         const creatorName = creatorProfile.rows[0]?.display_name || "Manager";
+        const notifType = isWfh ? "wfh_applied" : "leave_applied";
         await pool.query(
           `INSERT INTO public.notifications (user_id, type, title, body)
            VALUES ($1, $2, $3, $4)`,
           [
             targetUserId,
-            "leave_applied",
+            notifType,
             isWfh ? `🏠 WFH Added: by ${creatorName}` : `🌴 Leave Added: by ${creatorName}`,
             `${creatorName} added ${leaveLabel} for you from ${data.startDate} to ${data.endDate}${reasonSuffix}.`,
           ]
@@ -260,13 +261,14 @@ export const createLeaveFn = createServerFn({ method: "POST" })
       }
       recipientIds.delete(context.userId); // Don't notify self
 
+      const notifType = isWfh ? "wfh_applied" : "leave_applied";
       for (const mId of recipientIds) {
         await pool.query(
           `INSERT INTO public.notifications (user_id, type, title, body)
            VALUES ($1, $2, $3, $4)`,
           [
             mId,
-            "leave_applied",
+            notifType,
             isWfh ? `🏠 WFH Notice: ${empName}` : `🌴 Leave Notice: ${empName}`,
             `${empName} marked ${leaveLabel} from ${data.startDate} to ${data.endDate}${reasonSuffix}. Plan tasks accordingly.`,
           ]
@@ -313,14 +315,19 @@ export const updateLeaveStatusFn = createServerFn({ method: "POST" })
       }
       // Notify employee of status change
       try {
+        const isWfh = updated.leave_type === "wfh";
+        const notifType = isWfh ? "wfh_status_updated" : "leave_status_updated";
+        const notifTitle = isWfh ? `WFH request ${data.status}` : `Leave request ${data.status}`;
+        const notifBody = `Your ${isWfh ? "WFH" : updated.leave_type} request for ${updated.start_date} to ${updated.end_date} is now ${data.status}.`;
+
         await pool.query(
           `INSERT INTO public.notifications (user_id, type, title, body)
            VALUES ($1, $2, $3, $4)`,
           [
             updated.user_id,
-            "leave_status_updated",
-            `Leave request ${data.status}`,
-            `Your ${updated.leave_type} request for ${updated.start_date} to ${updated.end_date} is now ${data.status}.`,
+            notifType,
+            notifTitle,
+            notifBody,
           ]
         );
       } catch (err) {
@@ -499,15 +506,19 @@ export const deleteLeaveFn = createServerFn({ method: "POST" })
         );
         const managerName = managerProfile.rows[0]?.display_name || "Manager";
         const reasonText = data.reason ? ` Reason: "${data.reason}".` : "";
+        const isWfh = leave.leave_type === "wfh";
+        const notifType = isWfh ? "wfh_cancelled" : "leave_cancelled";
+        const notifTitle = isWfh ? `❌ WFH Request Cancelled` : `❌ Leave Request Cancelled`;
+        const notifBody = `Your ${isWfh ? "WFH" : leave.leave_type.toUpperCase()} for ${leave.start_date} to ${leave.end_date} was cancelled by ${managerName}.${reasonText}`;
 
         await pool.query(
           `INSERT INTO public.notifications (user_id, type, title, body)
            VALUES ($1, $2, $3, $4)`,
           [
             leave.user_id,
-            "leave_cancelled",
-            `❌ Leave Request Cancelled`,
-            `Your ${leave.leave_type.toUpperCase()} for ${leave.start_date} to ${leave.end_date} was cancelled by ${managerName}.${reasonText}`,
+            notifType,
+            notifTitle,
+            notifBody,
           ]
         );
       } catch (notifErr) {
@@ -556,6 +567,11 @@ export const checkAndNotifyTomorrowLeavesFn = createServerFn({ method: "POST" })
 
     let sentCount = 0;
     for (const leave of leavesRes.rows) {
+      const isWfh = leave.leave_type === "wfh";
+      const notifType = isWfh ? "wfh_advance_alert" : "leave_advance_alert";
+      const notifTitle = isWfh ? `🏠 Tomorrow WFH Alert` : `📅 Tomorrow Leave Alert`;
+      const notifBody = `${leave.user_name} is scheduled on ${isWfh ? "WFH" : leave.leave_type.toUpperCase() + " leave"} tomorrow (${tomorrowStr}).`;
+
       for (const mId of managerIds) {
         if (mId === leave.user_id) continue;
         try {
@@ -564,9 +580,9 @@ export const checkAndNotifyTomorrowLeavesFn = createServerFn({ method: "POST" })
              VALUES ($1, $2, $3, $4)`,
             [
               mId,
-              "leave_advance_alert",
-              `📅 Tomorrow Leave Alert`,
-              `${leave.user_name} is scheduled on ${leave.leave_type.toUpperCase()} leave tomorrow (${tomorrowStr}).`,
+              notifType,
+              notifTitle,
+              notifBody,
             ]
           );
           sentCount++;

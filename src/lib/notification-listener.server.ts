@@ -304,10 +304,10 @@ async function processSingleNotificationPayload(payload: NotificationPayload) {
       subject = "📊 End of Day Check-in: All Tasks Completed! - Operon";
     }
     html = getUncompletedEodTasksHtml(payload.user_id, uncompletedTasks, origin);
-  } else if (payload.type.startsWith("leave_") || payload.title.toLowerCase().includes("leave") || payload.title.toLowerCase().includes("wfh")) {
+  } else if (payload.type.startsWith("leave_") || payload.type.startsWith("wfh_") || payload.title.toLowerCase().includes("leave") || payload.title.toLowerCase().includes("wfh")) {
     subject = `${payload.title}${payload.body ? `: ${payload.body}` : ""}`;
     html = getLeaveNotificationHtml(payload.title, payload.body || "", payload.type, origin);
-    console.log(`[NotificationListener] 🌴 Dispatched LEAVE email to ${user.email} (Subject: ${subject})`);
+    console.log(`[NotificationListener] 🌴/🏠 Dispatched LEAVE/WFH email to ${user.email} (Subject: ${subject})`);
   } else {
     subject = `🔔 ${payload.title}${payload.body ? `: ${payload.body}` : ""}`;
 

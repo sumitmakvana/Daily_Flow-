@@ -342,28 +342,34 @@ export function getLeaveNotificationHtml(
   type: string,
   origin: string,
 ): string {
-  let heroIcon = "🌴";
-  let heroTitle = "Leave Notice";
-  let heroSubtitle = "Team member availability update";
+  const isWfh =
+    type.startsWith("wfh_") ||
+    title.toUpperCase().includes("WFH") ||
+    body.toUpperCase().includes("WFH") ||
+    body.toLowerCase().includes("work from home");
+
+  let heroIcon = isWfh ? "🏠" : "🌴";
+  let heroTitle = isWfh ? "Work From Home Notice" : "Leave Notice";
+  let heroSubtitle = isWfh ? "Remote work schedule update" : "Team member availability update";
   let ctaLabel = "View Calendar";
   let ctaUrl = `${origin}/calendar`;
 
-  if (type === "leave_cancelled") {
+  const isCancelled = type === "leave_cancelled" || type === "wfh_cancelled" || title.toLowerCase().includes("cancelled");
+  const isStatusUpdated = type === "leave_status_updated" || type === "wfh_status_updated" || title.toLowerCase().includes("status") || body.toLowerCase().includes("is now approved") || body.toLowerCase().includes("is now rejected") || body.toLowerCase().includes("is now pending");
+  const isAdvanceAlert = type === "leave_advance_alert" || type === "wfh_advance_alert" || title.toLowerCase().includes("tomorrow") || title.toLowerCase().includes("reminder");
+
+  if (isCancelled) {
     heroIcon = "❌";
-    heroTitle = "Leave Request Cancelled";
-    heroSubtitle = "A scheduled leave has been cancelled";
-  } else if (type === "leave_status_updated") {
+    heroTitle = isWfh ? "WFH Request Cancelled" : "Leave Request Cancelled";
+    heroSubtitle = isWfh ? "A scheduled WFH request has been cancelled" : "A scheduled leave has been cancelled";
+  } else if (isStatusUpdated) {
     heroIcon = body.toLowerCase().includes("approved") ? "✅" : "ℹ️";
-    heroTitle = "Leave Status Updated";
-    heroSubtitle = "Your leave request status has been updated";
-  } else if (type === "leave_advance_alert") {
-    heroIcon = "📅";
-    heroTitle = "Tomorrow Leave Reminder";
-    heroSubtitle = "Advance team planning alert";
-  } else if (title.includes("WFH") || body.includes("WFH")) {
-    heroIcon = "🏠";
-    heroTitle = "Work From Home Notice";
-    heroSubtitle = "Remote work schedule update";
+    heroTitle = isWfh ? "WFH Status Updated" : "Leave Status Updated";
+    heroSubtitle = isWfh ? "Your WFH request status has been updated" : "Your leave request status has been updated";
+  } else if (isAdvanceAlert) {
+    heroIcon = isWfh ? "🏠" : "📅";
+    heroTitle = isWfh ? "Tomorrow WFH Reminder" : "Tomorrow Leave Reminder";
+    heroSubtitle = isWfh ? "Remote work schedule alert" : "Advance team planning alert";
   }
 
   const cardHtml = `

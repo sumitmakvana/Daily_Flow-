@@ -443,10 +443,11 @@ async function dispatchAdvanceLeaveAlerts(timeSlot: "morning" | "evening", today
           [title, mId]
         );
         if (existing.rows.length === 0) {
+          const notifType = isWfh ? "wfh_advance_alert" : "leave_advance_alert";
           await pool.query(
             `INSERT INTO public.notifications (user_id, type, title, body)
              VALUES ($1, $2, $3, $4)`,
-            [mId, "leave_advance_alert", title, body]
+            [mId, notifType, title, body]
           );
         }
       }
