@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
@@ -15,7 +15,8 @@ import {
   type CapacityReportRow,
   type ProjectSummaryRow,
 } from "@/services/exports";
-import type { Profile, Team } from "@/lib/types";
+import type { Profile, Team, Task } from "@/lib/types";
+import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { downloadCSV } from "@/lib/csv";
 import {
   Dialog,
@@ -196,6 +197,7 @@ function ExportsPage() {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [selectedProjectModal, setSelectedProjectModal] = useState<string | null>(null);
+  const [selectedMemberModal, setSelectedMemberModal] = useState<{ memberName: string; projectName?: string | null } | null>(null);
 
   const [reportData, setReportData] = useState<{
     meta: {
@@ -727,17 +729,30 @@ function ExportsPage() {
                     return (
                       <tr
                         key={idx}
+                        onClick={() => {
+                          if (!isTotal && row.teamMember) {
+                            setSelectedMemberModal({
+                              memberName: row.teamMember,
+                              projectName: row.projectName !== "Total" && row.projectName !== "Leave" && row.projectName !== "Unassigned" ? row.projectName : null,
+                            });
+                          }
+                        }}
                         className={cn(
                           "transition-colors",
                           isTotal
-                            ? "bg-primary/5 font-semibold text-foreground border-t border-border/80"
-                            : "hover:bg-accent/30 text-foreground",
+                            ? "bg-primary/5 font-semibold text-foreground border-t border-border/80 cursor-default"
+                            : "hover:bg-accent/40 text-foreground cursor-pointer group",
                           isLeave && "bg-amber-500/5 text-amber-300/90",
                           isUnassigned && "text-muted-foreground/80"
                         )}
+                        title={!isTotal && row.teamMember ? `Click to view work items for ${row.teamMember}` : undefined}
                       >
                         <td className="py-2 px-3 font-semibold">
-                          {!isTotal && row.teamMember}
+                          {!isTotal && (
+                            <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                              {row.teamMember}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-1"></td>
                         <td className="py-2 px-3">
@@ -806,6 +821,16 @@ function ExportsPage() {
           }}
         />
       )}
+
+      {/* Interactive Member Work Items Modal */}
+      {selectedMemberModal && (
+        <MemberTasksModal
+          memberName={selectedMemberModal.memberName}
+          projectName={selectedMemberModal.projectName}
+          reportData={reportData}
+          onClose={() => setSelectedMemberModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -833,6 +858,7 @@ function ProjectDetailModal({
   } | null;
   onFilterByProject: (pName: string) => void;
 }) {
+  const { user } = useAuth();
   const [activeModalTab, setActiveModalTab] = useState<"members" | "tasks" | "daily">("members");
   const [projectTasks, setProjectTasks] = useState<Array<{
     id: string;
@@ -860,8 +886,42 @@ function ProjectDetailModal({
   }>>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const [selectedMemberModal, setSelectedMemberModal] = useState<{ memberName: string; projectName?: string | null } | null>(null);
+
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [loadingTaskDetails, setLoadingTaskDetails] = useState(false);
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
+
+  const hasChildModalRef = useRef(false);
+  hasChildModalRef.current = Boolean(selectedMemberModal || editingTask);
+
+  const handleTaskClick = async (taskId: string, fallbackTask?: any) => {
+    if (!taskId) return;
+    setLoadingTaskDetails(true);
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("id", taskId)
+        .maybeSingle();
+
+      if (error || !data) {
+        if (fallbackTask) {
+          setEditingTask(fallbackTask as Task);
+        } else {
+          toast.error("Could not load task details");
+        }
+      } else {
+        setEditingTask(data as Task);
+      }
+    } catch (e) {
+      console.error("Task load error:", e);
+      if (fallbackTask) setEditingTask(fallbackTask as Task);
+    } finally {
+      setLoadingTaskDetails(false);
+    }
+  };
 
   const memberRows = useMemo(() => {
     if (!reportData?.rows) return [];
@@ -950,6 +1010,22 @@ function ProjectDetailModal({
         const activeTaskIdsFromWorklogs = new Set<string>();
         let enrichedLogs: typeof projectWorklogs = [];
 
+        const assignedUserIds = Array.from(
+          new Set((tasks ?? []).map((t) => t.assigned_to).filter(Boolean))
+        ) as string[];
+
+        let profileMap: Record<string, string> = {};
+        if (assignedUserIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, display_name")
+            .in("id", assignedUserIds);
+
+          (profs ?? []).forEach((p) => {
+            profileMap[p.id] = p.display_name;
+          });
+        }
+
         if (allTaskIds.length > 0 && fromStr && toStr) {
           let wlQuery = supabase
             .from("task_worklogs")
@@ -979,39 +1055,17 @@ function ProjectDetailModal({
         let activePeriodTasks = tasks ?? [];
         if (fromStr && toStr) {
           activePeriodTasks = activePeriodTasks.filter((t) => {
-            // Task has work logs in selected period
             if (activeTaskIdsFromWorklogs.has(t.id)) return true;
-            // Task created in selected period
             const cDate = t.created_at ? t.created_at.slice(0, 10) : "";
             if (cDate && cDate >= fromStr && cDate <= toStr) return true;
-            // Task completed in selected period
             const compDate = t.completed_at ? t.completed_at.slice(0, 10) : "";
             if (compDate && compDate >= fromStr && compDate <= toStr) return true;
-            // Task updated in selected period (if active)
             const upDate = (t as any).updated_at ? (t as any).updated_at.slice(0, 10) : "";
             if (upDate && upDate >= fromStr && upDate <= toStr && t.status !== "Completed") return true;
-
             return false;
           });
         }
 
-        const assignedUserIds = Array.from(
-          new Set(activePeriodTasks.map((t) => t.assigned_to).filter(Boolean))
-        ) as string[];
-
-        let profileMap: Record<string, string> = {};
-        if (assignedUserIds.length > 0) {
-          const { data: profs } = await supabase
-            .from("profiles")
-            .select("id, display_name")
-            .in("id", assignedUserIds);
-
-          (profs ?? []).forEach((p) => {
-            profileMap[p.id] = p.display_name;
-          });
-        }
-
-        // Fill in user display names for worklogs
         enrichedLogs = enrichedLogs.map((l) => ({
           ...l,
           user_name: profileMap[l.user_id] || l.user_name || "Team Member",
@@ -1036,7 +1090,7 @@ function ProjectDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [projectName, reportData?.meta?.from, reportData?.meta?.to]);
+  }, [projectName, reportData?.meta?.from, reportData?.meta?.to, refetchTrigger]);
 
   const filteredTasks = useMemo(() => {
     let list = projectTasks;
@@ -1132,7 +1186,28 @@ function ProjectDetailModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-hidden bg-card border border-border shadow-2xl rounded-xl flex flex-col">
+      <DialogContent
+        overlayClassName="z-50"
+        onPointerDownOutside={(e) => {
+          if (hasChildModalRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        onInteractOutside={(e) => {
+          if (hasChildModalRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          if (hasChildModalRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        className="max-w-4xl max-h-[85vh] p-0 overflow-hidden bg-card border border-border shadow-2xl rounded-xl flex flex-col z-50"
+      >
         {/* Modal Header */}
         <DialogHeader className="p-4 md:p-5 bg-muted/20 border-b border-border/80 flex flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
@@ -1281,21 +1356,32 @@ function ProjectDetailModal({
                         );
 
                         return (
-                          <tr key={idx} className="hover:bg-accent/30 text-foreground transition-colors">
-                            <td className="py-2.5 px-4 font-semibold flex items-center gap-2.5">
-                              <div className="h-7 w-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold border border-primary/30 shrink-0 font-mono">
-                                {initial}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-foreground font-semibold">{m.teamMember}</span>
-                                {memberLeaveRow && (
-                                  <span
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono"
-                                    title={`${m.teamMember} took ${memberLeaveRow.hours}h leave in ${reportData?.meta.monthLabel}`}
-                                  >
-                                    <span>{memberLeaveRow.hours}h Leave in Month</span>
+                          <tr
+                            key={idx}
+                            onClick={() => {
+                              setSelectedMemberModal({ memberName: m.teamMember, projectName });
+                            }}
+                            className="hover:bg-accent/40 text-foreground transition-colors cursor-pointer group"
+                            title={`Click to view work items for ${m.teamMember}`}
+                          >
+                            <td className="py-2.5 px-4 font-semibold flex items-center justify-between gap-2.5">
+                              <div className="flex items-center gap-2.5">
+                                <div className="h-7 w-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold border border-primary/30 shrink-0 font-mono">
+                                  {initial}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-foreground font-semibold group-hover:text-primary transition-colors">
+                                    {m.teamMember}
                                   </span>
-                                )}
+                                  {memberLeaveRow && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono"
+                                      title={`${m.teamMember} took ${memberLeaveRow.hours}h leave in ${reportData?.meta.monthLabel}`}
+                                    >
+                                      <span>{memberLeaveRow.hours}h Leave in Month</span>
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-400">
@@ -1360,15 +1446,50 @@ function ProjectDetailModal({
                         </thead>
                         <tbody className="divide-y divide-border/30 font-medium">
                           {logs.map((log) => (
-                            <tr key={log.id} className="hover:bg-accent/30 text-foreground transition-colors">
+                            <tr
+                              key={log.id}
+                              onClick={() => handleTaskClick(log.task_id)}
+                              className="hover:bg-accent/40 text-foreground transition-colors cursor-pointer group"
+                            >
                               <td className="py-2 px-3 font-semibold text-foreground">
-                                {log.user_name}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAssigneeFilter(log.user_name || "all");
+                                  }}
+                                  className="hover:text-primary hover:underline font-semibold text-left cursor-pointer transition-colors"
+                                  title={`Filter by ${log.user_name}`}
+                                >
+                                  {log.user_name}
+                                </button>
                               </td>
                               <td className="py-2 px-3 font-mono font-semibold text-primary">
-                                {log.task_code}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTaskClick(log.task_id);
+                                  }}
+                                  className="hover:underline font-mono text-primary font-bold cursor-pointer text-left flex items-center gap-1 group-hover:text-primary"
+                                  title="Click to open task details"
+                                >
+                                  <span>{log.task_code}</span>
+                                  <ExternalLink className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </button>
                               </td>
                               <td className="py-2 px-3">
-                                <div className="font-medium text-foreground">{log.task_name}</div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTaskClick(log.task_id);
+                                  }}
+                                  className="font-medium text-foreground hover:text-primary hover:underline text-left cursor-pointer block w-full transition-colors"
+                                  title="Click to open task details"
+                                >
+                                  {log.task_name}
+                                </button>
                                 {log.notes && (
                                   <div className="text-[11px] text-muted-foreground italic mt-0.5">{log.notes}</div>
                                 )}
@@ -1430,10 +1551,51 @@ function ProjectDetailModal({
                           </thead>
                           <tbody className="divide-y divide-border/30 font-medium">
                             {tasks.map((t) => (
-                              <tr key={t.id} className="hover:bg-accent/30 text-foreground transition-colors">
-                                <td className="py-2 px-3 font-mono font-semibold text-primary">{t.task_code || "TSK-—"}</td>
-                                <td className="py-2 px-3 font-medium text-foreground">{t.task_name}</td>
-                                <td className="py-2 px-3 text-muted-foreground">{t.assignee_name}</td>
+                              <tr
+                                key={t.id}
+                                onClick={() => handleTaskClick(t.id, t)}
+                                className="hover:bg-accent/40 text-foreground transition-colors cursor-pointer group"
+                              >
+                                <td className="py-2 px-3 font-mono font-semibold text-primary">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleTaskClick(t.id, t);
+                                    }}
+                                    className="hover:underline font-mono text-primary font-bold cursor-pointer text-left flex items-center gap-1 group-hover:text-primary"
+                                    title="Click to open task details"
+                                  >
+                                    <span>{t.task_code || "TSK-—"}</span>
+                                    <ExternalLink className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </button>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleTaskClick(t.id, t);
+                                    }}
+                                    className="font-medium text-foreground hover:text-primary hover:underline text-left cursor-pointer block w-full transition-colors"
+                                    title="Click to open task details"
+                                  >
+                                    {t.task_name}
+                                  </button>
+                                </td>
+                                <td className="py-2 px-3 text-muted-foreground">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setAssigneeFilter(t.assignee_name || "all");
+                                    }}
+                                    className="hover:text-primary hover:underline text-left cursor-pointer transition-colors"
+                                    title={`Filter by ${t.assignee_name}`}
+                                  >
+                                    {t.assignee_name}
+                                  </button>
+                                </td>
                                 <td className="py-2 px-3"><StatusBadge status={t.status as any} /></td>
                                 <td className="py-2 px-3 text-right font-mono font-bold text-emerald-400">
                                   {t.actual_hours ?? t.planned_hours ?? 0}h
@@ -1500,15 +1662,50 @@ function ProjectDetailModal({
                     </thead>
                     <tbody className="divide-y divide-border/40 font-medium">
                       {filteredTasks.map((t) => (
-                        <tr key={t.id} className="hover:bg-accent/30 text-foreground transition-colors">
+                        <tr
+                          key={t.id}
+                          onClick={() => handleTaskClick(t.id, t)}
+                          className="hover:bg-accent/40 text-foreground transition-colors cursor-pointer group"
+                        >
                           <td className="py-2 px-3 font-mono font-semibold text-primary">
-                            {t.task_code || "TSK-—"}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTaskClick(t.id, t);
+                              }}
+                              className="hover:underline font-mono text-primary font-bold cursor-pointer text-left flex items-center gap-1 group-hover:text-primary"
+                              title="Click to open task details"
+                            >
+                              <span>{t.task_code || "TSK-—"}</span>
+                              <ExternalLink className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
                           </td>
                           <td className="py-2 px-3 font-medium text-foreground">
-                            {t.task_name}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTaskClick(t.id, t);
+                              }}
+                              className="font-medium text-foreground hover:text-primary hover:underline text-left cursor-pointer block w-full transition-colors"
+                              title="Click to open task details"
+                            >
+                              {t.task_name}
+                            </button>
                           </td>
                           <td className="py-2 px-3 text-muted-foreground">
-                            {t.assignee_name}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAssigneeFilter(t.assignee_name || "all");
+                              }}
+                              className="hover:text-primary hover:underline text-left cursor-pointer transition-colors"
+                              title={`Filter by ${t.assignee_name}`}
+                            >
+                              {t.assignee_name}
+                            </button>
                           </td>
                           <td className="py-2 px-3">
                             <StatusBadge status={t.status as any} />
@@ -1552,6 +1749,282 @@ function ProjectDetailModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Task Edit/Details Dialog */}
+      {editingTask && (
+        <TaskFormDialog
+          open={Boolean(editingTask)}
+          onOpenChange={(open) => {
+            if (!open) setEditingTask(null);
+          }}
+          initial={editingTask}
+          userId={user?.id || ""}
+          onSaved={() => {
+            setRefetchTrigger((c) => c + 1);
+          }}
+        />
+      )}
+
+      {/* Member Work Items Modal */}
+      {selectedMemberModal && (
+        <MemberTasksModal
+          memberName={selectedMemberModal.memberName}
+          projectName={selectedMemberModal.projectName}
+          reportData={reportData}
+          onClose={() => setSelectedMemberModal(null)}
+        />
+      )}
+    </Dialog>
+  );
+}
+
+function MemberTasksModal({
+  memberName,
+  projectName,
+  reportData,
+  onClose,
+}: {
+  memberName: string;
+  projectName?: string | null;
+  reportData: {
+    meta: {
+      monthLabel: string;
+      from: string;
+      to: string;
+    };
+    rows: CapacityReportRow[];
+  } | null;
+  onClose: () => void;
+}) {
+  const { user } = useAuth();
+  const [memberTasks, setMemberTasks] = useState<Array<any>>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
+
+  const hasChildModalRef = useRef(false);
+  hasChildModalRef.current = Boolean(editingTask);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    (async () => {
+      try {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .eq("display_name", memberName)
+          .maybeSingle();
+
+        const userId = prof?.id;
+
+        let taskQuery = supabase
+          .from("tasks")
+          .select(`
+            id,
+            task_code,
+            task_name,
+            status,
+            priority,
+            planned_hours,
+            actual_hours,
+            assigned_to,
+            created_at,
+            completed_at,
+            project_name
+          `)
+          .order("updated_at", { ascending: false });
+
+        if (userId) {
+          taskQuery = taskQuery.eq("assigned_to", userId);
+        }
+
+        if (projectName) {
+          taskQuery = taskQuery.eq("project_name", projectName);
+        }
+
+        const { data: tasks } = await taskQuery;
+
+        if (!cancelled) {
+          setMemberTasks(tasks ?? []);
+        }
+      } catch (err) {
+        console.warn("Failed to load member tasks:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [memberName, projectName, reportData?.meta?.from, reportData?.meta?.to, refetchTrigger]);
+
+  const handleTaskClick = async (taskId: string, fallbackTask?: any) => {
+    if (!taskId) return;
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("id", taskId)
+        .maybeSingle();
+
+      if (error || !data) {
+        if (fallbackTask) setEditingTask(fallbackTask as Task);
+        else toast.error("Could not load task details");
+      } else {
+        setEditingTask(data as Task);
+      }
+    } catch (e) {
+      if (fallbackTask) setEditingTask(fallbackTask as Task);
+    }
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent
+        overlayClassName="z-[60]"
+        onPointerDownOutside={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!hasChildModalRef.current) {
+            onClose();
+          }
+        }}
+        onInteractOutside={(e) => {
+          if (hasChildModalRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!hasChildModalRef.current) {
+            onClose();
+          }
+        }}
+        className="max-w-3xl max-h-[85vh] p-0 overflow-hidden bg-card border border-border shadow-2xl rounded-xl flex flex-col z-[65]"
+      >
+        {/* Modal Header */}
+        <DialogHeader className="p-4 md:p-5 bg-muted/20 border-b border-border/80 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold border border-primary/30 font-mono text-sm shrink-0">
+                {memberName.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
+                  <span>{memberName}</span>
+                  {projectName && (
+                    <span className="text-xs font-normal px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-sans">
+                      {projectName}
+                    </span>
+                  )}
+                  <span className="text-xs font-mono text-muted-foreground px-2 py-0.5 rounded bg-muted/60 border border-border/40">
+                    {reportData?.meta.monthLabel}
+                  </span>
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Work items and tasks for {memberName} {projectName ? `in ${projectName}` : ""}
+                </DialogDescription>
+              </div>
+            </div>
+            <div className="px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-mono text-xs shrink-0">
+              Total Tasks: {memberTasks.length}
+            </div>
+          </div>
+        </DialogHeader>
+
+        {/* Body Content - Simple & Clean Tasks List */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {loading ? (
+            <div className="py-12 text-center text-xs text-muted-foreground">
+              <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
+              Loading tasks for {memberName}...
+            </div>
+          ) : memberTasks.length === 0 ? (
+            <div className="py-12 text-center text-xs text-muted-foreground italic">
+              No tasks assigned to {memberName} for this scope.
+            </div>
+          ) : (
+            <div className="border border-border/80 rounded-lg overflow-hidden bg-card">
+              <table className="w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/40 border-b border-border text-muted-foreground font-medium text-[11px] uppercase tracking-wider">
+                    <th className="py-2.5 px-3 w-28 font-mono">Task Code</th>
+                    <th className="py-2.5 px-3">Task Name</th>
+                    <th className="py-2.5 px-3 w-28">Status</th>
+                    <th className="py-2.5 px-3 text-right w-24">Logged / Plan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40 font-medium">
+                  {memberTasks.map((t) => (
+                    <tr
+                      key={t.id}
+                      onClick={() => handleTaskClick(t.id, t)}
+                      className="hover:bg-accent/40 text-foreground transition-colors cursor-pointer group"
+                    >
+                      <td className="py-2 px-3 font-mono font-semibold text-primary">
+                        <span className="group-hover:underline flex items-center gap-1">
+                          {t.task_code || "TSK-—"}
+                          <ExternalLink className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 font-medium text-foreground group-hover:text-primary transition-colors">
+                        {t.task_name}
+                      </td>
+                      <td className="py-2 px-3">
+                        <StatusBadge status={t.status as any} />
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-400">
+                        {t.actual_hours ?? t.planned_hours ?? 0}h
+                        {t.planned_hours ? (
+                          <span className="text-[10px] text-muted-foreground font-normal ml-1">
+                            / {t.planned_hours}h
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <DialogFooter className="p-3 bg-muted/20 border-t border-border/80 flex items-center justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onClose();
+            }}
+            className="h-8 text-xs font-medium border-border hover:bg-accent text-foreground cursor-pointer"
+          >
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+
+      {/* Nested Task Detail Modal */}
+      {editingTask && (
+        <TaskFormDialog
+          open={Boolean(editingTask)}
+          onOpenChange={(open) => {
+            if (!open) setEditingTask(null);
+          }}
+          initial={editingTask}
+          userId={user?.id || ""}
+          onSaved={() => {
+            setRefetchTrigger((c) => c + 1);
+          }}
+        />
+      )}
     </Dialog>
   );
 }

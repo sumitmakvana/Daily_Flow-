@@ -872,8 +872,9 @@ export function TaskFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        overlayClassName="z-[70]"
         className={cn(
-          "flex flex-col p-0 overflow-hidden transition-all duration-200 shadow-2xl bg-background text-foreground border border-border",
+          "flex flex-col p-0 overflow-hidden transition-all duration-200 shadow-2xl bg-background text-foreground border border-border z-[75]",
           isExpanded
             ? "w-[98vw] h-[95vh] max-h-[95vh] sm:max-w-[98vw] rounded-xl"
             : creationMode === "grid" && !form.id
