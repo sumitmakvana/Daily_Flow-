@@ -177,7 +177,10 @@ function TeamCapacityPage() {
   const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [availabilityFilter, setAvailabilityFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"table" | "card">("table");
+  // Phones default to the card view; the wide table needs horizontal scrolling there.
+  const [viewMode, setViewMode] = useState<"table" | "card">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "card" : "table"
+  );
   const [selectedAssignMemberId, setSelectedAssignMemberId] = useState<string | null>(null);
   const [selectedPresetProjectName, setSelectedPresetProjectName] = useState<string | null>(null);
   const [showActiveOnly, setShowActiveOnly] = useState<boolean>(true);
@@ -864,11 +867,11 @@ function TeamCapacityPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-3.5 sm:p-5 space-y-4 font-sans">
+    <div className="min-h-screen bg-background text-foreground p-3.5 pb-24 sm:p-5 md:pb-5 space-y-4 font-sans overflow-x-hidden">
       {/* Top Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-3.5">
         <div className="space-y-1">
-          <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
             Team Capacity & Workload Dashboard
             <span
@@ -883,7 +886,7 @@ function TeamCapacityPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link to="/exports">
             <Button
               size="sm"
@@ -1054,7 +1057,7 @@ function TeamCapacityPage() {
         {/* Row 1: Search + View Controls */}
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           {/* Search Input */}
-          <div className="relative flex-1 min-w-[220px] max-w-md">
+          <div className="relative w-full sm:flex-1 sm:min-w-[220px] max-w-md">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="Search members, projects, tasks..."
@@ -1068,7 +1071,7 @@ function TeamCapacityPage() {
           </div>
 
           {/* Right: Info Popover, Active Work Switch, and View Mode Toggle */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -1299,8 +1302,8 @@ function TeamCapacityPage() {
 
       {/* MAIN TABLE VIEW */}
       {viewMode === "table" && (
-        <div className="bg-card border border-border/70 rounded-xl overflow-hidden shadow-2xs">
-          <table className="w-full text-left text-xs border-collapse table-fixed">
+        <div className="bg-card border border-border/70 rounded-xl overflow-x-auto shadow-2xs">
+          <table className="w-full min-w-[900px] text-left text-xs border-collapse table-fixed">
             <thead>
               <tr className="border-b border-border/80 bg-muted/30 text-muted-foreground text-[10px] font-bold uppercase tracking-wider h-10">
                 <th className="py-3 px-3 align-middle w-[24%]">Member</th>

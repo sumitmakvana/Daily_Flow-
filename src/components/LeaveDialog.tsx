@@ -15,10 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { leavesService } from "@/services/leaves";
 import { useAuth } from "@/hooks/use-auth";
-import { toLocalISO } from "@/lib/format";
+import { toLocalISO, analyzeWorkingRange, getDayOff } from "@/lib/format";
+import { holidaysService } from "@/services/operations";
 import { supabase } from "@/integrations/supabase/client";
 import { Calendar, Palmtree, Home, Activity, Clock, UserCheck, User, Sparkles, Check } from "lucide-react";
-import type { Profile, Leave } from "@/lib/types";
+import type { Profile, Leave, HolidayCalendar } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface LeaveDialogProps {
@@ -53,6 +54,7 @@ export function LeaveDialog({
   const [requestTo, setRequestTo] = useState<string>("default");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [officeHolidays, setOfficeHolidays] = useState<HolidayCalendar[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -75,6 +77,8 @@ export function LeaveDialog({
         setRequestTo("default");
       }
 
+      holidaysService.list().then(setOfficeHolidays).catch(() => setOfficeHolidays([]));
+
       // Load active profiles for Request To dropdown
       supabase
         .from("profiles")
@@ -87,19 +91,11 @@ export function LeaveDialog({
     }
   }, [open, initialDate, leaveToEdit]);
 
-  // Calculate day count
-  const calculateDays = () => {
-    if (!startDate || !endDate) return 1;
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    if (end < start) return 0;
-    if (leaveType === "half_day") return 0.5;
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-    return diffDays;
-  };
-
-  const daysCount = calculateDays();
+  // Working days only: Saturdays, Sundays and configured Office Holidays are never counted
+  const range = analyzeWorkingRange(startDate, endDate, officeHolidays);
+  const daysCount = leaveType === "half_day" ? (getDayOff(startDate, officeHolidays) ? 0 : 0.5) : range.workingDays;
+  const skippedWeekend = range.offDays.filter((d) => d.reason !== "Office Holiday").length;
+  const skippedHolidays = range.offDays.filter((d) => d.reason === "Office Holiday").length;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,16 +108,27 @@ export function LeaveDialog({
       return;
     }
 
+    if (daysCount === 0) {
+      toast.error(
+        leaveType === "half_day"
+          ? "The selected day is not a working day"
+          : "The selected dates have no working days (weekends and Office Holidays are excluded)"
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       const targetUserId = isManager && selectedMemberId ? selectedMemberId : (user?.id || "");
 
       if (leaveToEdit) {
+        const first = range.segments[0];
+        const last = range.segments[range.segments.length - 1];
         await leavesService.updateLeave(leaveToEdit.id, {
           userId: targetUserId,
           leaveType,
-          startDate,
-          endDate,
+          startDate: leaveType === "half_day" ? startDate : first.start,
+          endDate: leaveType === "half_day" ? startDate : last.end,
           daysCount,
           reason: reason.trim() || undefined,
           requestTo: requestTo === "default" ? null : requestTo,
@@ -129,22 +136,29 @@ export function LeaveDialog({
         });
         toast.success("Leave request updated successfully!");
       } else {
-        await leavesService.applyLeave({
-          userId: targetUserId,
-          leaveType,
-          startDate,
-          endDate,
-          daysCount,
-          reason: reason.trim() || undefined,
-          requestTo: requestTo === "default" ? null : requestTo,
-          handoverNote: handoverNote.trim() || undefined,
-          status: "approved",
-        });
+        // Create entries only on working days: one per contiguous run, skipping weekends / Office Holidays
+        const segments =
+          leaveType === "half_day"
+            ? [{ start: startDate, end: startDate, days: 0.5 }]
+            : range.segments;
+        for (const seg of segments) {
+          await leavesService.applyLeave({
+            userId: targetUserId,
+            leaveType,
+            startDate: seg.start,
+            endDate: seg.end,
+            daysCount: seg.days,
+            reason: reason.trim() || undefined,
+            requestTo: requestTo === "default" ? null : requestTo,
+            handoverNote: handoverNote.trim() || undefined,
+            status: "approved",
+          });
+        }
 
         toast.success(
           leaveType === "wfh"
-            ? `WFH scheduled for ${startDate === endDate ? startDate : `${startDate} to ${endDate}`}`
-            : `Leave request submitted (${daysCount} ${daysCount === 1 ? "day" : "days"})`
+            ? `WFH scheduled for ${daysCount} working ${daysCount === 1 ? "day" : "days"}`
+            : `Leave request submitted (${daysCount} working ${daysCount === 1 ? "day" : "days"})`
         );
       }
 
@@ -302,15 +316,46 @@ export function LeaveDialog({
             </div>
           </div>
 
-          {/* Duration Summary Pill */}
-          <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg bg-muted/30 border border-border">
-            <span className="text-muted-foreground text-[10px] font-medium flex items-center gap-1">
-              <Calendar className="h-3 w-3 text-primary" /> Total Duration:
-            </span>
-            <span className="font-bold text-foreground text-[11px] bg-card px-2 py-0.2 rounded border border-border shadow-xs">
-              {daysCount} {daysCount === 1 ? "Day" : "Days"}
-              {leaveType === "half_day" ? " (0.5D Half Day)" : leaveType === "wfh" ? " (Remote WFH)" : " (Full Day)"}
-            </span>
+          {/* Working-days summary */}
+          <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground text-[10px] font-medium flex items-center gap-1">
+                <Calendar className="h-3 w-3 text-primary" /> Working Days:
+              </span>
+              <span className="font-bold text-foreground text-[11px] bg-card px-2 py-0.2 rounded border border-border shadow-xs">
+                {daysCount} {daysCount === 1 ? "Day" : "Days"}
+                {leaveType === "half_day" ? " (Half Day)" : leaveType === "wfh" ? " (Remote WFH)" : ""}
+              </span>
+            </div>
+            {range.offDays.length > 0 && leaveType !== "half_day" && (
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground">
+                  Excluded:{" "}
+                  {[
+                    skippedWeekend > 0 ? `${skippedWeekend} weekend day${skippedWeekend > 1 ? "s" : ""}` : "",
+                    skippedHolidays > 0 ? `${skippedHolidays} Office Holiday${skippedHolidays > 1 ? "s" : ""}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {range.offDays.slice(0, 8).map((d) => (
+                    <span
+                      key={d.date}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground"
+                    >
+                      {d.date.slice(8)}/{d.date.slice(5, 7)} · {d.reason === "Office Holiday" ? d.label || "Office Holiday" : d.reason}
+                    </span>
+                  ))}
+                  {range.offDays.length > 8 && (
+                    <span className="text-[9px] text-muted-foreground">+{range.offDays.length - 8} more</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {startDate && endDate && daysCount === 0 && (
+              <p className="text-[10px] font-medium text-destructive">No working days in this selection.</p>
+            )}
           </div>
 
           {/* Request To / Send Notification Dropdown */}

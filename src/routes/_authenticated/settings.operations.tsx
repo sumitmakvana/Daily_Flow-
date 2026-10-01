@@ -333,7 +333,7 @@ function OpsSettings() {
         </ul>
       </Card>
 
-      {/* Official Company Holidays Section */}
+      {/* Office Holidays Section */}
       <Card className="p-4 md:p-5 space-y-4 border border-border/60 shadow-xs bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-3.5">
           <div>
@@ -341,7 +341,7 @@ function OpsSettings() {
               <div className="p-1.5 rounded-lg bg-muted text-muted-foreground border border-border">
                 <Building2 className="w-4 h-4" />
               </div>
-              <h2 className="text-sm font-semibold text-foreground tracking-tight">Official Company Office Holidays</h2>
+              <h2 className="text-sm font-semibold text-foreground tracking-tight">Office Holidays</h2>
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border">
                 {holidays.length} {holidays.length === 1 ? "Holiday" : "Holidays"}
               </span>
@@ -455,7 +455,7 @@ function OpsSettings() {
               <div className="w-10 h-10 rounded-full bg-muted/60 mx-auto flex items-center justify-center text-muted-foreground">
                 <Palmtree className="w-5 h-5 text-muted-foreground" />
               </div>
-              <p className="text-xs font-semibold text-foreground">No official company holidays added yet.</p>
+              <p className="text-xs font-semibold text-foreground">No office holidays added yet.</p>
               <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
                 Add individual holiday dates above or select a year and click <span className="font-semibold text-foreground">Import List</span> to populate.
               </p>

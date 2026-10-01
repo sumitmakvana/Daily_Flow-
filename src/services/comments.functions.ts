@@ -56,7 +56,7 @@ export const addCommentFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const body = data.body.trim();
     if (!body) throw new Error("Comment cannot be empty");
-    if (body.length > 4000) throw new Error("Comment too long");
+    if (body.length > 50000) throw new Error("Comment too long");
     const row = await withUser(context.userId, async (client) => {
       const ins = await client.query<Comment>(
         `INSERT INTO public.comments (work_item_id, user_id, body, parent_comment_id)
@@ -97,7 +97,7 @@ export const editCommentFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const t = data.body.trim();
     if (!t) throw new Error("Comment cannot be empty");
-    if (t.length > 4000) throw new Error("Comment too long");
+    if (t.length > 50000) throw new Error("Comment too long");
     await withUser(context.userId, async (client) => {
       await client.query(
         `UPDATE public.comments SET body = $1, edited_at = now() WHERE id = $2`,
