@@ -25,6 +25,7 @@ import { Route as AuthenticatedPlanningSuggestionsRouteImport } from './routes/_
 import { Route as AuthenticatedPlanningRouteImport } from './routes/_authenticated/planning'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
+import { Route as AuthenticatedNotebookRouteImport } from './routes/_authenticated/notebook'
 import { Route as AuthenticatedMyDayRouteImport } from './routes/_authenticated/my-day'
 import { Route as AuthenticatedManagerRouteImport } from './routes/_authenticated/manager'
 import { Route as AuthenticatedLeavesRouteImport } from './routes/_authenticated/leaves'
@@ -145,6 +146,11 @@ const AuthenticatedNotificationsRoute =
     path: '/notifications',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedNotebookRoute = AuthenticatedNotebookRouteImport.update({
+  id: '/notebook',
+  path: '/notebook',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedMyDayRoute = AuthenticatedMyDayRouteImport.update({
   id: '/my-day',
   path: '/my-day',
@@ -366,6 +372,7 @@ export interface FileRoutesByFullPath {
   '/leaves': typeof AuthenticatedLeavesRoute
   '/manager': typeof AuthenticatedManagerRoute
   '/my-day': typeof AuthenticatedMyDayRoute
+  '/notebook': typeof AuthenticatedNotebookRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/planning': typeof AuthenticatedPlanningRoute
@@ -419,6 +426,7 @@ export interface FileRoutesByTo {
   '/leaves': typeof AuthenticatedLeavesRoute
   '/manager': typeof AuthenticatedManagerRoute
   '/my-day': typeof AuthenticatedMyDayRoute
+  '/notebook': typeof AuthenticatedNotebookRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/planning': typeof AuthenticatedPlanningRoute
@@ -474,6 +482,7 @@ export interface FileRoutesById {
   '/_authenticated/leaves': typeof AuthenticatedLeavesRoute
   '/_authenticated/manager': typeof AuthenticatedManagerRoute
   '/_authenticated/my-day': typeof AuthenticatedMyDayRoute
+  '/_authenticated/notebook': typeof AuthenticatedNotebookRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/planning': typeof AuthenticatedPlanningRoute
@@ -529,6 +538,7 @@ export interface FileRouteTypes {
     | '/leaves'
     | '/manager'
     | '/my-day'
+    | '/notebook'
     | '/notifications'
     | '/onboarding'
     | '/planning'
@@ -582,6 +592,7 @@ export interface FileRouteTypes {
     | '/leaves'
     | '/manager'
     | '/my-day'
+    | '/notebook'
     | '/notifications'
     | '/onboarding'
     | '/planning'
@@ -636,6 +647,7 @@ export interface FileRouteTypes {
     | '/_authenticated/leaves'
     | '/_authenticated/manager'
     | '/_authenticated/my-day'
+    | '/_authenticated/notebook'
     | '/_authenticated/notifications'
     | '/_authenticated/onboarding'
     | '/_authenticated/planning'
@@ -804,6 +816,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/notifications'
       preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/notebook': {
+      id: '/_authenticated/notebook'
+      path: '/notebook'
+      fullPath: '/notebook'
+      preLoaderRoute: typeof AuthenticatedNotebookRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/my-day': {
@@ -1096,6 +1115,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedLeavesRoute: typeof AuthenticatedLeavesRoute
   AuthenticatedManagerRoute: typeof AuthenticatedManagerRoute
   AuthenticatedMyDayRoute: typeof AuthenticatedMyDayRoute
+  AuthenticatedNotebookRoute: typeof AuthenticatedNotebookRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedPlanningRoute: typeof AuthenticatedPlanningRoute
@@ -1130,6 +1150,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedLeavesRoute: AuthenticatedLeavesRoute,
   AuthenticatedManagerRoute: AuthenticatedManagerRoute,
   AuthenticatedMyDayRoute: AuthenticatedMyDayRoute,
+  AuthenticatedNotebookRoute: AuthenticatedNotebookRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedPlanningRoute: AuthenticatedPlanningRoute,

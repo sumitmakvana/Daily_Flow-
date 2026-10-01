@@ -119,12 +119,15 @@ export function TaskFormDialog({
   open,
   onOpenChange,
   initial,
+  initialFiles,
   userId,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   initial?: Partial<Task> | null;
+  /** Files to pre-attach when the dialog opens (e.g. images from a note). */
+  initialFiles?: File[];
   userId: string;
   onSaved: () => void;
 }) {
@@ -197,6 +200,15 @@ export function TaskFormDialog({
       setExistingAttachments([]);
     }
   }, [open, form.id]);
+
+  // Pre-attach files supplied by the caller (e.g. Convert Note to Task)
+  useEffect(() => {
+    if (!open || !initialFiles || initialFiles.length === 0) return;
+    setPendingFiles((prev) => {
+      prev.forEach((x) => URL.revokeObjectURL(x.previewUrl));
+      return initialFiles.map((f) => ({ id: crypto.randomUUID(), file: f, previewUrl: URL.createObjectURL(f) }));
+    });
+  }, [open, initialFiles]);
 
   const addPendingFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;

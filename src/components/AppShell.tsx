@@ -33,6 +33,7 @@ import {
   User,
   Palmtree,
   Clock,
+  BookOpen,
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -51,6 +52,9 @@ import { useBrowserNotifications } from "@/hooks/use-browser-notifications";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { GlobalSearchModal } from "@/components/GlobalSearchModal";
+import { DraggableNotepadModal } from "@/components/notebook/DraggableNotepadModal";
+import { DockNotepadBar } from "@/components/notebook/DockNotepadBar";
+import type { Task } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,6 +68,7 @@ import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
 const memberNav = [
   { to: "/my-day", icon: Sunrise, label: "My Day" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
+  { to: "/notebook", icon: BookOpen, label: "Notebook" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod-tasks", icon: Sun, label: "EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
@@ -75,6 +80,7 @@ const managerNav = [
   { to: "/executive", icon: Gauge, label: "Executive" },
   { to: "/my-day", icon: Sunrise, label: "My Day" },
   { to: "/tasks", icon: ListChecks, label: "Tasks" },
+  { to: "/notebook", icon: BookOpen, label: "Notebook" },
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/leaves", icon: Palmtree, label: "Team Leaves" },
   { to: "/eod", icon: Sun, label: "EOD" },
@@ -94,6 +100,65 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [accessibilityOpen, setAccessibilityOpen] = useState(false);
   const [addTaskOpen, setAddTaskOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [draggableNotepadOpen, setDraggableNotepadOpen] = useState(false);
+  const [activeDockNoteId, setActiveDockNoteId] = useState<string | null>(null);
+  const [taskFormFiles, setTaskFormFiles] = useState<File[]>([]);
+  const [taskFormInitial, setTaskFormInitial] = useState<Partial<Task> | null>(null);
+
+  const handleOpenDockNote = (noteId?: string) => {
+    if (noteId) {
+      setActiveDockNoteId(noteId);
+    }
+    setDraggableNotepadOpen(true);
+  };
+
+  const [notepadFocusSignal, setNotepadFocusSignal] = useState(0);
+
+  // Opened by the Operon Quick Notes browser extension (?quicknotes=1): show the notepad and focus it
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("quicknotes") === "1") {
+      setDraggableNotepadOpen(true);
+      setNotepadFocusSignal((n) => n + 1);
+    }
+  }, []);
+
+  // Global Alt+N: open the Quick Notes notepad (or focus it if already open) without leaving the page
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.code !== "KeyN") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']") || t.isContentEditable)) return;
+      e.preventDefault();
+      setDraggableNotepadOpen(true);
+      setNotepadFocusSignal((n) => n + 1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const handleConvertToTaskFromNote = async (noteTitle: string, noteContent: string, noteImages: string[] = []) => {
+    // Turn the note's images into files so they are attached to the new task
+    const files: File[] = [];
+    for (const [i, src] of noteImages.entries()) {
+      try {
+        const blob = await (await fetch(src)).blob();
+        const ext = (blob.type.split("/")[1] || "png").split("+")[0];
+        files.push(new File([blob], `note-image-${i + 1}.${ext}`, { type: blob.type || "image/png" }));
+      } catch {
+        // skip images that cannot be read (e.g. blocked cross-origin URLs)
+      }
+    }
+    setTaskFormFiles(files);
+    setTaskFormInitial({
+      assigned_to: user?.id ?? null,
+      task_name: noteTitle || "Task from Note",
+      remarks: noteContent,
+      priority: "Medium",
+      status: "To Do",
+    });
+    setAddTaskOpen(true);
+  };
   
   const [profile, setProfile] = useState<{
     display_name: string | null;
@@ -259,6 +324,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {unread}
                 </span>
               )}
+            </button>
+
+            {/* Quick Draggable Notepad Top Bar Button */}
+            <button
+              type="button"
+              onClick={() => handleOpenDockNote()}
+              className="flex items-center justify-center h-8 w-8 rounded-md text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors"
+              title="Open Draggable Notepad"
+            >
+              <BookOpen className="h-4 w-4 text-primary" />
             </button>
 
             {/* Profile Dropdown */}
@@ -647,12 +722,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       />
       <GlobalCompleteTaskEodDialog />
       <GlobalFeedbackWidget />
+      <DockNotepadBar
+        onOpenNote={handleOpenDockNote}
+        activeNoteId={activeDockNoteId}
+      />
+      <DraggableNotepadModal
+        open={draggableNotepadOpen}
+        focusSignal={notepadFocusSignal}
+        onClose={() => setDraggableNotepadOpen(false)}
+        activeNoteId={activeDockNoteId}
+        onConvertToTask={handleConvertToTaskFromNote}
+      />
       {user && (
         <TaskFormDialog
           open={addTaskOpen}
-          onOpenChange={setAddTaskOpen}
+          onOpenChange={(v) => {
+            setAddTaskOpen(v);
+            if (!v) setTaskFormFiles([]);
+          }}
+          initial={taskFormInitial}
+          initialFiles={taskFormFiles}
           userId={user.id}
-          onSaved={() => queryClient.invalidateQueries()}
+          onSaved={() => {
+            setTaskFormInitial(null);
+            setTaskFormFiles([]);
+            queryClient.invalidateQueries();
+          }}
         />
       )}
     </div>

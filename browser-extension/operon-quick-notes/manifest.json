@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Operon Quick Notes Shortcut",
+  "description": "Press Alt+N anywhere in Chrome to open (or focus) your Operon Quick Notes window.",
+  "version": "1.0.0",
+  "minimum_chrome_version": "102",
+  "permissions": ["storage"],
+  "background": { "service_worker": "background.js" },
+  "options_ui": { "page": "options.html", "open_in_tab": false },
+  "commands": {
+    "open-quick-notes": {
+      "suggested_key": { "default": "Alt+N" },
+      "description": "Open or focus Operon Quick Notes"
+    }
+  }
+}
