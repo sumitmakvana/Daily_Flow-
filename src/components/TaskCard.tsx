@@ -503,6 +503,11 @@ export function TaskCard({
                 <div className="flex items-start gap-1.5">
                   <div className="min-w-0 flex-1">
                     <div
+                      // Native tooltip with the full title, only when the 2-line clamp is truncating it
+                      onMouseEnter={(e) => {
+                        const el = e.currentTarget;
+                        el.title = el.scrollHeight > el.clientHeight + 1 ? task.task_name : "";
+                      }}
                       className="font-semibold text-slate-100 leading-snug hover:text-[#5C8EFA] transition-colors text-xs md:text-sm line-clamp-2"
                     >
                       {task.task_name}

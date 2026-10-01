@@ -483,3 +483,69 @@ export function getActiveHolidaysForDate(
 
 
 
+
+/* ------------------------------------------------------------------ */
+/* Working-day helpers for Leave / WFH ranges                          */
+/* ------------------------------------------------------------------ */
+
+export type DayOffReason = "Saturday" | "Sunday" | "Office Holiday";
+
+export interface DayOff {
+  date: string;
+  reason: DayOffReason;
+  label?: string;
+}
+
+type OfficeHolidayLike = { calendar_date?: unknown; date?: unknown; label?: string };
+
+/** Why a date is not a working day (weekend or configured Office Holiday), or null if it is one. */
+export function getDayOff(iso: string, officeHolidays: OfficeHolidayLike[] = []): DayOff | null {
+  const d = parseLocalYYYYMMDD(iso);
+  if (!d) return null;
+  if (d.getDay() === 6) return { date: iso, reason: "Saturday" };
+  if (d.getDay() === 0) return { date: iso, reason: "Sunday" };
+  const h = officeHolidays.find((x) => getHolidayDateStr(x as { calendar_date?: unknown }).slice(0, 10) === iso);
+  if (h) return { date: iso, reason: "Office Holiday", label: h.label };
+  return null;
+}
+
+/** Splits an inclusive date range into working days, skipped days, and contiguous working segments. */
+export function analyzeWorkingRange(
+  startISO: string,
+  endISO: string,
+  officeHolidays: OfficeHolidayLike[] = []
+): {
+  workingDays: number;
+  offDays: DayOff[];
+  segments: Array<{ start: string; end: string; days: number }>;
+} {
+  const start = parseLocalYYYYMMDD(startISO);
+  const end = parseLocalYYYYMMDD(endISO);
+  const out = {
+    workingDays: 0,
+    offDays: [] as DayOff[],
+    segments: [] as Array<{ start: string; end: string; days: number }>,
+  };
+  if (!start || !end || end < start) return out;
+  const cur = new Date(start);
+  let seg: { start: string; end: string; days: number } | null = null;
+  for (let i = 0; i < 400 && cur <= end; i++) {
+    const iso = toLocalISO(cur);
+    const off = getDayOff(iso, officeHolidays);
+    if (off) {
+      out.offDays.push(off);
+      seg = null;
+    } else {
+      out.workingDays += 1;
+      if (seg) {
+        seg.end = iso;
+        seg.days += 1;
+      } else {
+        seg = { start: iso, end: iso, days: 1 };
+        out.segments.push(seg);
+      }
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}

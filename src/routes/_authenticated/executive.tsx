@@ -435,9 +435,9 @@ function ExecutivePage() {
   }, [eodProfiles, scope]);
 
   return (
-    <div className="max-w-7xl mx-auto px-3 md:px-6 py-4 md:py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-3 md:px-6 pt-4 pb-24 md:py-6 space-y-6 overflow-x-hidden">
       {/* Header controls */}
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-xl md:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Gauge className="h-6 w-6 text-indigo-400" /> Executive Command Center
@@ -454,7 +454,7 @@ function ExecutivePage() {
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0 items-center">
+        <div className="flex flex-wrap gap-2 sm:shrink-0 items-center">
           <ScopeSelect
             scope={scope || { kind: "org" }}
             boot={boot || { userId: "", displayName: null, isAdmin: true, isManager: true, primaryTeamId: null, primaryTeamName: null }}
@@ -994,7 +994,7 @@ function ExecutiveRealDashboard({
             <h3 className="text-base font-bold text-foreground tracking-tight">Team workload</h3>
             <p className="text-xs text-muted-foreground">Real task allocation, status breakdown, and capacity per team member</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex w-full sm:w-auto items-center gap-3">
             <div className="flex items-center gap-1 bg-background border border-border p-0.5 rounded-lg">
               <Button
                 size="sm"
@@ -1017,16 +1017,16 @@ function ExecutiveRealDashboard({
               placeholder="Filter member..."
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
-              className="h-8 w-44 md:w-52 text-xs bg-input/40 border-border text-foreground placeholder:text-muted-foreground/60"
+              className="h-8 min-w-0 flex-1 sm:flex-none sm:w-44 md:w-52 text-xs bg-input/40 border-border text-foreground placeholder:text-muted-foreground/60"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full min-w-[640px] text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-border/70 text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">
-                <th className="py-2.5 px-3 font-semibold">Member</th>
+                <th className="py-2.5 px-3 font-semibold sticky left-0 z-10 bg-card">Member</th>
                 <th className="py-2.5 px-3 font-semibold text-center">Completed</th>
                 <th className="py-2.5 px-3 font-semibold text-center">In Progress</th>
                 <th className="py-2.5 px-3 font-semibold text-center">In Review</th>
@@ -1052,7 +1052,7 @@ function ExecutiveRealDashboard({
                     onClick={() => onSelectMember(m.id)}
                     className="hover:bg-accent/30 transition-colors cursor-pointer group"
                   >
-                    <td className="py-3 px-3">
+                    <td className="py-3 px-3 sticky left-0 z-10 bg-card group-hover:bg-accent/30 max-w-[11rem] sm:max-w-none">
                       <div className="flex items-center gap-2.5">
                         <Avatar className="h-7 w-7 border border-border shrink-0">
                           {m.avatar ? (

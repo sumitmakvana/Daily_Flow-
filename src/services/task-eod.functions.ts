@@ -105,7 +105,7 @@ export const upsertTaskEodFn = createServerFn({ method: "POST" })
           taskId: z.string().uuid(),
           progressStatus: z.enum(["done", "in_progress", "blocked"]),
           actualHours: z.number().min(0).max(24),
-          note: z.string().max(2000).nullable().optional(),
+          note: z.string().max(10000).nullable().optional(),
         })
         .parse(d),
   )
