@@ -10,6 +10,7 @@ import {
   exportsService,
   exportMemberCapacityToExcel,
   exportProjectSummaryToExcel,
+  exportProjectsSeparateSheetsToExcel,
   exportCapacityReportToCSV,
   exportProjectSummaryToCSV,
   type CapacityReportRow,
@@ -26,6 +27,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
   Download,
@@ -216,6 +223,7 @@ function ExportsPage() {
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [exportingSheets, setExportingSheets] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -311,6 +319,40 @@ function ExportsPage() {
     }
   };
 
+  const hasProjectSheets = Boolean(reportData?.projectSummary?.some((p) => !p.isTotalRow));
+
+  const handleExportProjectSheets = async () => {
+    if (!reportData?.projectSummary || !hasProjectSheets) {
+      toast.error("No project data to export");
+      return;
+    }
+    setExportingSheets(true);
+    try {
+      const projectNames = reportData.projectSummary.filter((p) => !p.isTotalRow).map((p) => p.projectName);
+      const results = await Promise.all(
+        projectNames.map((name) => fetchProjectActivity(name, reportData.meta.from, reportData.meta.to)),
+      );
+      const activityByProject: Record<string, { tasks: any[]; worklogs: any[] }> = {};
+      projectNames.forEach((name, i) => {
+        activityByProject[name] = results[i];
+      });
+      const cleanLabel = reportData.meta.monthLabel.replace(/[^a-zA-Z0-9]/g, "_");
+      const filename = `Projects_Separate_Sheets_${cleanLabel}.xlsx`;
+      exportProjectsSeparateSheetsToExcel(
+        reportData.meta,
+        reportData.rows,
+        reportData.projectSummary,
+        activityByProject,
+        filename,
+      );
+      toast.success(`Exported Project Sheets Excel (${filename})`);
+    } catch (e) {
+      toast.error("Failed to export project sheets: " + (e as Error).message);
+    } finally {
+      setExportingSheets(false);
+    }
+  };
+
   const handleExportCSV = () => {
     if (!reportData) return;
     const cleanLabel = reportData.meta.monthLabel.replace(/[^a-zA-Z0-9]/g, "_");
@@ -371,14 +413,41 @@ function ExportsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            onClick={handleExportExcel}
-            disabled={loading || isCurrentTabEmpty}
-            className="h-8 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors cursor-pointer"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" /> Download Excel (.xlsx)
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                disabled={loading || exportingSheets || (isCurrentTabEmpty && !hasProjectSheets)}
+                className="h-8 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors cursor-pointer"
+              >
+                {exportingSheets ? (
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Download Excel (.xlsx)
+                <ChevronDown className="h-3.5 w-3.5 ml-1.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem
+                onSelect={handleExportExcel}
+                disabled={isCurrentTabEmpty}
+                className="text-xs cursor-pointer"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-2 text-emerald-400" />
+                All Projects — Single Sheet
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={handleExportProjectSheets}
+                disabled={!hasProjectSheets}
+                className="text-xs cursor-pointer"
+              >
+                <Layers className="h-3.5 w-3.5 mr-2 text-primary" />
+                Projects — Separate Sheets
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             size="sm"
             variant="outline"
@@ -839,6 +908,149 @@ function ExportsPage() {
   );
 }
 
+export interface ProjectActivityTask {
+  id: string;
+  task_code: string | null;
+  task_name: string;
+  status: string;
+  priority: string;
+  planned_hours: number | null;
+  actual_hours: number | null;
+  assigned_to: string | null;
+  created_at: string;
+  completed_at: string | null;
+  assignee_name?: string;
+}
+
+export interface ProjectActivityWorklog {
+  id: string;
+  task_id: string;
+  user_id: string;
+  work_date: string;
+  hours: number;
+  notes?: string | null;
+  task_code?: string | null;
+  task_name?: string;
+  user_name?: string;
+}
+
+// Shared loader for a project's tasks + worklogs within the report period.
+// Used by the Project Detail modal and the separate-sheets Excel export.
+async function fetchProjectActivity(
+  projectName: string,
+  fromStr?: string,
+  toStr?: string,
+): Promise<{ tasks: ProjectActivityTask[]; worklogs: ProjectActivityWorklog[] }> {
+  const { data: prjData } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("name", projectName)
+    .maybeSingle();
+
+  let query = supabase
+    .from("tasks")
+    .select(`
+      id,
+      task_code,
+      task_name,
+      status,
+      priority,
+      planned_hours,
+      actual_hours,
+      assigned_to,
+      created_at,
+      completed_at,
+      project_name,
+      project_id
+    `)
+    .order("updated_at", { ascending: false });
+
+  if (prjData?.id) {
+    query = query.or(`project_name.eq."${projectName}",project_id.eq."${prjData.id}"`);
+  } else {
+    query = query.eq("project_name", projectName);
+  }
+
+  const { data: tasks, error } = await query;
+  if (error) throw error;
+
+  // Filter tasks and worklogs strictly by report date bounds (from - to) for the selected month/period
+    
+  // 1. Fetch worklogs for this project's tasks within [fromStr, toStr]
+  const allTaskIds = (tasks ?? []).map((t) => t.id);
+  const activeTaskIdsFromWorklogs = new Set<string>();
+  let enrichedLogs: ProjectActivityWorklog[] = [];
+
+  const assignedUserIds = Array.from(
+    new Set((tasks ?? []).map((t) => t.assigned_to).filter(Boolean))
+  ) as string[];
+
+  let profileMap: Record<string, string> = {};
+  if (assignedUserIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", assignedUserIds);
+
+    (profs ?? []).forEach((p) => {
+      profileMap[p.id] = p.display_name;
+    });
+  }
+
+  if (allTaskIds.length > 0 && fromStr && toStr) {
+    let wlQuery = supabase
+      .from("task_worklogs")
+      .select("id, task_id, user_id, work_date, hours, notes, created_at")
+      .in("task_id", allTaskIds)
+      .gte("work_date", fromStr)
+      .lte("work_date", toStr)
+      .order("work_date", { ascending: false });
+
+    const { data: wlogs } = await wlQuery;
+    if (wlogs && wlogs.length > 0) {
+      const taskMap = new Map((tasks ?? []).map((t) => [t.id, t]));
+      wlogs.forEach((w) => activeTaskIdsFromWorklogs.add(w.task_id));
+      enrichedLogs = wlogs.map((w) => {
+        const taskObj = taskMap.get(w.task_id);
+        return {
+          ...w,
+          task_code: taskObj?.task_code || "TSK-—",
+          task_name: taskObj?.task_name || "Unknown Task",
+          user_name: profileMap[w.user_id] || "Team Member",
+        };
+      });
+    }
+  }
+
+  // 2. Strict filtering of tasks belonging to the selected month/period
+  let activePeriodTasks = tasks ?? [];
+  if (fromStr && toStr) {
+    activePeriodTasks = activePeriodTasks.filter((t) => {
+      if (activeTaskIdsFromWorklogs.has(t.id)) return true;
+      const cDate = t.created_at ? t.created_at.slice(0, 10) : "";
+      if (cDate && cDate >= fromStr && cDate <= toStr) return true;
+      const compDate = t.completed_at ? t.completed_at.slice(0, 10) : "";
+      if (compDate && compDate >= fromStr && compDate <= toStr) return true;
+      const upDate = (t as any).updated_at ? (t as any).updated_at.slice(0, 10) : "";
+      if (upDate && upDate >= fromStr && upDate <= toStr && t.status !== "Completed") return true;
+      return false;
+    });
+  }
+
+  enrichedLogs = enrichedLogs.map((l) => ({
+    ...l,
+    user_name: profileMap[l.user_id] || l.user_name || "Team Member",
+  }));
+
+  const formatted = activePeriodTasks.map((t) => ({
+    ...t,
+    assignee_name: t.assigned_to ? profileMap[t.assigned_to] || "Unassigned" : "Unassigned",
+  }));
+
+
+  return { tasks: formatted as ProjectActivityTask[], worklogs: enrichedLogs };
+}
+
 function ProjectDetailModal({
   projectName,
   onClose,
@@ -972,117 +1184,14 @@ function ProjectDetailModal({
 
     (async () => {
       try {
-        const { data: prjData } = await supabase
-          .from("projects")
-          .select("id")
-          .eq("name", projectName)
-          .maybeSingle();
-
-        let query = supabase
-          .from("tasks")
-          .select(`
-            id,
-            task_code,
-            task_name,
-            status,
-            priority,
-            planned_hours,
-            actual_hours,
-            assigned_to,
-            created_at,
-            completed_at,
-            project_name,
-            project_id
-          `)
-          .order("updated_at", { ascending: false });
-
-        if (prjData?.id) {
-          query = query.or(`project_name.eq."${projectName}",project_id.eq."${prjData.id}"`);
-        } else {
-          query = query.eq("project_name", projectName);
-        }
-
-        const { data: tasks, error } = await query;
-        if (error) throw error;
-
-        // Filter tasks and worklogs strictly by report date bounds (from - to) for the selected month/period
-        const fromStr = reportData?.meta?.from;
-        const toStr = reportData?.meta?.to;
-
-        // 1. Fetch worklogs for this project's tasks within [fromStr, toStr]
-        const allTaskIds = (tasks ?? []).map((t) => t.id);
-        const activeTaskIdsFromWorklogs = new Set<string>();
-        let enrichedLogs: typeof projectWorklogs = [];
-
-        const assignedUserIds = Array.from(
-          new Set((tasks ?? []).map((t) => t.assigned_to).filter(Boolean))
-        ) as string[];
-
-        let profileMap: Record<string, string> = {};
-        if (assignedUserIds.length > 0) {
-          const { data: profs } = await supabase
-            .from("profiles")
-            .select("id, display_name")
-            .in("id", assignedUserIds);
-
-          (profs ?? []).forEach((p) => {
-            profileMap[p.id] = p.display_name;
-          });
-        }
-
-        if (allTaskIds.length > 0 && fromStr && toStr) {
-          let wlQuery = supabase
-            .from("task_worklogs")
-            .select("id, task_id, user_id, work_date, hours, notes, created_at")
-            .in("task_id", allTaskIds)
-            .gte("work_date", fromStr)
-            .lte("work_date", toStr)
-            .order("work_date", { ascending: false });
-
-          const { data: wlogs } = await wlQuery;
-          if (wlogs && wlogs.length > 0) {
-            const taskMap = new Map((tasks ?? []).map((t) => [t.id, t]));
-            wlogs.forEach((w) => activeTaskIdsFromWorklogs.add(w.task_id));
-            enrichedLogs = wlogs.map((w) => {
-              const taskObj = taskMap.get(w.task_id);
-              return {
-                ...w,
-                task_code: taskObj?.task_code || "TSK-—",
-                task_name: taskObj?.task_name || "Unknown Task",
-                user_name: profileMap[w.user_id] || "Team Member",
-              };
-            });
-          }
-        }
-
-        // 2. Strict filtering of tasks belonging to the selected month/period
-        let activePeriodTasks = tasks ?? [];
-        if (fromStr && toStr) {
-          activePeriodTasks = activePeriodTasks.filter((t) => {
-            if (activeTaskIdsFromWorklogs.has(t.id)) return true;
-            const cDate = t.created_at ? t.created_at.slice(0, 10) : "";
-            if (cDate && cDate >= fromStr && cDate <= toStr) return true;
-            const compDate = t.completed_at ? t.completed_at.slice(0, 10) : "";
-            if (compDate && compDate >= fromStr && compDate <= toStr) return true;
-            const upDate = (t as any).updated_at ? (t as any).updated_at.slice(0, 10) : "";
-            if (upDate && upDate >= fromStr && upDate <= toStr && t.status !== "Completed") return true;
-            return false;
-          });
-        }
-
-        enrichedLogs = enrichedLogs.map((l) => ({
-          ...l,
-          user_name: profileMap[l.user_id] || l.user_name || "Team Member",
-        }));
-
-        const formatted = activePeriodTasks.map((t) => ({
-          ...t,
-          assignee_name: t.assigned_to ? profileMap[t.assigned_to] || "Unassigned" : "Unassigned",
-        }));
-
+        const { tasks, worklogs } = await fetchProjectActivity(
+          projectName,
+          reportData?.meta?.from,
+          reportData?.meta?.to,
+        );
         if (!cancelled) {
-          setProjectTasks(formatted);
-          setProjectWorklogs(enrichedLogs);
+          setProjectTasks(tasks);
+          setProjectWorklogs(worklogs);
         }
       } catch (err) {
         console.warn("Failed to fetch project tasks/worklogs:", err);
