@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DESKTOP_DOWNLOADS, detectDesktopPlatform, type DesktopPlatform } from "@/lib/desktop-downloads";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/_authenticated/download-hub")({
+export const Route = createFileRoute("/_authenticated/desktop-hub")({
   component: DownloadHubPage,
 });
 

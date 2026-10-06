@@ -36,9 +36,8 @@ The installer is unsigned, so Windows SmartScreen may show a warning until you a
 npm run dist:win       # dist/Operon Setup <version>.exe   (build on Windows)
 npm run dist:mac       # dist/Operon-macOS.dmg             (must be built on macOS)
 npm run dist:linux     # dist/Operon-Linux.AppImage        (build on Linux)
-npm run publish:downloads   # copies built installers to ../public/downloads for the web Download Hub
 ```
 electron-builder cannot cross-build macOS, and on Windows it needs Developer Mode/admin to build Linux
 (symlinks). The **Desktop builds** GitHub workflow (`.github/workflows/desktop-build.yml`) builds all three on
-native runners; download the artifacts, drop them in `dist/`, run `publish:downloads`, then deploy the web app.
-The Download Hub (`/download-hub`) links to `/downloads/<file>`; set `VITE_DESKTOP_DOWNLOAD_BASE_URL` to host them elsewhere.
+native runners; download the artifacts and attach them to a GitHub Release.
+The Desktop Hub (`/desktop-hub`) links directly to the `desktop-v1.0.0` Release assets; see `src/lib/desktop-downloads.ts`.

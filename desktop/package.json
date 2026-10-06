@@ -15,8 +15,7 @@
     "dist:icon": "electron-builder --win nsis --x64",
     "dist:win": "npm run dist",
     "dist:mac": "electron-builder --mac dmg --universal",
-    "dist:linux": "electron-builder --linux AppImage --x64",
-    "publish:downloads": "node scripts/publish-downloads.js"
+    "dist:linux": "electron-builder --linux AppImage --x64"
   },
   "devDependencies": {
     "electron": "^33.2.1",
