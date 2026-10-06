@@ -34,3 +34,7 @@ dist-ssr
 .env
 .env.local
 .env.*
+
+# Desktop installers (copied by desktop/scripts/publish-downloads.js)
+public/downloads/*
+!public/downloads/.gitkeep

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Operon</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #0b0d12;
+        color: #e5e7eb;
+        font-family: system-ui, "Segoe UI", sans-serif;
+      }
+      main {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 24px;
+        text-align: center;
+      }
+      h1 { font-size: 18px; margin: 0; }
+      p { margin: 0; font-size: 13px; color: #9ca3af; max-width: 360px; }
+      button {
+        margin-top: 8px;
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: 0;
+        background: #6d8cff;
+        color: #0b0d12;
+        font-weight: 600;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Can't reach Operon</h1>
+      <p>Check your internet connection or VPN. Operon will retry automatically.</p>
+      <button id="retry">Retry now</button>
+    </main>
+    <script>
+      const target = new URLSearchParams(location.search).get("target");
+      const go = () => { if (target) location.href = target; };
+      document.getElementById("retry").addEventListener("click", go);
+      setTimeout(go, 10000);
+    </script>
+  </body>
+</html>

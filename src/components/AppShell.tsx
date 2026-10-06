@@ -384,6 +384,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
+                    <Link to="/download-hub" className="cursor-pointer">
+                      <Download className="mr-2 h-4 w-4" />
+                      <span>Get Desktop App</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
                     <Link to="/settings/notifications" className="cursor-pointer">
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
@@ -682,6 +688,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </Link>
                 </SheetClose>
               )}
+              <SheetClose asChild>
+                <Link
+                  to="/download-hub"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-md text-xs font-semibold transition-colors",
+                    location.pathname === "/download-hub"
+                      ? "bg-[#141F36] text-[#5C8EFA] font-bold"
+                      : "text-slate-300 hover:text-white hover:bg-slate-800/50",
+                  )}
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Get Desktop App</span>
+                </Link>
+              </SheetClose>
               <SheetClose asChild>
                 <Link
                   to="/settings/notifications"

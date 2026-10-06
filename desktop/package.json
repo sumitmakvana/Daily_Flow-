@@ -1,0 +1,95 @@
+{
+  "name": "operon-desktop",
+  "version": "1.0.0",
+  "description": "Operon desktop shell (Electron) – loads the existing Operon web app",
+  "main": "main.js",
+  "author": {
+    "name": "Noesis Analytics",
+    "email": "miraj.shah@noesisanalytics.co.in"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64 -c.win.signAndEditExecutable=false",
+    "dist:icon": "electron-builder --win nsis --x64",
+    "dist:win": "npm run dist",
+    "dist:mac": "electron-builder --mac dmg --universal",
+    "dist:linux": "electron-builder --linux AppImage --x64",
+    "publish:downloads": "node scripts/publish-downloads.js"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "in.co.noesisanalytics.operon",
+    "productName": "Operon",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "offline.html",
+      "build/icon.png",
+      "build/icon.ico",
+      "package.json",
+      "!build/afterPack.js"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Operon",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "afterPack": "build/afterPack.js",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "artifactName": "Operon-macOS.${ext}"
+    },
+    "dmg": {
+      "title": "Operon"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Office",
+      "synopsis": "Operon desktop",
+      "artifactName": "Operon-Linux.${ext}"
+    }
+  },
+  "homepage": "http://operon.noesisanalytics.co.in"
+}
