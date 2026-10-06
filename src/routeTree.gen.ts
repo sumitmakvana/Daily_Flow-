@@ -36,6 +36,7 @@ import { Route as AuthenticatedExportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedExecutiveRouteImport } from './routes/_authenticated/executive'
 import { Route as AuthenticatedEodTasksRouteImport } from './routes/_authenticated/eod-tasks'
 import { Route as AuthenticatedEodRouteImport } from './routes/_authenticated/eod'
+import { Route as AuthenticatedDesktopHubRouteImport } from './routes/_authenticated/desktop-hub'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedConfigureRouteImport } from './routes/_authenticated/configure'
 import { Route as AuthenticatedCommandRouteImport } from './routes/_authenticated/command'
@@ -202,6 +203,11 @@ const AuthenticatedEodRoute = AuthenticatedEodRouteImport.update({
   path: '/eod',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedDesktopHubRoute = AuthenticatedDesktopHubRouteImport.update({
+  id: '/desktop-hub',
+  path: '/desktop-hub',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -362,6 +368,7 @@ export interface FileRoutesByFullPath {
   '/command': typeof AuthenticatedCommandRoute
   '/configure': typeof AuthenticatedConfigureRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/desktop-hub': typeof AuthenticatedDesktopHubRoute
   '/eod': typeof AuthenticatedEodRoute
   '/eod-tasks': typeof AuthenticatedEodTasksRoute
   '/executive': typeof AuthenticatedExecutiveRoute
@@ -416,6 +423,7 @@ export interface FileRoutesByTo {
   '/command': typeof AuthenticatedCommandRoute
   '/configure': typeof AuthenticatedConfigureRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/desktop-hub': typeof AuthenticatedDesktopHubRoute
   '/eod': typeof AuthenticatedEodRoute
   '/eod-tasks': typeof AuthenticatedEodTasksRoute
   '/executive': typeof AuthenticatedExecutiveRoute
@@ -472,6 +480,7 @@ export interface FileRoutesById {
   '/_authenticated/command': typeof AuthenticatedCommandRoute
   '/_authenticated/configure': typeof AuthenticatedConfigureRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/desktop-hub': typeof AuthenticatedDesktopHubRoute
   '/_authenticated/eod': typeof AuthenticatedEodRoute
   '/_authenticated/eod-tasks': typeof AuthenticatedEodTasksRoute
   '/_authenticated/executive': typeof AuthenticatedExecutiveRoute
@@ -528,6 +537,7 @@ export interface FileRouteTypes {
     | '/command'
     | '/configure'
     | '/dashboard'
+    | '/desktop-hub'
     | '/eod'
     | '/eod-tasks'
     | '/executive'
@@ -582,6 +592,7 @@ export interface FileRouteTypes {
     | '/command'
     | '/configure'
     | '/dashboard'
+    | '/desktop-hub'
     | '/eod'
     | '/eod-tasks'
     | '/executive'
@@ -637,6 +648,7 @@ export interface FileRouteTypes {
     | '/_authenticated/command'
     | '/_authenticated/configure'
     | '/_authenticated/dashboard'
+    | '/_authenticated/desktop-hub'
     | '/_authenticated/eod'
     | '/_authenticated/eod-tasks'
     | '/_authenticated/executive'
@@ -895,6 +907,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEodRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/desktop-hub': {
+      id: '/_authenticated/desktop-hub'
+      path: '/desktop-hub'
+      fullPath: '/desktop-hub'
+      preLoaderRoute: typeof AuthenticatedDesktopHubRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -1105,6 +1124,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCommandRoute: typeof AuthenticatedCommandRoute
   AuthenticatedConfigureRoute: typeof AuthenticatedConfigureRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDesktopHubRoute: typeof AuthenticatedDesktopHubRoute
   AuthenticatedEodRoute: typeof AuthenticatedEodRoute
   AuthenticatedEodTasksRoute: typeof AuthenticatedEodTasksRoute
   AuthenticatedExecutiveRoute: typeof AuthenticatedExecutiveRoute
@@ -1140,6 +1160,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCommandRoute: AuthenticatedCommandRoute,
   AuthenticatedConfigureRoute: AuthenticatedConfigureRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDesktopHubRoute: AuthenticatedDesktopHubRoute,
   AuthenticatedEodRoute: AuthenticatedEodRoute,
   AuthenticatedEodTasksRoute: AuthenticatedEodTasksRoute,
   AuthenticatedExecutiveRoute: AuthenticatedExecutiveRoute,

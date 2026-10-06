@@ -1,0 +1,42 @@
+name: Desktop builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["desktop-v*"]
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows uses dist:icon (full icon embedding; runners have symlink privilege).
+          - { name: Windows, os: windows-latest, script: "dist:icon", artifact: "desktop/dist/Operon Setup *.exe" }
+          - { name: macOS, os: macos-latest, script: "dist:mac", artifact: "desktop/dist/Operon-macOS.dmg" }
+          - { name: Linux, os: ubuntu-latest, script: "dist:linux", artifact: "desktop/dist/Operon-Linux.AppImage" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build installer
+        working-directory: desktop
+        run: npm run ${{ matrix.script }} -- --publish never
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: operon-${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error

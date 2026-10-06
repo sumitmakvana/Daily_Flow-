@@ -73,6 +73,7 @@ const memberNav = [
   { to: "/eod-tasks", icon: Sun, label: "EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
   { to: "/notifications", icon: Bell, label: "Inbox" },
+  { to: "/desktop-hub", icon: Download, label: "Install" },
 ];
 
 const managerNav = [
@@ -87,6 +88,7 @@ const managerNav = [
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
   { to: "/exports", icon: Download, label: "Exports & Reports" },
+  { to: "/desktop-hub", icon: Download, label: "Install" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -381,6 +383,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Link to="/time-tracking" className="cursor-pointer">
                       <Clock className="mr-2 h-4 w-4 text-amber-400" />
                       <span>Time Tracking</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/desktop-hub" className="cursor-pointer">
+                      <Download className="mr-2 h-4 w-4" />
+                      <span>Get Desktop App</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
@@ -682,6 +690,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </Link>
                 </SheetClose>
               )}
+              <SheetClose asChild>
+                <Link
+                  to="/desktop-hub"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-md text-xs font-semibold transition-colors",
+                    location.pathname === "/desktop-hub"
+                      ? "bg-[#141F36] text-[#5C8EFA] font-bold"
+                      : "text-slate-300 hover:text-white hover:bg-slate-800/50",
+                  )}
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Get Desktop App</span>
+                </Link>
+              </SheetClose>
               <SheetClose asChild>
                 <Link
                   to="/settings/notifications"
