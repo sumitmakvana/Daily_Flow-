@@ -167,11 +167,7 @@ function createMainWindow(startHidden) {
     if (!startHidden) mainWin.show();
   });
 
-  // Minimize -> tray; close -> tray (Quit lives in the tray menu).
-  mainWin.on("minimize", (e) => {
-    e.preventDefault();
-    mainWin.hide();
-  });
+  // Minimize behaves normally (stays on the taskbar); close -> tray (Quit lives in the tray menu).
   mainWin.on("close", (e) => {
     if (!isQuitting) {
       e.preventDefault();
