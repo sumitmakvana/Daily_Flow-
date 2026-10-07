@@ -399,7 +399,8 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
                   l.start_date::text,
                   l.end_date::text
              FROM public.leaves l
-            WHERE l.status <> 'rejected'
+            WHERE l.status NOT IN ('rejected', 'cancelled')
+              AND l.leave_type <> 'wfh'
               AND l.start_date <= $2
               AND l.end_date >= $1
               AND l.user_id = ANY($3::uuid[])`,

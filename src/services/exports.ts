@@ -109,6 +109,7 @@ export function exportProjectSummaryToExcel(
   status: string;
   planned_hours: number | null;
   actual_hours: number | null;
+  logged_hours?: number;
   created_at: string;
   completed_at: string | null;
   assignee_name?: string;
@@ -238,7 +239,7 @@ export function exportProjectsSeparateSheetsToExcel(
         Array.from(byDay.entries())
           .sort((a, b) => b[0].localeCompare(a[0]))
           .forEach(([dateStr, dayTasks]) => {
-            const dayTotal = dayTasks.reduce((acc, t) => acc + (t.actual_hours ?? t.planned_hours ?? 0), 0);
+            const dayTotal = dayTasks.reduce((acc, t) => acc + (t.logged_hours ?? 0), 0);
             data.push([`${dateStr} (${dayTasks.length} Tasks)`, "", "", "", `${round1(dayTotal)}h Total`]);
             data.push(["Task Code", "Task Title", "Assignee", "Status", "Hours"]);
             dayTasks.forEach((t) =>
@@ -247,7 +248,7 @@ export function exportProjectsSeparateSheetsToExcel(
                 t.task_name,
                 t.assignee_name ?? "",
                 t.status,
-                `${t.actual_hours ?? t.planned_hours ?? 0}h`,
+                `${t.logged_hours ?? 0}h`,
               ]),
             );
             data.push(["", "", "", `Total Hours for ${dateStr}:`, `${round1(dayTotal)}h`]);
@@ -265,7 +266,7 @@ export function exportProjectsSeparateSheetsToExcel(
           t.task_name,
           t.assignee_name ?? "",
           t.status,
-          `${t.actual_hours ?? t.planned_hours ?? 0}h${t.planned_hours ? ` / ${t.planned_hours}h` : ""}`,
+          `${t.logged_hours ?? 0}h${t.planned_hours ? ` / ${t.planned_hours}h` : ""}`,
         ]),
       );
 
