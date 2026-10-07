@@ -538,14 +538,32 @@ function TasksPage() {
   }, [q, selectedStatuses, selectedPriorities, assignee, dateFilter, activeTab, pageSize, sortBy]);
 
   // Compute pagination parameters
+  // Date-aware pagination: whole date groups are packed into pages so a date is never split.
+  // A page holds as many complete groups as fit in pageSize; an oversized group gets its own page.
   const totalItems = currentTabTasks.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const validatedPage = Math.min(Math.max(1, currentPage), totalPages);
+  const pages = useMemo(() => {
+    const result: { tasks: Task[]; start: number }[] = [];
+    let current: Task[] = [];
+    let offset = 0;
+    let pageStart = 0;
+    for (const group of groupTasksByWhatsAppDay(currentTabTasks, sortBy)) {
+      if (current.length > 0 && current.length + group.tasks.length > pageSize) {
+        result.push({ tasks: current, start: pageStart });
+        pageStart = offset;
+        current = [];
+      }
+      current = current.concat(group.tasks);
+      offset += group.tasks.length;
+    }
+    if (current.length > 0) result.push({ tasks: current, start: pageStart });
+    return result;
+  }, [currentTabTasks, sortBy, pageSize]);
 
-  const paginatedTasks = useMemo(() => {
-    const start = (validatedPage - 1) * pageSize;
-    return currentTabTasks.slice(start, start + pageSize);
-  }, [currentTabTasks, validatedPage, pageSize]);
+  const totalPages = Math.max(1, pages.length);
+  const validatedPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedTasks = pages[validatedPage - 1]?.tasks ?? [];
+  const rangeStart = paginatedTasks.length === 0 ? 0 : pages[validatedPage - 1].start + 1;
+  const rangeEnd = paginatedTasks.length === 0 ? 0 : pages[validatedPage - 1].start + paginatedTasks.length;
 
   // Switch tab automatically if we have a highlightId from My Day/Notification
   useEffect(() => {
@@ -833,24 +851,24 @@ function TasksPage() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 py-2 sm:py-3 text-slate-100 flex flex-col h-full lg:h-[calc(100vh-105px)] overflow-y-auto lg:overflow-hidden w-full pb-16 md:pb-4">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 py-1.5 sm:py-2 text-slate-100 flex flex-col h-full lg:h-[calc(100vh-105px)] overflow-y-auto lg:overflow-hidden w-full pb-16 md:pb-4">
       
       {/* Top Header Row & KPI Metric Cards */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 select-none shrink-0 mb-2 sm:mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 select-none shrink-0 mb-1.5 sm:mb-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Tasks</h1>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">Tasks</h1>
             <span className="text-[11px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-[#1e2d4a] text-[#5C8EFA] border border-[#2b3e66]">
               {tasks.length}
             </span>
           </div>
-          <p className="text-[11px] sm:text-xs text-[#8a99ad] mt-0.5 font-medium">Plan, track and get things done</p>
+          <p className="text-[10px] sm:text-[11px] text-[#8a99ad] font-medium leading-tight">Plan, track and get things done</p>
         </div>
 
         {/* KPI Summary Cards - compact micro-cards on mobile */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2.5 shrink-0">
-          <div className="bg-[#181a20] border border-[#262936] rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 flex items-center gap-2 sm:gap-3">
-            <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-md sm:rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 shrink-0">
+          <div className="bg-[#181a20] border border-[#262936] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 flex items-center gap-2">
+            <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-md bg-blue-500/15 flex items-center justify-center shrink-0">
               <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#5C8EFA]" />
             </div>
             <div>
@@ -859,8 +877,8 @@ function TasksPage() {
             </div>
           </div>
 
-          <div className="bg-[#181a20] border border-[#262936] rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 flex items-center gap-2 sm:gap-3">
-            <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-md sm:rounded-lg bg-[#5C8EFA]/15 flex items-center justify-center shrink-0">
+          <div className="bg-[#181a20] border border-[#262936] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 flex items-center gap-2">
+            <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-md bg-[#5C8EFA]/15 flex items-center justify-center shrink-0">
               <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#5C8EFA]" />
             </div>
             <div>
@@ -871,8 +889,8 @@ function TasksPage() {
             </div>
           </div>
 
-          <div className="bg-[#181a20] border border-[#262936] rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 flex items-center gap-2 sm:gap-3">
-            <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-md sm:rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+          <div className="bg-[#181a20] border border-[#262936] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 flex items-center gap-2">
+            <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-md bg-emerald-500/15 flex items-center justify-center shrink-0">
               <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400" />
             </div>
             <div>
@@ -883,8 +901,8 @@ function TasksPage() {
             </div>
           </div>
 
-          <div className="bg-[#181a20] border border-[#262936] rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 flex items-center gap-2 sm:gap-3">
-            <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-md sm:rounded-lg bg-rose-500/15 flex items-center justify-center shrink-0">
+          <div className="bg-[#181a20] border border-[#262936] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 flex items-center gap-2">
+            <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-md bg-rose-500/15 flex items-center justify-center shrink-0">
               <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-400" />
             </div>
             <div>
@@ -899,7 +917,7 @@ function TasksPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
         
         {/* Navigation Bar with Tabs & Actions */}
-        <div className="bg-[#181a20] border border-[#262936] p-2 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 mb-2 sm:mb-3">
+        <div className="bg-[#181a20] border border-[#262936] p-1.5 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 mb-1.5 sm:mb-2">
           
           {/* Tabs List */}
           <TabsList className="bg-transparent border-none flex overflow-x-auto justify-start scrollbar-none gap-1 sm:gap-2 h-auto p-0 w-full sm:w-auto">
@@ -986,7 +1004,7 @@ function TasksPage() {
             {/* List Header Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 shrink-0 pb-2">
               <div className="text-xs text-[#8a99ad] font-medium">
-                Showing {totalItems === 0 ? 0 : (validatedPage - 1) * pageSize + 1}–{Math.min(validatedPage * pageSize, totalItems)} of {totalItems} tasks
+                Showing {rangeStart}–{rangeEnd} of {totalItems} tasks
               </div>
 
               <div className="flex items-center gap-2">
@@ -1052,7 +1070,7 @@ function TasksPage() {
             {!initialLoading && totalPages > 1 && (
               <div className="shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 mt-2 border-t border-[#262936] bg-[#181a20]/95 backdrop-blur z-10 select-none text-xs">
                 <div className="text-[#8a99ad] font-medium">
-                  Showing {(validatedPage - 1) * pageSize + 1}–{Math.min(validatedPage * pageSize, totalItems)} of {totalItems} tasks
+                  Showing {rangeStart}–{rangeEnd} of {totalItems} tasks
                 </div>
 
                 {/* Page Number Buttons matching screenshot */}
