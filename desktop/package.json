@@ -1,6 +1,6 @@
 {
   "name": "operon-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Operon desktop shell (Electron) – loads the existing Operon web app",
   "main": "main.js",
   "author": {

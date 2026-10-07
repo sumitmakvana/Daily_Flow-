@@ -68,14 +68,47 @@ function webPreferences() {
   };
 }
 
-/** Keep navigation inside Operon; send everything else to the default browser. */
-function lockNavigation(win) {
-  const origin = new URL(BASE_URL()).origin;
+/** Optional explicit Keycloak/auth URL (env AUTH_URL or "authUrl" in desktop-settings.json). */
+function getAuthOrigin() {
+  try {
+    return new URL(process.env.AUTH_URL || readSettings().authUrl).origin;
+  } catch {
+    return null;
+  }
+}
 
+/**
+ * True for pages that must stay inside the app window: Operon itself and its
+ * Keycloak sign-in host (same hostname on any port, a sibling subdomain such as
+ * auth.<domain>, or the explicit AUTH_URL). Login redirects/callbacks therefore
+ * never leave Electron.
+ */
+function isInternalUrl(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  const base = new URL(BASE_URL());
+  if (u.origin === base.origin || u.hostname === base.hostname) return true;
+  if (u.origin === getAuthOrigin()) return true;
+  const isIp = /^[\d.]+$/.test(base.hostname) || base.hostname.includes(":");
+  const labels = base.hostname.split(".");
+  if (!isIp && labels.length >= 3) {
+    const parent = "." + labels.slice(1).join(".");
+    if (u.hostname.endsWith(parent)) return true;
+  }
+  return false;
+}
+
+/** Keep navigation (incl. Keycloak login) inside Operon; send everything else to the default browser. */
+function lockNavigation(win) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const u = new URL(url);
-      if (u.origin === origin) return { action: "allow" };
+      if (isInternalUrl(url)) return { action: "allow" };
       if (u.protocol === "http:" || u.protocol === "https:" || u.protocol === "mailto:") shell.openExternal(url);
     } catch {
       /* ignore malformed urls */
@@ -86,7 +119,7 @@ function lockNavigation(win) {
   win.webContents.on("will-navigate", (event, url) => {
     try {
       const u = new URL(url);
-      if (u.origin === origin || u.protocol === "file:") return;
+      if (isInternalUrl(url) || u.protocol === "file:") return;
       event.preventDefault();
       if (u.protocol === "http:" || u.protocol === "https:") shell.openExternal(url);
     } catch {
