@@ -40,6 +40,13 @@ export const createTaskFn = createServerFn({ method: "POST" })
         }
       }
 
+      // Timer state on creation: only "In Progress" runs the timer (started once, here).
+      if (payload.status === "In Progress") {
+        if (!payload.started_at) payload.started_at = new Date().toISOString();
+      } else if ("started_at" in payload || payload.status) {
+        payload.started_at = null;
+      }
+
       const keys = Object.keys(payload);
       if (keys.length === 0) throw new Error("Empty task payload");
 
