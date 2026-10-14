@@ -958,6 +958,7 @@ export function TaskCard({
           done: false,
           completed_at: null,
           start_date: getDefaultStartDate(),
+          due_date: getDefaultStartDate(),
           planned_hours: task.planned_hours !== undefined && task.planned_hours !== null ? task.planned_hours : 4,
         }}
         userId={userId}
