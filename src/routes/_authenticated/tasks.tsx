@@ -424,7 +424,7 @@ function TasksPage() {
               priority: t.priority,
               status: "To Do",
               start_date: defaultStartDate,
-              due_date: t.due_date,
+              due_date: defaultStartDate,
               planned_hours: t.planned_hours !== undefined && t.planned_hours !== null ? t.planned_hours : 4,
               actual_hours: 0,
               system_hours: 0,

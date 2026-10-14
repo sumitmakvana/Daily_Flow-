@@ -632,6 +632,7 @@ export function TaskFormDialog({
         done: false,
         completed_at: null,
         start_date: defaultStartDate,
+        due_date: defaultStartDate ?? todayISO(),
         planned_hours: prev.planned_hours !== undefined && prev.planned_hours !== null ? prev.planned_hours : 4,
         actual_hours: 0,
         system_hours: 0,
