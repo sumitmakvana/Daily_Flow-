@@ -1,4 +1,7 @@
 import { getPool } from "@/integrations/postgres/client.server";
+import { emitToRooms, emitToUser } from "@/lib/realtime.server";
+import { EntityEventBatcher } from "@/lib/entity-events.server";
+import { isReadOnlyMode } from "@/lib/read-only-mode.server";
 import { sendEodEmail } from "@/services/email-dispatcher";
 import {
   getZeroTasksNudgeHtml,
@@ -24,7 +27,16 @@ const globalListenerState = globalThis as unknown as {
   __notificationClient?: any;
   __isNotificationListening?: boolean;
   __processedDedupeMap?: Map<string, number>;
+  __entityBatcher?: EntityEventBatcher;
 };
+
+// One batcher per process (survives HMR); coalesces bursts before emitting.
+function getEntityBatcher(): EntityEventBatcher {
+  if (!globalListenerState.__entityBatcher) {
+    globalListenerState.__entityBatcher = new EntityEventBatcher({ emit: emitToRooms });
+  }
+  return globalListenerState.__entityBatcher;
+}
 
 if (!globalListenerState.__processedDedupeMap) {
   globalListenerState.__processedDedupeMap = new Map<string, number>();
@@ -68,72 +80,102 @@ export function startNotificationListener() {
 
   const pool = getPool();
 
-  async function connectAndListen() {
+  // At most one reconnect may be pending. Both "error" and "end" fire when a
+  // connection drops; scheduling a reconnect from each used to create two
+  // clients, the second destroying the first (events lost, then duplicated).
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void connectAndListen();
+    }, 5000);
+  }
+
+  function dropClient(client: any) {
+    if (globalListenerState.__notificationClient === client) {
+      globalListenerState.__notificationClient = null;
+    }
     try {
-      if (globalListenerState.__notificationClient) {
-        try {
-          globalListenerState.__notificationClient.release(true);
-        } catch {}
-        globalListenerState.__notificationClient = null;
-      }
+      client.removeAllListeners("notification");
+      client.release(true);
+    } catch {
+      // already released/destroyed
+    }
+  }
 
-      const client = await pool.connect();
+  async function connectAndListen() {
+    // Never hold two LISTEN connections: retire the previous one first.
+    const previous = globalListenerState.__notificationClient;
+    if (previous) dropClient(previous);
+
+    let client: any;
+    try {
+      client = await pool.connect();
       globalListenerState.__notificationClient = client;
+      const isCurrent = () => globalListenerState.__notificationClient === client;
 
+      // Attach lifecycle handlers immediately, before any await, so an error
+      // during setup is handled instead of crashing as an unhandled 'error'.
+      client.on("error", (err: any) => {
+        if (!isCurrent()) return; // stale connection we already replaced
+        console.error("[NotificationListener] Connection error, reconnecting in 5s...", err.message);
+        dropClient(client);
+        scheduleReconnect();
+      });
+      client.on("end", () => {
+        if (!isCurrent()) return;
+        console.log("[NotificationListener] Connection ended, reconnecting in 5s...");
+        dropClient(client);
+        scheduleReconnect();
+      });
 
-      await client.query(`
-        CREATE OR REPLACE FUNCTION public.notify_notification_inserted()
-        RETURNS TRIGGER AS $$
-        BEGIN
-          PERFORM pg_notify('new_notification', row_to_json(NEW)::text);
-          RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
+      if (isReadOnlyMode()) {
+        console.log("[NotificationListener] Read-only mode: skipping startup DDL (trigger install).");
+      } else {
+        await client.query(`
+          CREATE OR REPLACE FUNCTION public.notify_notification_inserted()
+          RETURNS TRIGGER AS $$
+          BEGIN
+            PERFORM pg_notify('new_notification', row_to_json(NEW)::text);
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql;
 
-        DROP TRIGGER IF EXISTS trg_notification_inserted ON public.notifications;
-        CREATE TRIGGER trg_notification_inserted
-        AFTER INSERT ON public.notifications
-        FOR EACH ROW EXECUTE FUNCTION public.notify_notification_inserted();
-      `);
+          DROP TRIGGER IF EXISTS trg_notification_inserted ON public.notifications;
+          CREATE TRIGGER trg_notification_inserted
+          AFTER INSERT ON public.notifications
+          FOR EACH ROW EXECUTE FUNCTION public.notify_notification_inserted();
+        `);
+      }
 
       await client.query("LISTEN new_notification");
       console.log("[NotificationListener] Listening on DB channel: new_notification");
+      // Row-change signals from the notify_entity_changed() trigger. Harmless if
+      // that trigger has not been installed yet: no messages simply arrive.
+      await client.query("LISTEN entity_changed");
+      console.log("[NotificationListener] Listening on DB channel: entity_changed");
 
       client.on("notification", (msg: any) => {
+        if (!isCurrent()) return;
         try {
           if (!msg.payload) return;
           const payload = JSON.parse(msg.payload);
+          if (msg.channel === "entity_changed") {
+            getEntityBatcher().push(payload);
+            return;
+          }
           enqueueNotificationPayload(payload);
         } catch (err) {
           console.error("[NotificationListener] Payload error:", err);
         }
       });
-
-      client.on("error", (err: any) => {
-        console.error("[NotificationListener] Connection error, reconnecting in 5s...", err.message);
-        cleanupAndReconnect();
-      });
-
-      client.on("end", () => {
-        console.log("[NotificationListener] Connection ended, reconnecting in 5s...");
-        cleanupAndReconnect();
-      });
     } catch (err) {
       console.error("[NotificationListener] Setup failed, retrying in 5s...", (err as Error).message);
-      setTimeout(connectAndListen, 5000);
+      if (client) dropClient(client); // don't leak a half-configured connection
+      scheduleReconnect();
     }
-  }
-
-  function cleanupAndReconnect() {
-    if (globalListenerState.__notificationClient) {
-      try {
-        globalListenerState.__notificationClient.release(true);
-      } catch (err) {
-        // ignore
-      }
-      globalListenerState.__notificationClient = null;
-    }
-    setTimeout(connectAndListen, 5000);
   }
 
 
@@ -141,6 +183,19 @@ export function startNotificationListener() {
 }
 
 function enqueueNotificationPayload(payload: NotificationPayload) {
+  // Push the in-app event first and independently of the email batching and
+  // dedupe below, which exist only to avoid duplicate emails. Never let a
+  // socket failure block email dispatch.
+  try {
+    emitToUser(payload.user_id, "notification:new", payload);
+  } catch (err) {
+    console.warn("[NotificationListener] realtime emit failed:", (err as Error).message);
+  }
+
+  // Read-only mode: push the socket event only. Never read prefs or send email
+  // for notifications that production itself is already handling.
+  if (isReadOnlyMode()) return;
+
   if (payload.type === "task_assigned" && payload.task_id) {
     const existing = userTaskAssignmentBatches.get(payload.user_id);
     if (existing) {

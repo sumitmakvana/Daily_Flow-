@@ -15,8 +15,7 @@ import {
   Sun,
   ShieldCheck,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/use-auth";
+import { useNotifications } from "@/hooks/use-notifications";
 import type { AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -87,26 +86,10 @@ export function NotificationsModalContent({
   onClose?: () => void;
   isEmbedded?: boolean;
 }) {
-  const { user } = useAuth();
+  const { items, markRead, markAllRead } = useNotifications();
   const navigate = useNavigate();
-  const [items, setItems] = useState<AppNotification[]>([]);
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
   const [isExpanded, setIsExpanded] = useState(false);
-
-  const load = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(100);
-    setItems((data ?? []) as AppNotification[]);
-  };
-
-  useEffect(() => {
-    load();
-  }, [user?.id]);
 
   const unreadCount = useMemo(() => items.filter((n) => !n.read_at).length, [items]);
 
@@ -133,23 +116,11 @@ export function NotificationsModalContent({
     return sections.filter((s) => s.items.length > 0);
   }, [filteredItems]);
 
-  const markAll = async () => {
-    if (!user) return;
-    await supabase
-      .from("notifications")
-      .update({ read_at: new Date().toISOString() } as never)
-      .eq("user_id", user.id)
-      .is("read_at", null);
-    load();
-  };
+  const markAll = () => markAllRead();
 
   const handleClick = async (n: AppNotification) => {
     if (!n.read_at) {
-      await supabase
-        .from("notifications")
-        .update({ read_at: new Date().toISOString() } as never)
-        .eq("id", n.id);
-      load();
+      await markRead(n.id);
     }
 
     onClose?.();

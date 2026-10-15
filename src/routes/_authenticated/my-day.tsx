@@ -54,6 +54,7 @@ import {
 import type { Profile, Task } from "@/lib/types";
 import { isToday, isOverdue, toLocalISO } from "@/lib/format";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
+import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { getTodayDateStr, isTaskCompletedToday } from "@/lib/task-date-utils";
 import { toast } from "sonner";
 
@@ -267,8 +268,9 @@ function MyDayPage() {
     queryKey: ["my-day"],
     queryFn: () => fetchMyDay(),
     staleTime: 1000,
+    // No refetchInterval: updates arrive over Socket.IO (see the hooks below);
+    // focus/visibility and reconnect recovery cover missed events.
     refetchOnWindowFocus: true,
-    refetchInterval: 5000,
   });
 
   // Realtime subscription handles both TaskCard raw tasks and priority query
@@ -276,6 +278,15 @@ function MyDayPage() {
     loadTasks();
     q.refetch();
   }, [loadTasks, q]);
+
+  // The My Day query also depends on risks and pending approvals, not only my tasks.
+  useRealtimeRefresh(
+    ["risk_events", "approval_requests"],
+    () => {
+      void q.refetch();
+    },
+    `my-day-extras-${user?.id ?? "x"}`,
+  );
 
   useRealtimeTasks(
     handleRealtimeChange,

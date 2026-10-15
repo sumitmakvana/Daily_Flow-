@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { auth } from "@/integrations/backend/auth";
 import { getMyRoles } from "@/services/auth.functions";
+import { stopRealtime } from "@/integrations/realtime/socket";
 import type { AppRole } from "@/lib/types";
 
 export function useAuth() {
@@ -39,5 +40,6 @@ export function useAuth() {
 }
 
 export async function signOut() {
+  stopRealtime();
   return await auth.signOut();
 }

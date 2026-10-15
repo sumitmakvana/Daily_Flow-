@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { getManagerCommand, type AtRiskRow, type CapacityRow, type ManagerAction, type ApprovalQueueRow, type ProjectHealthRow } from "@/lib/manager.functions";
 import { Activity, AlertOctagon, ArrowRight, ClipboardCheck, Flame, Gauge, RefreshCw, ShieldAlert, Sparkles, TrendingUp, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 
 export const Route = createFileRoute("/_authenticated/manager")({
   component: ManagerPage,
@@ -20,9 +21,17 @@ function ManagerPage() {
     queryKey: ["manager-command"],
     queryFn: () => fetchCmd(),
     staleTime: 1000,
+    // No refetchInterval: updates arrive over Socket.IO (below).
     refetchOnWindowFocus: true,
-    refetchInterval: 5000,
   });
+
+  useRealtimeRefresh(
+    ["tasks", "risk_events", "approval_requests"],
+    () => {
+      void q.refetch();
+    },
+    "manager-command-rt",
+  );
 
   if (q.isLoading) {
     return (

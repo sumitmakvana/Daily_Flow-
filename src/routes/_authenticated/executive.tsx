@@ -1,6 +1,7 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
@@ -262,8 +263,17 @@ function ExecutivePage() {
       }),
     enabled: !!filters,
     staleTime: 1000,
-    refetchInterval: 5000,
+    // No refetchInterval: the summary is invalidated by Socket.IO task events (below).
   });
+
+  const queryClient = useQueryClient();
+  useRealtimeRefresh(
+    ["tasks"],
+    () => {
+      void queryClient.invalidateQueries({ queryKey: ["exec-summary"] });
+    },
+    "exec-summary-rt",
+  );
 
   // Dynamic Teams and Managers list for Scope select
   const availableTeams = useMemo(() => {

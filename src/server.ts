@@ -1,10 +1,28 @@
 import "./lib/error-capture";
 import { startBackgroundCronTicker } from "./lib/cron-ticker.server";
 import { startNotificationListener } from "./lib/notification-listener.server";
+import { attachRealtime } from "./lib/realtime.server";
+import { installReadOnlyGuards, isReadOnlyMode } from "./lib/read-only-mode.server";
+import { pokeEntityWatcher, startEntityWatcher } from "./lib/entity-watcher.server";
 
-// Start internal 60-second EOD cron loop and notification listener automatically in Node server process
-startBackgroundCronTicker();
+// Start internal 60-second EOD cron loop and notification listener automatically in Node server process.
+// In read-only mode (local run against a database that must not change) the cron
+// ticker is NOT started and the listener runs without DDL or email dispatch.
+if (isReadOnlyMode()) {
+  installReadOnlyGuards();
+} else {
+  startBackgroundCronTicker();
+}
 startNotificationListener();
+// Detects task/nudge/risk/suggestion/approval changes with read-only SELECTs when
+// the database cannot push them (no triggers). Safe in read-only mode.
+void startEntityWatcher().catch((err) => console.error("[EntityWatcher] failed to start:", err));
+
+// runner.js owns the HTTP server (PORT 8080 in the container, 7050 on the host).
+// It calls this hook once the bundle is loaded so Socket.IO shares that server
+// and port instead of opening its own.
+(globalThis as unknown as { __attachRealtime?: typeof attachRealtime }).__attachRealtime =
+  attachRealtime;
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
@@ -77,6 +95,11 @@ export default {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
+      // Any write request this server just handled (server functions, API hooks,
+      // actions) may have changed tasks etc.: have the watcher look right away.
+      if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS") {
+        pokeEntityWatcher();
+      }
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);

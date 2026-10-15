@@ -10,6 +10,7 @@
  * does not crash when the var is absent during build.
  */
 import { Pool, type PoolConfig } from "pg";
+import { isReadOnlyMode, READ_ONLY_PG_OPTIONS } from "@/lib/read-only-mode.server";
 
 let _pool: Pool | undefined;
 
@@ -30,6 +31,12 @@ function createPool(): Pool {
     // managed providers that require SSL.
     ssl: process.env.PG_SSL === "true" ? { rejectUnauthorized: false } : undefined,
   };
+  if (isReadOnlyMode()) {
+    // Every session starts read-only, so Postgres rejects any write the server
+    // attempts (see src/lib/read-only-mode.server.ts).
+    config.options = READ_ONLY_PG_OPTIONS;
+    config.application_name = "operon-local-readonly";
+  }
   return new Pool(config);
 }
 

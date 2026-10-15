@@ -12,13 +12,17 @@ import type { JWTPayload } from "jose";
 
 type VerifiedClaims = JWTPayload & { sub?: string; email?: string; role?: string };
 
-// Cache JWKS client to avoid recreating it on every request
-let _jwks: any;
+// Cache the remote JWKS set so keys are fetched once and reused across
+// requests (and websocket handshakes) instead of being re-fetched per call.
+let _jwks: ReturnType<typeof import("jose").createRemoteJWKSet> | undefined;
 
-function getJwksClient(jwksUrl: string) {
+async function getJwks() {
   if (!_jwks) {
-    const { createRemoteJWKSet } = require("jose");
-    _jwks = createRemoteJWKSet(new URL(jwksUrl));
+    const { createRemoteJWKSet } = await import("jose");
+    const keycloakInternalUrl = process.env.KEYCLOAK_INTERNAL_URL ?? "http://keycloak:8080";
+    _jwks = createRemoteJWKSet(
+      new URL(`${keycloakInternalUrl}/realms/lovable/protocol/openid-connect/certs`),
+    );
   }
   return _jwks;
 }
@@ -29,12 +33,7 @@ export async function verifyBackendJwt(token: string): Promise<VerifiedClaims> {
   if (mode === "self") {
     // Self-hosted: Verify Keycloak tokens using JWKS endpoint
     const { jwtVerify } = await import("jose");
-    const keycloakInternalUrl = process.env.KEYCLOAK_INTERNAL_URL ?? "http://keycloak:8080";
-    const jwksUrl = `${keycloakInternalUrl}/realms/lovable/protocol/openid-connect/certs`;
-    
-    // We use a helper function to require createRemoteJWKSet lazily
-    const { createRemoteJWKSet } = await import("jose");
-    const jwks = createRemoteJWKSet(new URL(jwksUrl));
+    const jwks = await getJwks();
 
     const { payload } = await jwtVerify(token, jwks);
     return {

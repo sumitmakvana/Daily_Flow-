@@ -5,6 +5,7 @@ import { getMyRoles } from "@/services/auth.functions";
 import { AppShell } from "@/components/AppShell";
 import { UnstartedTaskLeaveModal } from "@/components/UnstartedTaskLeaveModal";
 import { MorningResumePromptModal } from "@/components/MorningResumePromptModal";
+import { NotificationsProvider } from "@/hooks/use-notifications";
 
 /**
  * Manager/admin-only path prefixes. Members hitting these get redirected to /my-day.
@@ -96,10 +97,12 @@ function AuthenticatedLayout() {
   }
 
   return (
-    <AppShell>
-      <Outlet />
-      <UnstartedTaskLeaveModal />
-      <MorningResumePromptModal />
-    </AppShell>
+    <NotificationsProvider>
+      <AppShell>
+        <Outlet />
+        <UnstartedTaskLeaveModal />
+        <MorningResumePromptModal />
+      </AppShell>
+    </NotificationsProvider>
   );
 }

@@ -3,7 +3,10 @@ import fs from 'fs';
 import path from 'path';
 
 const port = process.env.PORT || 8080;
-const CLIENT_DIR = path.join(process.cwd(), 'dist/client');
+// Build output directory. Default 'dist' (unchanged); the local read-only build
+// uses 'dist-local-safe' so it can never be mistaken for a production build.
+const DIST_DIR = process.env.OPERON_DIST_DIR || 'dist';
+const CLIENT_DIR = path.join(process.cwd(), DIST_DIR, 'client');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -27,13 +30,13 @@ const MIME_TYPES = {
 let serverInstance = null;
 async function getServerInstance() {
   if (!serverInstance) {
-    const mod = await import('./dist/server/server.js');
+    const mod = await import(new URL(`./${DIST_DIR}/server/server.js`, import.meta.url).href);
     serverInstance = mod.default ?? mod;
   }
   return serverInstance;
 }
 
-http.createServer(async (req, res) => {
+const httpServer = http.createServer(async (req, res) => {
   try {
     const host = req.headers.host || 'localhost';
     const protocol = req.headers['x-forwarded-proto'] || 'http';
@@ -123,6 +126,23 @@ http.createServer(async (req, res) => {
     res.statusCode = 500;
     res.end('Internal Server Error');
   }
-}).listen(port, '0.0.0.0', () => {
+});
+
+// Load the server bundle eagerly (it also starts the cron ticker and the
+// Postgres notification listener) and attach Socket.IO to this same HTTP
+// server, so /socket.io/ shares the existing port. A failure here must not
+// stop the web app from serving, so fall back to the lazy behaviour.
+try {
+  await getServerInstance();
+  if (typeof globalThis.__attachRealtime === 'function') {
+    globalThis.__attachRealtime(httpServer);
+  } else {
+    console.warn('[Realtime] __attachRealtime not found; Socket.IO disabled');
+  }
+} catch (err) {
+  console.error('[Realtime] failed to attach Socket.IO:', err);
+}
+
+httpServer.listen(port, '0.0.0.0', () => {
   console.log(`Server running at http://0.0.0.0:${port}`);
 });

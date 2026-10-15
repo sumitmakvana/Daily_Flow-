@@ -5,6 +5,7 @@
  * and direct grant (ROPC) flow to keep the existing login page UI working.
  */
 import Keycloak from "keycloak-js";
+import { isClientReadOnly } from "@/lib/read-only-fetch";
 
 // Check if window is defined (for SSR safety)
 const isBrowser = typeof window !== "undefined";
@@ -59,7 +60,8 @@ export function initKeycloak(): Promise<boolean> {
           const email = keycloak.tokenParsed?.email;
           const name =
             (keycloak.tokenParsed as any)?.name || keycloak.tokenParsed?.preferred_username;
-          if (userId && email) {
+          // Read-only builds never write a profile/role row at login.
+          if (userId && email && !isClientReadOnly()) {
             const { supabase } = await import("@/integrations/supabase/client");
             await supabase.rpc("ensure_user_profile", {
               user_id: userId,
@@ -193,7 +195,7 @@ export const auth = {
         const email = keycloak!.tokenParsed?.email;
         const name =
           (keycloak!.tokenParsed as any)?.name || keycloak!.tokenParsed?.preferred_username;
-        if (userId && email) {
+        if (userId && email && !isClientReadOnly()) {
           const { supabase } = await import("@/integrations/supabase/client");
           await supabase.rpc("ensure_user_profile", {
             user_id: userId,

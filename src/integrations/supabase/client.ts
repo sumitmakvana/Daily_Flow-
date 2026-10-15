@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { auth as keycloakAuth } from '../backend/auth';
+import { createRealtimeChannel } from '../realtime/channel';
+import { pokeRealtime } from '../realtime/socket';
+import { createReadOnlyFetch, isClientReadOnly } from '../../lib/read-only-fetch';
 
 function createSupabaseClient() {
   // Use import.meta.env for client-side (Vite build-time replacement)
@@ -55,7 +58,6 @@ function createSupabaseClient() {
         if (typeof window !== 'undefined') {
           const token = window.localStorage.getItem("kc_token");
           if (token) {
-            console.log("Supabase Fetch Interceptor attaching token:", token);
             if (options.headers instanceof Headers) {
               options.headers.set("Authorization", `Bearer ${token}`);
             } else if (Array.isArray(options.headers)) {
@@ -68,7 +70,16 @@ function createSupabaseClient() {
             }
           }
         }
-        return fetch(url, options);
+        // Read-only build (VITE_OPERON_READ_ONLY=1): refuse every non-GET request.
+        const send = isClientReadOnly() ? createReadOnlyFetch(fetch) : fetch;
+        const method = String(options.method ?? 'GET').toUpperCase();
+        const isWrite = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+        return send(url, options).then((res: Response) => {
+          // After a successful write, nudge the server to look for changes now so
+          // other users' screens update right away (no data is sent).
+          if (isWrite && res.ok) pokeRealtime();
+          return res;
+        });
       }
     }
   });
@@ -84,36 +95,8 @@ export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>,
       return keycloakAuth;
     }
     if (prop === "channel") {
-      return (channelName: string) => {
-        let intervalId: any = null;
-        let callback: (() => void) | null = null;
-
-        const mockChannel = {
-          on: (event: string, filterObj: any, cb: () => void) => {
-            callback = cb;
-            return mockChannel;
-          },
-          subscribe: () => {
-            if (callback) {
-              intervalId = setInterval(() => {
-                if (callback) callback();
-              }, 4000);
-            }
-            return mockChannel;
-          },
-          unsubscribe: () => {
-            if (intervalId) {
-              clearInterval(intervalId);
-              intervalId = null;
-            }
-          },
-          presenceState: () => ({}),
-          send: async () => ({ status: "ok" }),
-          track: async () => ({ status: "ok" }),
-          untrack: async () => ({ status: "ok" }),
-        };
-        return mockChannel;
-      };
+      // Real Socket.IO-backed channel; see src/integrations/realtime/channel.ts
+      return (channelName: string) => createRealtimeChannel(channelName);
     }
     if (prop === "removeChannel") {
       return (channel: any) => {

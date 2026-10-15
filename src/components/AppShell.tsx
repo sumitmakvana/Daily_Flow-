@@ -48,7 +48,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { NotificationsModal } from "@/components/NotificationsModal";
-import { useBrowserNotifications } from "@/hooks/use-browser-notifications";
+import { useNotifications } from "@/hooks/use-notifications";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { GlobalSearchModal } from "@/components/GlobalSearchModal";
@@ -96,7 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [unread, setUnread] = useState(0);
+  const { unreadCount: unread } = useNotifications();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifModalOpen, setNotifModalOpen] = useState(false);
   const [accessibilityOpen, setAccessibilityOpen] = useState(false);
@@ -228,11 +228,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         { to: "/tasks", icon: ListChecks, label: "Tasks" },
         { to: "/eod-tasks", icon: Sun, label: "EOD" },
       ];
-
-  // Global Operon Chrome/Browser Desktop Notifications & Realtime Sync
-  const { triggerDesktopNotification } = useBrowserNotifications(user?.id, {
-    onUnreadChange: setUnread,
-  });
 
   const handleLogout = async () => {
     await queryClient.cancelQueries();
