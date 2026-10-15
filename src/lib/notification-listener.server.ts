@@ -1,5 +1,6 @@
 import { getPool } from "@/integrations/postgres/client.server";
 import { sendEodEmail } from "@/services/email-dispatcher";
+import { sendPushToUser, isPushConfigured } from "@/lib/fcm.server";
 import {
   getZeroTasksNudgeHtml,
   getUnstartedTasksNudgeHtml,
@@ -140,7 +141,29 @@ export function startNotificationListener() {
   connectAndListen();
 }
 
+async function sendPushForPayload(payload: NotificationPayload) {
+  if (!isPushConfigured()) return;
+  if (["system", "eod_team_digest", "sod_team_digest"].includes(payload.type)) return;
+  try {
+    const prefsRes = await getPool().query(
+      "SELECT notify_assignment, notify_blocker_resolved FROM public.notification_prefs WHERE user_id = $1",
+      [payload.user_id],
+    );
+    const prefs = prefsRes.rows[0];
+    if (payload.type === "task_assigned" && prefs?.notify_assignment === false) return;
+    if (payload.type === "task_blocked" && prefs?.notify_blocker_resolved === false) return;
+  } catch {
+    /* prefs unavailable: default to sending */
+  }
+  await sendPushToUser(payload.user_id, {
+    title: payload.title,
+    body: payload.body,
+    data: { type: payload.type, task_id: payload.task_id, notification_id: payload.id },
+  });
+}
+
 function enqueueNotificationPayload(payload: NotificationPayload) {
+  void sendPushForPayload(payload);
   if (payload.type === "task_assigned" && payload.task_id) {
     const existing = userTaskAssignmentBatches.get(payload.user_id);
     if (existing) {
