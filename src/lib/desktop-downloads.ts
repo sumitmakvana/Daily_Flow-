@@ -10,8 +10,7 @@ export const DESKTOP_DOWNLOADS: { id: DesktopPlatform; label: string; ext: strin
 ];
 
 /**
- * Android APK location. PLACEHOLDER: publish the APK as a GitHub Release asset named
- * "Operon-Android.apk" under the tag below (or change the tag/file) before announcing it.
+ * Android APK location (GitHub Release android-v1.0.0, asset "Operon-Android.apk").
  */
 const ANDROID_RELEASE_BASE = "https://github.com/sumitmakvana/Daily_Flow-/releases/download/android-v1.0.0";
 
