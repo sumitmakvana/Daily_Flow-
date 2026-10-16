@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser } from "@/integrations/postgres/query.server";
+import { pushTaskProgress } from "@/lib/task-push.server";
 import type { Task } from "@/lib/types";
 
 /**
@@ -130,16 +131,18 @@ export const updateTaskFn = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    let oldStatus: string | null = null;
     const result = await withUser(context.userId, async (client) => {
       // Get old assigned_to, started_at, and status before update
       let oldAssignedTo: string | null = null;
       let existingStartedAt: string | null = null;
       let existingSystemHours: number = 0;
       if (import.meta.env.MODE !== "test") {
-        const oldTaskRes = await client.query<{ assigned_to: string | null; started_at: string | null; system_hours: number | null }>(
-          `SELECT assigned_to, started_at::text, system_hours FROM public.tasks WHERE id = $1`,
+        const oldTaskRes = await client.query<{ assigned_to: string | null; started_at: string | null; system_hours: number | null; status: string | null }>(
+          `SELECT assigned_to, started_at::text, system_hours, status::text AS status FROM public.tasks WHERE id = $1`,
           [data.id],
         );
+        oldStatus = oldTaskRes.rows[0]?.status ?? null;
         oldAssignedTo = oldTaskRes.rows[0]?.assigned_to ?? null;
         existingStartedAt = oldTaskRes.rows[0]?.started_at ?? null;
         existingSystemHours = Number(oldTaskRes.rows[0]?.system_hours ?? 0);
@@ -307,6 +310,11 @@ export const updateTaskFn = createServerFn({ method: "POST" })
 
       return updatedTask;
     });
+    // Push "started" / "completed" to the people following the task (after commit, best effort).
+    if (import.meta.env.MODE !== "test" && result && oldStatus !== null && result.status !== oldStatus) {
+      if (result.status === "In Progress") void pushTaskProgress("started", result.id, context.userId);
+      else if (result.status === "Completed") void pushTaskProgress("completed", result.id, context.userId);
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return result as any;
   });

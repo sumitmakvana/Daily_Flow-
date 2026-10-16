@@ -42,3 +42,11 @@ tapping a push opens `/tasks?taskId=…` (or `/notifications`).
 ## Release build
 Create a keystore (never commit it), configure `signingConfigs` in `android/app/build.gradle`,
 run `gradlew.bat assembleRelease` (or `bundleRelease` for Play).
+
+## Task notifications and the Start Task button
+Task pushes (assigned / started / completed / overdue) are sent by the backend as **data-only** FCM
+messages and rendered natively by `OperonMessagingService` (branded icon, default sound, two-line
+text). Assignment pushes for tasks still in *To Do* carry a signed, 24h, one-time action token; the
+**Start Task** button POSTs it to `/api/public/actions/push-start-task`, which re-checks the assignee
+and task status before starting the task. Signing key: `PUSH_ACTION_SECRET` (falls back to
+`CRON_SECRET`). Users must install an APK that contains this service to see these notifications.

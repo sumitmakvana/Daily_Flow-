@@ -1,6 +1,7 @@
 import { getPool } from "@/integrations/postgres/client.server";
 import { sendEodEmail } from "@/services/email-dispatcher";
 import { sendPushToUser, isPushConfigured } from "@/lib/fcm.server";
+import { pushTaskAssigned } from "@/lib/task-push.server";
 import {
   getZeroTasksNudgeHtml,
   getUnstartedTasksNudgeHtml,
@@ -154,6 +155,15 @@ async function sendPushForPayload(payload: NotificationPayload) {
     if (payload.type === "task_blocked" && prefs?.notify_blocker_resolved === false) return;
   } catch {
     /* prefs unavailable: default to sending */
+  }
+  if (payload.type === "task_assigned" && payload.task_id) {
+    // Rich, task-specific message with the Start Task action.
+    await pushTaskAssigned({
+      userId: payload.user_id,
+      taskId: payload.task_id,
+      notificationId: payload.id,
+    });
+    return;
   }
   await sendPushToUser(payload.user_id, {
     title: payload.title,

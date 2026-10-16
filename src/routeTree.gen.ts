@@ -61,6 +61,7 @@ import { Route as ApiPublicHooksAutomationTickRouteImport } from './routes/api/p
 import { Route as ApiPublicHooksAutomationDueEnqueueRouteImport } from './routes/api/public/hooks/automation-due-enqueue'
 import { Route as ApiPublicHooksAdoptionRollupRouteImport } from './routes/api/public/hooks/adoption-rollup'
 import { Route as ApiPublicActionsStartTaskRouteImport } from './routes/api/public/actions/start-task'
+import { Route as ApiPublicActionsPushStartTaskRouteImport } from './routes/api/public/actions/push-start-task'
 import { Route as ApiPublicActionsCompleteTaskRouteImport } from './routes/api/public/actions/complete-task'
 import { Route as ApiPublicActionsCarryForwardTaskRouteImport } from './routes/api/public/actions/carry-forward-task'
 
@@ -345,6 +346,12 @@ const ApiPublicActionsStartTaskRoute =
     path: '/api/public/actions/start-task',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicActionsPushStartTaskRoute =
+  ApiPublicActionsPushStartTaskRouteImport.update({
+    id: '/api/public/actions/push-start-task',
+    path: '/api/public/actions/push-start-task',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicActionsCompleteTaskRoute =
   ApiPublicActionsCompleteTaskRouteImport.update({
     id: '/api/public/actions/complete-task',
@@ -400,6 +407,7 @@ export interface FileRoutesByFullPath {
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
   '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
@@ -455,6 +463,7 @@ export interface FileRoutesByTo {
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
   '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
@@ -512,6 +521,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
   '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
@@ -569,6 +579,7 @@ export interface FileRouteTypes {
     | '/settings/operations'
     | '/api/public/actions/carry-forward-task'
     | '/api/public/actions/complete-task'
+    | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
@@ -624,6 +635,7 @@ export interface FileRouteTypes {
     | '/settings/operations'
     | '/api/public/actions/carry-forward-task'
     | '/api/public/actions/complete-task'
+    | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
@@ -680,6 +692,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/operations'
     | '/api/public/actions/carry-forward-task'
     | '/api/public/actions/complete-task'
+    | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
@@ -702,6 +715,7 @@ export interface RootRouteChildren {
   AppStorageUploadRoute: typeof AppStorageUploadRoute
   ApiPublicActionsCarryForwardTaskRoute: typeof ApiPublicActionsCarryForwardTaskRoute
   ApiPublicActionsCompleteTaskRoute: typeof ApiPublicActionsCompleteTaskRoute
+  ApiPublicActionsPushStartTaskRoute: typeof ApiPublicActionsPushStartTaskRoute
   ApiPublicActionsStartTaskRoute: typeof ApiPublicActionsStartTaskRoute
   ApiPublicHooksAdoptionRollupRoute: typeof ApiPublicHooksAdoptionRollupRoute
   ApiPublicHooksAutomationDueEnqueueRoute: typeof ApiPublicHooksAutomationDueEnqueueRoute
@@ -1082,6 +1096,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicActionsStartTaskRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/actions/push-start-task': {
+      id: '/api/public/actions/push-start-task'
+      path: '/api/public/actions/push-start-task'
+      fullPath: '/api/public/actions/push-start-task'
+      preLoaderRoute: typeof ApiPublicActionsPushStartTaskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/actions/complete-task': {
       id: '/api/public/actions/complete-task'
       path: '/api/public/actions/complete-task'
@@ -1202,6 +1223,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppStorageUploadRoute: AppStorageUploadRoute,
   ApiPublicActionsCarryForwardTaskRoute: ApiPublicActionsCarryForwardTaskRoute,
   ApiPublicActionsCompleteTaskRoute: ApiPublicActionsCompleteTaskRoute,
+  ApiPublicActionsPushStartTaskRoute: ApiPublicActionsPushStartTaskRoute,
   ApiPublicActionsStartTaskRoute: ApiPublicActionsStartTaskRoute,
   ApiPublicHooksAdoptionRollupRoute: ApiPublicHooksAdoptionRollupRoute,
   ApiPublicHooksAutomationDueEnqueueRoute:

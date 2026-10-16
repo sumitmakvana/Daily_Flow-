@@ -10,6 +10,7 @@ import {
 } from "@/lib/task-date-utils";
 
 import { checkIsWorkingDayServer, getUsersOnLeaveTodayServer } from "@/lib/workday-checker.server";
+import { pushOverdueTasks } from "@/lib/task-push.server";
 
 // Global singleton state to survive Vite / HMR module re-evaluations in dev server
 const globalCronState = globalThis as unknown as {
@@ -95,6 +96,9 @@ export function startBackgroundCronTicker() {
 
         // Dispatch advance alerts for leaves starting tomorrow morning
         await dispatchAdvanceLeaveAlerts("morning", todayStr);
+
+        // Push alerts for tasks that just became overdue (no-op unless FCM is configured)
+        await pushOverdueTasks(todayStr);
       }
 
       // -------------------------------------------------------------

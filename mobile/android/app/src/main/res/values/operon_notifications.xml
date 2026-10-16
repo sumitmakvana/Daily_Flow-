@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand accent used to tint the notification small icon. -->
+    <color name="operon_notification_color">#00E5A0</color>
+    <string name="operon_origin" translatable="false">https://operon.noesisanalytics.co.in</string>
+    <string name="operon_channel_id" translatable="false">operon_tasks</string>
+    <string name="operon_channel_name">Task notifications</string>
+    <string name="operon_channel_description">Task assignments, progress and overdue alerts</string>
+    <string name="operon_action_start_task">Start Task</string>
+</resources>

@@ -90,6 +90,11 @@ export interface PushMessage {
   body?: string | null;
   /** Delivered to the app; `task_id` / `url` drive the deep link on tap. */
   data?: Record<string, string | null | undefined>;
+  /**
+   * Send as a data-only message that the Android app renders itself (needed for action buttons
+   * and consistent branding). Other messages are shown by the system as plain notifications.
+   */
+  display?: boolean;
 }
 
 /** Send a push to every registered device of a user. Never throws. */
@@ -115,6 +120,11 @@ export async function sendPushToUser(userId: string, msg: PushMessage): Promise<
     const accessToken = await getAccessToken(sa);
     const data: Record<string, string> = {};
     for (const [k, v] of Object.entries(msg.data ?? {})) if (v) data[k] = String(v);
+    if (msg.display) {
+      data.operon_display = "1";
+      data.title = msg.title;
+      data.body = msg.body ?? "";
+    }
 
     await Promise.all(
       rows.map(async ({ token }) => {
@@ -129,9 +139,12 @@ export async function sendPushToUser(userId: string, msg: PushMessage): Promise<
             body: JSON.stringify({
               message: {
                 token,
-                notification: { title: msg.title, body: msg.body ?? "" },
+                ...(msg.display ? {} : { notification: { title: msg.title, body: msg.body ?? "" } }),
                 data,
-                android: { priority: "HIGH" },
+                android: {
+                  priority: "HIGH",
+                  ...(msg.display ? {} : { notification: { channel_id: "operon_tasks" } }),
+                },
               },
             }),
           },
