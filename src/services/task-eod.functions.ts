@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser } from "@/integrations/postgres/query.server";
+import { pushTaskProgress } from "@/lib/task-push.server";
 
 export type EodProgressStatus = "done" | "in_progress" | "blocked";
 
@@ -110,6 +111,7 @@ export const upsertTaskEodFn = createServerFn({ method: "POST" })
         .parse(d),
   )
   .handler(async ({ data, context }) => {
+    let completedNow = false;
     const row = await withUser(context.userId, async (client) => {
       // 1. Insert or update the daily EOD submission
       const res = await client.query<TaskEodSubmission>(
@@ -149,6 +151,12 @@ export const upsertTaskEodFn = createServerFn({ method: "POST" })
         );
         const totalHours = Number(hoursRes.rows[0]?.sum ?? 0);
 
+        const prevRes = await client.query<{ status: string }>(
+          `SELECT status::text AS status FROM public.tasks WHERE id = $1`,
+          [data.taskId],
+        );
+        completedNow = isCompleted && !!prevRes.rows[0] && prevRes.rows[0].status !== "Completed";
+
         // 4. Update the main tasks table to stay in sync with explicit type casting
         await client.query(
           `UPDATE public.tasks
@@ -171,6 +179,7 @@ export const upsertTaskEodFn = createServerFn({ method: "POST" })
 
       return res.rows[0];
     });
+    if (completedNow) void pushTaskProgress("completed", data.taskId, context.userId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return row as any;
   });

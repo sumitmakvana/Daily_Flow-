@@ -9,6 +9,23 @@ export const DESKTOP_DOWNLOADS: { id: DesktopPlatform; label: string; ext: strin
   { id: "linux", label: "Linux", ext: ".AppImage", file: "Operon-Linux.AppImage", href: `${RELEASE_BASE}/Operon-Linux.AppImage` },
 ];
 
+/**
+ * Android APK location. PLACEHOLDER: publish the APK as a GitHub Release asset named
+ * "Operon-Android.apk" under the tag below (or change the tag/file) before announcing it.
+ */
+const ANDROID_RELEASE_BASE = "https://github.com/sumitmakvana/Daily_Flow-/releases/download/android-v1.0.0";
+
+export const ANDROID_DOWNLOAD = {
+  label: "Android",
+  ext: ".apk",
+  file: "Operon-Android.apk",
+  href: `${ANDROID_RELEASE_BASE}/Operon-Android.apk`,
+};
+
+export function isAndroidDevice(): boolean {
+  return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+}
+
 export function detectDesktopPlatform(): DesktopPlatform | null {
   if (typeof navigator === "undefined") return null;
   const ua = navigator.userAgent;
