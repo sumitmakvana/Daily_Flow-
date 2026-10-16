@@ -6,7 +6,7 @@
  * Operon URL, so authentication, routing, Notebook auto-save (notebook_notes) and
  * user isolation all keep working exactly as in the browser.
  */
-const { app, BrowserWindow, Tray, Menu, globalShortcut, shell, nativeImage, session, Notification } = require("electron");
+const { app, BrowserWindow, Tray, Menu, globalShortcut, shell, nativeImage, session, Notification, ipcMain, safeStorage } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -58,9 +58,87 @@ const BASE_URL = () => getBaseUrl();
 
 /* ------------------------------ helpers ------------------------------ */
 
+/* ------------------------- secure token storage ------------------------- */
+
+// The web app keeps its long-lived refresh token here (OS credential store via safeStorage), not in
+// localStorage. Requests are honoured only from the Operon origin and only for known keys.
+const SECURE_KEYS = new Set(["kc_offline_session"]);
+const secureFile = () => path.join(app.getPath("userData"), "secure-store.json");
+
+function secureAvailable() {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    // On Linux without a keyring Electron falls back to a hard-coded key: not secure, so refuse.
+    if (process.platform === "linux" && safeStorage.getSelectedStorageBackend?.() === "basic_text") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readSecure() {
+  try {
+    return JSON.parse(fs.readFileSync(secureFile(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeSecure(data) {
+  fs.writeFileSync(secureFile(), JSON.stringify(data), { mode: 0o600 });
+}
+
+function trustedSender(event) {
+  try {
+    return new URL(event.senderFrame.url).origin === new URL(BASE_URL()).origin;
+  } catch {
+    return false;
+  }
+}
+
+ipcMain.on("operon:secure-available", (event) => {
+  event.returnValue = trustedSender(event) && secureAvailable();
+});
+
+ipcMain.handle("operon:secure-get", (event, key) => {
+  if (!trustedSender(event) || !SECURE_KEYS.has(key) || !secureAvailable()) return null;
+  const enc = readSecure()[key];
+  if (!enc) return null;
+  try {
+    return safeStorage.decryptString(Buffer.from(enc, "base64"));
+  } catch {
+    return null; // e.g. profile copied to another machine/user: unreadable, treat as signed out
+  }
+});
+
+ipcMain.handle("operon:secure-set", (event, key, value) => {
+  if (!trustedSender(event) || !SECURE_KEYS.has(key) || typeof value !== "string" || !secureAvailable()) return false;
+  try {
+    const data = readSecure();
+    data[key] = safeStorage.encryptString(value).toString("base64");
+    writeSecure(data);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle("operon:secure-remove", (event, key) => {
+  if (!trustedSender(event) || !SECURE_KEYS.has(key)) return false;
+  try {
+    const data = readSecure();
+    delete data[key];
+    writeSecure(data);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
 function webPreferences() {
   return {
     partition: PARTITION,
+    preload: path.join(__dirname, "preload.js"),
     contextIsolation: true,
     nodeIntegration: false,
     sandbox: true,

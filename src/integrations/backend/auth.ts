@@ -5,11 +5,35 @@
  * and direct grant (ROPC) flow to keep the existing login page UI working.
  */
 import Keycloak from "keycloak-js";
+import { getSecureTokenStore } from "@/lib/secure-token-store";
+import {
+  APP_CLIENT_ID,
+  WEB_CLIENT_ID,
+  clearStored,
+  passwordLogin,
+  readStored,
+  refreshTokens,
+  revokeSession,
+  secondsUntilExpiry,
+  writeStored,
+  type RefreshOutcome,
+  type StoredSession,
+  type TokenResponse,
+} from "@/lib/app-session";
 
 // Check if window is defined (for SSR safety)
 const isBrowser = typeof window !== "undefined";
 
 let keycloak: Keycloak | null = null;
+
+/**
+ * App mode = the Android / Desktop apps, i.e. an environment with OS-protected token storage.
+ * There the session is a persistent offline session (see app-session.ts). The website never
+ * gets a secure store, so it keeps the original Keycloak behaviour untouched.
+ */
+const secureStore = isBrowser ? getSecureTokenStore() : null;
+const APP_MODE = secureStore !== null;
+let authBaseUrl = "";
 
 if (isBrowser) {
   // Keycloak runs on AUTH_DOMAIN (http://localhost:7052 in dev, or custom in prod)
@@ -18,10 +42,11 @@ if (isBrowser) {
     ? "http://localhost:7052"
     : `${window.location.protocol}//${window.location.host.replace("7050", "7052")}`;
 
+  authBaseUrl = authUrl;
   keycloak = new Keycloak({
     url: authUrl,
     realm: "lovable",
-    clientId: "execution-os",
+    clientId: APP_MODE ? APP_CLIENT_ID : WEB_CLIENT_ID,
   });
 }
 
@@ -33,6 +58,10 @@ let initPromise: Promise<boolean> | null = null;
 export function initKeycloak(): Promise<boolean> {
   if (!isBrowser) return Promise.resolve(false);
   if (initPromise) return initPromise;
+  if (APP_MODE) {
+    initPromise = initAppSession();
+    return initPromise;
+  }
 
   const savedToken = window.localStorage.getItem("kc_token");
   const savedRefreshToken = window.localStorage.getItem("kc_refresh_token");
@@ -106,6 +135,151 @@ export function initKeycloak(): Promise<boolean> {
   return initPromise;
 }
 
+/* ------------------------------------------------------------------ */
+/* App mode (Android / Desktop): persistent offline session            */
+/* ------------------------------------------------------------------ */
+
+let appSession: StoredSession | null = null;
+let refreshInFlight: Promise<RefreshOutcome["status"]> | null = null;
+let appLoopStarted = false;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function emit(event: string) {
+  const session = getSessionSync();
+  listeners.forEach((cb) => cb(event, session));
+}
+
+function clearLocalTokens() {
+  if (keycloak) {
+    keycloak.token = undefined;
+    keycloak.refreshToken = undefined;
+    keycloak.idToken = undefined;
+    keycloak.tokenParsed = undefined;
+    keycloak.authenticated = false;
+    keycloak.subject = undefined;
+  }
+  window.localStorage.removeItem("kc_token");
+  window.localStorage.removeItem("kc_refresh_token");
+}
+
+/** Load a token response into the Keycloak instance and persist the refresh token securely. */
+async function acceptTokens(tokens: TokenResponse, event: "SIGNED_IN" | "TOKEN_REFRESHED") {
+  const payload = tokens.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  const parsed = JSON.parse(window.atob(payload));
+  const kc = keycloak!;
+  kc.token = tokens.access_token;
+  kc.refreshToken = tokens.refresh_token;
+  kc.idToken = tokens.id_token;
+  kc.tokenParsed = parsed;
+  kc.authenticated = true;
+  kc.subject = parsed.sub;
+  // The access token is short-lived and is what the data layer reads; the refresh token never
+  // goes to localStorage in app mode.
+  window.localStorage.setItem("kc_token", tokens.access_token);
+  window.localStorage.removeItem("kc_refresh_token");
+
+  if (appSession) {
+    appSession = { c: appSession.c, t: tokens.refresh_token || appSession.t };
+    if (!(await writeStored(secureStore!, appSession))) {
+      console.warn("[auth] could not persist the session securely; it will last until the app closes");
+    }
+  }
+  if (event === "SIGNED_IN") await provisionProfile();
+  emit(event);
+}
+
+async function provisionProfile() {
+  try {
+    const userId = keycloak?.tokenParsed?.sub;
+    const email = keycloak?.tokenParsed?.email;
+    const name = (keycloak?.tokenParsed as any)?.name || keycloak?.tokenParsed?.preferred_username;
+    if (userId && email) {
+      const { supabase } = await import("@/integrations/supabase/client");
+      await (supabase as any).rpc("ensure_user_profile", {
+        user_id: userId,
+        user_email: email,
+        user_name: name || email.split("@")[0],
+      });
+    }
+  } catch (err) {
+    console.error("Failed to auto-provision user profile:", err);
+  }
+}
+
+/** The session is definitively over (revoked/expired): wipe it and send the user to sign in. */
+async function endAppSession() {
+  const wasAuthenticated = !!keycloak?.authenticated;
+  appSession = null;
+  await clearStored(secureStore!);
+  clearLocalTokens();
+  emit("SIGNED_OUT");
+  if (wasAuthenticated && window.location.pathname !== "/login") {
+    window.location.replace("/login");
+  }
+}
+
+/** One refresh at a time (refresh tokens may rotate, so parallel refreshes could invalidate each other). */
+function doRefresh(): Promise<RefreshOutcome["status"]> {
+  if (!appSession) return Promise.resolve("invalid");
+  if (!refreshInFlight) {
+    const session = appSession;
+    refreshInFlight = (async () => {
+      const wasAuthenticated = !!keycloak?.authenticated;
+      const outcome = await refreshTokens(authBaseUrl, session);
+      if (outcome.status === "ok") {
+        await acceptTokens(outcome.tokens, wasAuthenticated ? "TOKEN_REFRESHED" : "SIGNED_IN");
+      } else if (outcome.status === "invalid") {
+        await endAppSession();
+      }
+      return outcome.status;
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+/** Refresh proactively when the access token is close to expiry (or missing, e.g. after a network outage). */
+async function ensureFreshApp(minValiditySeconds = 120): Promise<void> {
+  if (!appSession) {
+    const stored = await readStored(secureStore!);
+    if (!stored) return;
+    appSession = stored;
+  }
+  if (keycloak?.authenticated && secondsUntilExpiry(keycloak.token) > minValiditySeconds) return;
+  await doRefresh();
+}
+
+function startAppRefreshLoop() {
+  if (appLoopStarted) return;
+  appLoopStarted = true;
+  setInterval(() => void ensureFreshApp(), 60_000);
+  // Recover from network loss and from the app/PC waking up or returning to the foreground.
+  window.addEventListener("online", () => void ensureFreshApp());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void ensureFreshApp();
+  });
+}
+
+async function initAppSession(): Promise<boolean> {
+  window.localStorage.removeItem("kc_refresh_token"); // legacy plain-text copy must not linger
+  startAppRefreshLoop();
+  const stored = await readStored(secureStore!);
+  if (!stored) {
+    clearLocalTokens();
+    return false;
+  }
+  appSession = stored;
+  let status = await doRefresh();
+  // Right after a device/PC restart the network may not be up yet: retry briefly, never log out for that.
+  for (let i = 1; status === "network" && i <= 3; i++) {
+    await sleep(2000 * i);
+    status = await doRefresh();
+  }
+  return status === "ok";
+}
+
 function getSessionSync() {
   if (!isBrowser || !keycloak?.authenticated || !keycloak?.token) return null;
   return {
@@ -135,6 +309,7 @@ function getSessionSync() {
  * background, where the 60s interval timer is throttled/suspended).
  */
 export async function refreshSessionNow(): Promise<void> {
+  if (APP_MODE) return ensureFreshApp();
   if (!isBrowser || !keycloak?.authenticated) return;
   try {
     if (await keycloak.updateToken(70)) {
@@ -157,6 +332,18 @@ export const auth = {
 
     if (keycloak?.authenticated) {
       return { data: { session: getSessionSync() }, error: null };
+    }
+
+    // Apps: password login against the offline-capable app client; tokens go to secure storage.
+    if (APP_MODE && args.email && args.password) {
+      try {
+        const { tokens, clientId } = await passwordLogin(authBaseUrl, args.email, args.password);
+        appSession = { c: clientId, t: tokens.refresh_token };
+        await acceptTokens(tokens, "SIGNED_IN");
+        return { data: { session: getSessionSync() }, error: null };
+      } catch (err: any) {
+        return { data: { session: null }, error: err };
+      }
     }
 
     // Direct Grant (ROPC) flow if email & password are provided
@@ -248,6 +435,16 @@ export const auth = {
 
   signOut: async () => {
     if (!isBrowser) return { error: null, redirected: false };
+    if (APP_MODE) {
+      // Explicit logout: revoke the offline session server-side, then wipe every local copy.
+      const stored = appSession ?? (await readStored(secureStore!));
+      if (stored) await revokeSession(authBaseUrl, stored);
+      appSession = null;
+      await clearStored(secureStore!);
+      clearLocalTokens();
+      emit("SIGNED_OUT");
+      return { error: null, redirected: false };
+    }
     window.localStorage.removeItem("kc_token");
     window.localStorage.removeItem("kc_refresh_token");
     if (keycloak?.authenticated) {

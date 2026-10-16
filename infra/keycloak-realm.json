@@ -126,6 +126,38 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "operon-app",
+      "name": "Operon Android and Desktop apps",
+      "description": "Used only by the Operon Android/Desktop apps. Issues offline refresh tokens so app sessions persist until explicit logout. The website keeps using execution-os.",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "optionalClientScopes": ["offline_access"],
+      "protocolMappers": [
+        {
+          "name": "role-hardcoded",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "role",
+            "claim.value": "authenticated",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
     }
   ]
 }
