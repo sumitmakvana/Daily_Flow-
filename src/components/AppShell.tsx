@@ -49,6 +49,9 @@ import { cn } from "@/lib/utils";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { NotificationsModal } from "@/components/NotificationsModal";
 import { useBrowserNotifications } from "@/hooks/use-browser-notifications";
+import { useNativeApp, getStoredPushToken } from "@/hooks/use-native-app";
+import { unregisterDeviceTokenFn } from "@/services/device-tokens.functions";
+import { storePushToken } from "@/lib/native-bridge";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { GlobalSearchModal } from "@/components/GlobalSearchModal";
@@ -233,8 +236,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { triggerDesktopNotification } = useBrowserNotifications(user?.id, {
     onUnreadChange: setUnread,
   });
+  // Android (Capacitor) app: back button, deep links, FCM registration. No-op elsewhere.
+  useNativeApp(user?.id);
 
   const handleLogout = async () => {
+    // Stop pushes for this account on this device (must run while the token is still valid).
+    const pushToken = getStoredPushToken();
+    if (pushToken) {
+      await unregisterDeviceTokenFn({ data: { token: pushToken } }).catch(() => {});
+      storePushToken(null);
+    }
     await queryClient.cancelQueries();
     queryClient.clear();
     const res = await signOut();
