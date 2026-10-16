@@ -95,7 +95,10 @@ export interface PushMessage {
 /** Send a push to every registered device of a user. Never throws. */
 export async function sendPushToUser(userId: string, msg: PushMessage): Promise<void> {
   const sa = loadAccount();
-  if (!sa) return;
+  if (!sa) {
+    console.log("[push-diag] step6 push skipped: FCM_SERVICE_ACCOUNT_JSON/FILE not configured");
+    return;
+  }
   try {
     await ensureDeviceTokensTable();
     const pool = getPool();
@@ -103,7 +106,11 @@ export async function sendPushToUser(userId: string, msg: PushMessage): Promise<
       "SELECT token FROM public.device_tokens WHERE user_id = $1",
       [userId],
     );
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      console.log("[push-diag] step6 no device tokens for user=", userId);
+      return;
+    }
+    console.log("[push-diag] step6 sending push to", rows.length, "device(s) user=", userId);
 
     const accessToken = await getAccessToken(sa);
     const data: Record<string, string> = {};

@@ -1,17 +1,16 @@
 /**
  * Native (Capacitor / Android) bridge.
  *
- * The Android app is a Capacitor shell that loads the hosted Operon web app, so
- * Capacitor injects `window.Capacitor` (and its native plugin proxies) into the
- * page. This module talks to that global directly — no @capacitor/* npm
- * dependency in the web bundle — and is a no-op in browsers and Electron.
+ * The Android app is a Capacitor shell that loads the hosted Operon web app. Native plugins are
+ * imported lazily (see initNativeApp) so browsers and Electron never load them; everything here
+ * is a no-op outside the native app.
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { PluginListenerHandle } from "@capacitor/core";
+
 interface CapacitorGlobal {
   isNativePlatform?: () => boolean;
   getPlatform?: () => string;
-  Plugins?: Record<string, any>;
 }
 
 const PUSH_TOKEN_KEY = "operon_fcm_token";
@@ -28,10 +27,6 @@ export function isNativeApp(): boolean {
 
 export function getNativePlatform(): string {
   return getCapacitor()?.getPlatform?.() ?? "web";
-}
-
-function plugin(name: string): any | null {
-  return getCapacitor()?.Plugins?.[name] ?? null;
 }
 
 export function getStoredPushToken(): string | null {
@@ -80,81 +75,96 @@ export interface NativeHandlers {
 /**
  * Wire Android back button, deep links, resume and FCM registration.
  * Returns a cleanup function.
+ *
+ * The page is loaded from a remote URL, so Capacitor does not pre-register JS plugin proxies on
+ * `window.Capacitor.Plugins`. The plugin packages are therefore imported dynamically (only inside
+ * the native app); importing them calls `registerPlugin`, which binds to the native side.
  */
 export function initNativeApp(handlers: NativeHandlers, opts: { push: boolean }): () => void {
+  const log = (...a: unknown[]) => console.log("[push-diag]", ...a);
   if (!isNativeApp()) return () => {};
+  log("step1 native app; platform=", getNativePlatform());
+
+  let cancelled = false;
   const removers: Array<() => void> = [];
-  const track = (p: Promise<{ remove: () => void }> | { remove: () => void } | undefined) => {
-    Promise.resolve(p)
-      .then((h) => h && removers.push(() => h.remove()))
-      .catch(() => {});
-  };
+  const track = (p: Promise<PluginListenerHandle>) =>
+    p
+      .then((h) => (cancelled ? h.remove() : void removers.push(() => void h.remove())))
+      .catch((e) => console.warn("[native] could not add listener", e));
 
-  const App = plugin("App");
-  if (App) {
-    track(
-      App.addListener("backButton", ({ canGoBack }: { canGoBack: boolean }) => {
-        if (canGoBack || window.history.length > 1) window.history.back();
-        else App.minimizeApp?.();
-      }),
-    );
-    track(
-      App.addListener("appUrlOpen", ({ url }: { url: string }) => {
-        const path = resolveDeepLink({ url });
-        if (path) handlers.navigate(path);
-      }),
-    );
-    track(App.addListener("resume", () => handlers.onResume()));
-    // Cold start from a tapped link.
-    App.getLaunchUrl?.()
-      .then((r: { url?: string } | undefined) => {
-        const path = r?.url ? resolveDeepLink({ url: r.url }) : null;
-        if (path) handlers.navigate(path);
-      })
-      .catch(() => {});
-  }
+  void (async () => {
+    try {
+      const { App } = await import("@capacitor/app");
+      track(
+        App.addListener("backButton", ({ canGoBack }) => {
+          if (canGoBack || window.history.length > 1) window.history.back();
+          else void App.minimizeApp();
+        }),
+      );
+      track(
+        App.addListener("appUrlOpen", ({ url }) => {
+          const path = resolveDeepLink({ url });
+          if (path) handlers.navigate(path);
+        }),
+      );
+      track(App.addListener("resume", () => handlers.onResume()));
+      // Cold start from a tapped link.
+      const launch = await App.getLaunchUrl();
+      const path = launch?.url ? resolveDeepLink({ url: launch.url }) : null;
+      if (path) handlers.navigate(path);
+    } catch (e) {
+      console.warn("[native] App plugin setup failed", e);
+    }
 
-  const Push = opts.push ? plugin("PushNotifications") : null;
-  if (Push) {
-    track(
-      Push.addListener("registration", (t: { value: string }) => {
-        if (t?.value) handlers.onPushToken(t.value);
-      }),
-    );
-    track(
-      Push.addListener("registrationError", (e: unknown) => {
-        console.warn("[native] FCM registration failed (is google-services.json bundled?)", e);
-      }),
-    );
-    track(
-      Push.addListener(
-        "pushNotificationActionPerformed",
-        (a: { notification?: { data?: Record<string, unknown> } }) => {
+    if (!opts.push) return;
+    try {
+      const { PushNotifications: Push } = await import("@capacitor/push-notifications");
+      track(
+        Push.addListener("registration", (t) => {
+          log("step2 FCM token event received; length=", t?.value?.length ?? 0);
+          if (t?.value) handlers.onPushToken(t.value);
+        }),
+      );
+      track(
+        Push.addListener("registrationError", (e) => {
+          console.warn("[native] FCM registration failed (is google-services.json bundled?)", e);
+        }),
+      );
+      track(
+        Push.addListener("pushNotificationActionPerformed", (a) => {
           const path = resolveDeepLink(a?.notification?.data);
           if (path) handlers.navigate(path);
-        },
-      ),
-    );
-    (async () => {
-      try {
-        let perm = await Push.checkPermissions();
-        if (perm.receive === "prompt" || perm.receive === "prompt-with-rationale") {
-          perm = await Push.requestPermissions();
-        }
-        if (perm.receive === "granted") await Push.register();
-      } catch (e) {
-        console.warn("[native] push setup failed", e);
-      }
-    })();
-  }
+        }),
+      );
 
-  return () => removers.forEach((r) => r());
+      let perm = await Push.checkPermissions();
+      log("step1 permission state=", perm.receive);
+      if (perm.receive === "prompt" || perm.receive === "prompt-with-rationale") {
+        perm = await Push.requestPermissions();
+      }
+      if (perm.receive === "granted" && !cancelled) {
+        log("step1 calling PushNotifications.register()");
+        await Push.register();
+      } else if (perm.receive !== "granted") {
+        log("step1 FAIL: notification permission not granted:", perm.receive);
+      }
+    } catch (e) {
+      console.warn("[native] push setup failed", e);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    removers.forEach((r) => r());
+  };
 }
 
-/** Drop native notifications/registration on sign-out so a shared device stops receiving them. */
+/** Drop delivered notifications on sign-out so a shared device doesn't keep showing them. */
 export async function teardownNativePush() {
+  if (!isNativeApp()) return;
   try {
-    await plugin("PushNotifications")?.removeAllDeliveredNotifications?.();
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    await PushNotifications.removeAllDeliveredNotifications();
   } catch {
     /* ignore */
   }
