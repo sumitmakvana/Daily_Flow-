@@ -10,7 +10,7 @@
   },
   "android": {
     "allowMixedContent": false,
-    "webContentsDebuggingEnabled": true
+    "webContentsDebuggingEnabled": false
   },
   "plugins": {
     "Keyboard": { "resize": "native", "resizeOnFullScreen": true },

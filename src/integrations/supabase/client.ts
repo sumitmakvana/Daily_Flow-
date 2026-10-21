@@ -55,7 +55,6 @@ function createSupabaseClient() {
         if (typeof window !== 'undefined') {
           const token = window.localStorage.getItem("kc_token");
           if (token) {
-            console.log("Supabase Fetch Interceptor attaching token:", token);
             if (options.headers instanceof Headers) {
               options.headers.set("Authorization", `Bearer ${token}`);
             } else if (Array.isArray(options.headers)) {

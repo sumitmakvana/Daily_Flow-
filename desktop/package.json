@@ -29,6 +29,8 @@
     },
     "files": [
       "main.js",
+      "preload.js",
+      "secure-gate.js",
       "offline.html",
       "build/icon.png",
       "build/icon.ico",

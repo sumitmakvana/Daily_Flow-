@@ -6,9 +6,10 @@
  * Operon URL, so authentication, routing, Notebook auto-save (notebook_notes) and
  * user isolation all keep working exactly as in the browser.
  */
-const { app, BrowserWindow, Tray, Menu, globalShortcut, shell, nativeImage, session, Notification } = require("electron");
+const { app, BrowserWindow, Tray, Menu, globalShortcut, shell, nativeImage, session, Notification, ipcMain, safeStorage } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { isSecureBaseUrl } = require("./secure-gate");
 
 const DEFAULT_URL = "http://operon.noesisanalytics.co.in";
 const QUICK_NOTES_SHORTCUT = "Alt+N";
@@ -47,6 +48,82 @@ function getBaseUrl() {
   }
 }
 
+/* ------------------------------ secure storage ------------------------------ */
+
+// Refresh tokens for the persistent-login feature, encrypted with the OS keychain (safeStorage).
+const secureFile = () => path.join(app.getPath("userData"), "secure-store.json");
+const SECURE_KEY_RE = /^[a-z_]{1,40}$/;
+
+function secureAvailable() {
+  try {
+    if (!isSecureBaseUrl(BASE_URL())) return false; // never offer the token store over plain http
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    // On Linux without a keyring Electron falls back to a hard-coded key: treat as unavailable.
+    if (process.platform === "linux") {
+      const backend = safeStorage.getSelectedStorageBackend?.();
+      if (!backend || backend === "basic_text" || backend === "unknown") return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readSecure() {
+  try {
+    return JSON.parse(fs.readFileSync(secureFile(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeSecure(data) {
+  const tmp = secureFile() + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
+  fs.renameSync(tmp, secureFile());
+}
+
+/** Only the Operon web origin may use the store. */
+function trustedSender(event) {
+  try {
+    const url = event.senderFrame && event.senderFrame.url;
+    return !!url && new URL(url).origin === new URL(BASE_URL()).origin;
+  } catch {
+    return false;
+  }
+}
+
+function registerSecureStorage() {
+  ipcMain.on("operon:secure:available", (event) => {
+    event.returnValue = trustedSender(event) && secureAvailable();
+  });
+  const guard = (event, key) => {
+    if (!trustedSender(event) || !secureAvailable()) throw new Error("secure storage unavailable");
+    if (typeof key !== "string" || !SECURE_KEY_RE.test(key)) throw new Error("invalid key");
+  };
+  ipcMain.handle("operon:secure:get", (event, key) => {
+    guard(event, key);
+    const enc = readSecure()[key];
+    if (!enc) return null;
+    try {
+      return safeStorage.decryptString(Buffer.from(enc, "base64"));
+    } catch {
+      return null;
+    }
+  });
+  ipcMain.handle("operon:secure:set", (event, key, value) => {
+    guard(event, key);
+    if (typeof value !== "string" || value.length === 0 || value.length > 8192) throw new Error("invalid value");
+    writeSecure({ ...readSecure(), [key]: safeStorage.encryptString(value).toString("base64") });
+  });
+  ipcMain.handle("operon:secure:remove", (event, key) => {
+    guard(event, key);
+    const data = readSecure();
+    delete data[key];
+    writeSecure(data);
+  });
+}
+
 /* ------------------------------ state ------------------------------ */
 
 let mainWin = null;
@@ -61,6 +138,7 @@ const BASE_URL = () => getBaseUrl();
 function webPreferences() {
   return {
     partition: PARTITION,
+    preload: path.join(__dirname, "preload.js"),
     contextIsolation: true,
     nodeIntegration: false,
     sandbox: true,
@@ -272,6 +350,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
+    registerSecureStorage();
 
     // Only the permissions Operon actually needs (notifications, clipboard writes).
     const allowed = new Set(["notifications", "clipboard-sanitized-write", "fullscreen"]);
