@@ -80,6 +80,7 @@ services:
       args:
         - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-http://localhost:7051}
         - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+        - VITE_NATIVE_PERSISTENT_LOGIN=${VITE_NATIVE_PERSISTENT_LOGIN:-false}
     restart: unless-stopped
     ports:
       - "7050:8080"

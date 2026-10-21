@@ -9,9 +9,9 @@
 const { app, BrowserWindow, Tray, Menu, globalShortcut, shell, nativeImage, session, Notification, ipcMain, safeStorage } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { isSecureBaseUrl } = require("./secure-gate");
+const { isTrustedSenderUrl } = require("./secure-gate");
 
-const DEFAULT_URL = "http://operon.noesisanalytics.co.in";
+const DEFAULT_URL = "https://operon.noesisanalytics.co.in";
 const QUICK_NOTES_SHORTCUT = "Alt+N";
 const PARTITION = "persist:operon"; // one persistent session shared by every window (keeps login)
 const ICON_PATH = path.join(__dirname, "build", process.platform === "win32" ? "icon.ico" : "icon.png");
@@ -56,7 +56,6 @@ const SECURE_KEY_RE = /^[a-z_]{1,40}$/;
 
 function secureAvailable() {
   try {
-    if (!isSecureBaseUrl(BASE_URL())) return false; // never offer the token store over plain http
     if (!safeStorage.isEncryptionAvailable()) return false;
     // On Linux without a keyring Electron falls back to a hard-coded key: treat as unavailable.
     if (process.platform === "linux") {
@@ -83,14 +82,13 @@ function writeSecure(data) {
   fs.renameSync(tmp, secureFile());
 }
 
-/** Only the Operon web origin may use the store. */
+/**
+ * Only the Operon web page may use the store, judged by the frame's real (post-redirect) URL: it must
+ * be https (or loopback in development) on the Operon host. Plain-http origins are always refused.
+ */
 function trustedSender(event) {
-  try {
-    const url = event.senderFrame && event.senderFrame.url;
-    return !!url && new URL(url).origin === new URL(BASE_URL()).origin;
-  } catch {
-    return false;
-  }
+  const url = event.senderFrame && event.senderFrame.url;
+  return !!url && isTrustedSenderUrl(url, BASE_URL());
 }
 
 function registerSecureStorage() {

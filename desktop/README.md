@@ -59,7 +59,7 @@ desktop/
 - App ID is `in.co.noesisanalytics.operon` (taskbar grouping, shortcuts, notifications).
 
 ### Operon URL
-Defaults to `http://operon.noesisanalytics.co.in`. Override with:
+Defaults to `https://operon.noesisanalytics.co.in`. Override with:
 - the `OPERON_URL` environment variable, or
 - `{ "url": "https://..." }` in `%APPDATA%\Operon\desktop-settings.json`.
 
