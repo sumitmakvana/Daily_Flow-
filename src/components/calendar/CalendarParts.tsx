@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarOff,
+  FileText,
 } from "lucide-react";
 import type { Task, Leave } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -18,7 +19,7 @@ import { toLocalISO } from "@/lib/format";
 /* Event model + pastel colour coding (light theme)                    */
 /* ------------------------------------------------------------------ */
 
-export type EventKind = "my" | "team" | "leave" | "wfh" | "office" | "public";
+export type EventKind = "my" | "team" | "leave" | "tentative" | "wfh" | "office" | "public";
 export type CalLayer = "my" | "team" | "leave" | "office" | "public";
 
 export interface CalEvent {
@@ -37,6 +38,7 @@ export const KIND_META: Record<EventKind, { chip: string; dot: string; name: str
   team: { chip: "bg-purple-500/15 text-purple-200 border-purple-500/30", dot: "bg-purple-500", name: "Team Task" },
   leave: { chip: "bg-emerald-500/15 text-emerald-200 border-emerald-500/30", dot: "bg-emerald-500", name: "Leave" },
   wfh: { chip: "bg-cyan-500/15 text-cyan-200 border-cyan-500/30", dot: "bg-cyan-500", name: "WFH" },
+  tentative: { chip: "bg-orange-500/10 text-orange-200 border-orange-500/40 border-dashed", dot: "bg-orange-500", name: "Tentative Leave" },
   office: { chip: "bg-rose-500/15 text-rose-200 border-rose-500/30", dot: "bg-rose-500", name: "Office Closed" },
   public: { chip: "bg-amber-500/15 text-amber-200 border-amber-500/30", dot: "bg-amber-500", name: "Public Holiday" },
 };
@@ -50,7 +52,7 @@ export const LAYER_META: Array<{ key: CalLayer; label: string; dot: string }> = 
 ];
 
 export function layerOf(kind: EventKind): CalLayer {
-  return kind === "wfh" ? "leave" : kind;
+  return kind === "wfh" || kind === "tentative" ? "leave" : kind;
 }
 
 export type EventClickHandler = (event: CalEvent, date: Date) => void;
@@ -95,7 +97,7 @@ export function EventChip({
 /* Sidebar                                                             */
 /* ------------------------------------------------------------------ */
 
-export type NavKey = "calendar" | "my" | "team" | "holidays" | "leaves" | "filters";
+export type NavKey = "calendar" | "my" | "team" | "holidays" | "leaves" | "leaveReport" | "filters";
 
 export function CalendarSidebar({
   active,
@@ -114,6 +116,7 @@ export function CalendarSidebar({
     { key: "team", label: "Team Calendar", icon: Users },
     { key: "holidays", label: "Office Holidays", icon: Building2 },
     { key: "leaves", label: "Leaves", icon: Palmtree },
+    { key: "leaveReport", label: "Leave Report", icon: FileText },
     { key: "filters", label: "Filters", icon: Filter },
   ];
   return (
@@ -124,15 +127,16 @@ export function CalendarSidebar({
             key={key}
             type="button"
             onClick={() => onNav(key)}
+            title={label}
             className={cn(
-              "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
+              "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors",
               active === key
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground"
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
-            {label}
+            <span className="min-w-0 truncate">{label}</span>
           </button>
         ))}
       </nav>
@@ -206,6 +210,7 @@ export function MonthGrid({
           const isToday = dateStr === todayStr;
           const wfh = events.filter((e) => e.kind === "wfh").length;
           const leave = events.filter((e) => e.kind === "leave").length;
+          const tentative = events.filter((e) => e.kind === "tentative").length;
           const shown = events.slice(0, MAX_CHIPS);
           const more = events.length - shown.length;
           const hasOffice = events.some((e) => e.kind === "office");
@@ -243,6 +248,11 @@ export function MonthGrid({
                   {wfh > 0 && (
                     <span className="rounded-full bg-cyan-500/15 px-1.5 text-[9px] font-semibold text-cyan-300">
                       {wfh} WFH
+                    </span>
+                  )}
+                  {tentative > 0 && (
+                    <span className="rounded-full border border-dashed border-orange-500/40 px-1.5 text-[9px] font-semibold text-orange-300">
+                      {tentative} tentative
                     </span>
                   )}
                 </span>

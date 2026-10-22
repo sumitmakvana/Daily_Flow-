@@ -307,8 +307,8 @@ export interface NotificationPrefs {
   custom_target_email?: string | null;
 }
 
-export type LeaveType = "casual" | "sick" | "wfh" | "half_day" | "paid" | "unpaid";
-export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type LeaveType = "planned" | "tentative" | "sick" | "wfh" | "half_day" | "paid" | "unpaid";
+export type LeaveStatus = "pending" | "tentative" | "approved" | "rejected" | "cancelled";
 
 export interface Leave {
   id: string;

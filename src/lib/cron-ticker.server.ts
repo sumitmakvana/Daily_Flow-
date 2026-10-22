@@ -11,6 +11,7 @@ import {
 
 import { checkIsWorkingDayServer, getUsersOnLeaveTodayServer } from "@/lib/workday-checker.server";
 import { pushOverdueTasks } from "@/lib/task-push.server";
+import { promoteDueTentativeLeaves } from "@/services/leaves.server";
 
 // Global singleton state to survive Vite / HMR module re-evaluations in dev server
 const globalCronState = globalThis as unknown as {
@@ -45,6 +46,10 @@ export function startBackgroundCronTicker() {
   globalCronState.__cronTickerInterval = setInterval(async () => {
     try {
       const todayStr = getTodayDateStr("Asia/Kolkata");
+
+      // Promote due tentative leaves to approved Planned Leave (idempotent; runs before the working-day
+      // check so a missed day is caught up on the next tick)
+      await promoteDueTentativeLeaves(todayStr);
 
       // Verify if today is a valid working day (not a weekend or official company/public holiday)
       const workStatus = await checkIsWorkingDayServer(todayStr);

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser, adminSelect } from "@/integrations/postgres/query.server";
+import { promoteDueTentativeLeaves } from "@/services/leaves.server";
 
 const KIND = [
   "task_audit",
@@ -388,6 +389,7 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
       }> = [];
 
       try {
+        await promoteDueTentativeLeaves(undefined, { throttle: true });
         leavesRows = await adminSelect<{
           user_id: string;
           leave_type: string;
@@ -399,7 +401,7 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
                   l.start_date::text,
                   l.end_date::text
              FROM public.leaves l
-            WHERE l.status NOT IN ('rejected', 'cancelled')
+            WHERE l.status NOT IN ('rejected', 'cancelled', 'tentative')
               AND l.leave_type <> 'wfh'
               AND l.start_date <= $2
               AND l.end_date >= $1

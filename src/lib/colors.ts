@@ -22,7 +22,8 @@ export const priorityDot: Record<TaskPriority, string> = {
 };
 
 export const leaveColor: Record<string, string> = {
-  casual: "bg-card text-foreground border-border hover:bg-muted/50",
+  planned: "bg-card text-foreground border-border hover:bg-muted/50",
+  tentative: "bg-card text-foreground border-dashed border-border hover:bg-muted/50",
   sick: "bg-card text-foreground border-border hover:bg-muted/50",
   wfh: "bg-card text-foreground border-border hover:bg-muted/50",
   half_day: "bg-card text-foreground border-border hover:bg-muted/50",
@@ -30,7 +31,8 @@ export const leaveColor: Record<string, string> = {
 };
 
 export const leaveDot: Record<string, string> = {
-  casual: "bg-purple-400",
+  planned: "bg-purple-400",
+  tentative: "bg-orange-400",
   sick: "bg-amber-400",
   wfh: "bg-sky-400",
   half_day: "bg-emerald-400",

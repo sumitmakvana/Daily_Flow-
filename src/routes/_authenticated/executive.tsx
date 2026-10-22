@@ -1043,8 +1043,8 @@ function ExecutiveRealDashboard({
                 const pct = Math.min(100, Math.round((m.actualHours / (plannedOrCap || 1)) * 100));
                 const isOverloaded = m.actualHours > plannedOrCap;
 
-                const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh");
-                const activeWfh = activeLeavesToday.find((l: any) => l.user_id === m.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh");
+                const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type !== "wfh");
+                const activeWfh = activeLeavesToday.find((l: any) => l.user_id === m.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type === "wfh");
 
                 return (
                   <tr
@@ -1771,11 +1771,11 @@ export function MemberDetailSheet({
                 <h2 className="text-base font-bold text-foreground truncate">
                   {member.display_name}
                 </h2>
-                {activeLeavesToday.some((l: any) => l.user_id === member.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh") ? (
+                {activeLeavesToday.some((l: any) => l.user_id === member.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type !== "wfh") ? (
                   <Badge variant="outline" className="bg-muted/40 text-amber-300/90 border-border/60 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
                     <Palmtree className="h-3 w-3 text-amber-400/80" /> ON LEAVE
                   </Badge>
-                ) : activeLeavesToday.some((l: any) => l.user_id === member.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh") ? (
+                ) : activeLeavesToday.some((l: any) => l.user_id === member.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type === "wfh") ? (
                   <Badge variant="outline" className="bg-sky-500/15 text-sky-400 border-sky-500/30 text-[9px] font-medium px-1.5 py-0 h-4 shrink-0 flex items-center gap-1">
                     🏠 WFH
                   </Badge>

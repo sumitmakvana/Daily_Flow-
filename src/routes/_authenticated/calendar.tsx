@@ -6,6 +6,7 @@ import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { LeaveDialog } from "@/components/LeaveDialog";
+import { MyLeaveReportDialog } from "@/components/MyLeaveReportDialog";
 import { leavesService } from "@/services/leaves";
 import { holidaysService } from "@/services/operations";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ function CalendarPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [leaveReportOpen, setLeaveReportOpen] = useState(false);
   const [editingLeave, setEditingLeave] = useState<Leave | null>(null);
   const [holidaysSheetOpen, setHolidaysSheetOpen] = useState(false);
 
@@ -249,11 +251,13 @@ function CalendarPage() {
   }, [selectedDateStr, leavesByDate]);
 
   const selectedDateLeaveSummary = useMemo(() => {
-    const actualLeaves = selectedDateLeaves.filter((l) => l.leave_type !== "wfh");
+    const actualLeaves = selectedDateLeaves.filter((l) => l.leave_type !== "wfh" && l.status !== "tentative");
     const wfhLeaves = selectedDateLeaves.filter((l) => l.leave_type === "wfh");
+    const tentativeLeaves = selectedDateLeaves.filter((l) => l.status === "tentative");
     const parts: string[] = [];
     if (actualLeaves.length > 0) parts.push(`${actualLeaves.length} leave${actualLeaves.length > 1 ? "s" : ""}`);
     if (wfhLeaves.length > 0) parts.push(`${wfhLeaves.length} WFH`);
+    if (tentativeLeaves.length > 0) parts.push(`${tentativeLeaves.length} tentative`);
     if (parts.length === 0) return "0 leave/WFH";
     return parts.join(" and ");
   }, [selectedDateLeaves]);
@@ -290,7 +294,14 @@ function CalendarPage() {
       (leavesByDate[dateStr] || []).forEach((l) => {
         const name = l.user_name || profiles.find((p) => p.id === l.user_id)?.display_name || "Member";
         const isWfh = l.leave_type === "wfh";
-        out.push({ id: `l-${l.id}-${dateStr}`, kind: isWfh ? "wfh" : "leave", label: name, tag: isWfh ? "WFH" : "Leave", leave: l });
+        const isTentative = l.status === "tentative";
+        out.push({
+          id: `l-${l.id}-${dateStr}`,
+          kind: isTentative ? "tentative" : isWfh ? "wfh" : "leave",
+          label: name,
+          tag: isTentative ? "Tentative" : isWfh ? "WFH" : "Leave",
+          leave: l,
+        });
       });
       if (all) return out;
       const q = search.trim().toLowerCase();
@@ -358,7 +369,8 @@ function CalendarPage() {
     else if (k === "leaves") {
       setEditingLeave(null);
       setLeaveDialogOpen(true);
-    } else if (k === "filters") setFilterOpen((o) => !o);
+    } else if (k === "leaveReport") setLeaveReportOpen(true);
+    else if (k === "filters") setFilterOpen((o) => !o);
   };
 
   return (
@@ -714,7 +726,7 @@ function CalendarPage() {
               <div className="space-y-2">
                 {selectedDateLeaves.map((l) => {
                   const empName = l.user_name || profiles.find((p) => p.id === l.user_id)?.display_name || "Member";
-                  const dotClass = leaveDot[l.leave_type] || leaveDot.casual;
+                  const dotClass = leaveDot[l.leave_type] || leaveDot.planned;
                   const canEditOrCancel = isManager || l.user_id === user?.id;
 
                   return (
@@ -729,6 +741,11 @@ function CalendarPage() {
                           <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-muted text-muted-foreground border border-border/80 font-semibold uppercase tracking-wider">
                             {l.leave_type === "wfh" ? "WFH" : l.leave_type.replace("_", " ")}
                           </span>
+                          {l.status === "tentative" && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md border border-dashed border-orange-500/50 text-orange-400 font-semibold uppercase tracking-wider">
+                              Not approved
+                            </span>
+                          )}
                         </div>
                         {l.reason ? (
                           <p className="text-[11px] text-muted-foreground pl-4 leading-relaxed">{l.reason}</p>
@@ -789,7 +806,7 @@ function CalendarPage() {
                           </div>
                         )}
 
-                        {canEditOrCancel && l.status === "approved" && (
+                        {canEditOrCancel && (l.status === "approved" || l.status === "tentative") && (
                           <button
                             type="button"
                             title="Cancel leave"
@@ -887,6 +904,8 @@ function CalendarPage() {
           }}
         />
       )}
+
+      <MyLeaveReportDialog open={leaveReportOpen} onOpenChange={setLeaveReportOpen} />
 
       {/* Leave & WFH Creation Dialog */}
       <LeaveDialog

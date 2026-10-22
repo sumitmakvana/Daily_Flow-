@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { X, MessageSquarePlus, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Dispatched by the right-side toolbar to open the feedback card on desktop. */
+export const OPEN_FEEDBACK_EVENT = "operon:open-feedback";
+
 export function GlobalFeedbackWidget() {
   const { user, isManager } = useAuth();
   const submitDemoFeedbackFn = useServerFn(submitDemoFeedback);
@@ -31,6 +34,13 @@ export function GlobalFeedbackWidget() {
         return () => clearTimeout(timer);
       }
     }
+  }, []);
+
+  // Desktop trigger lives in the right toolbar
+  useEffect(() => {
+    const open = () => setIsOpen(true);
+    window.addEventListener(OPEN_FEEDBACK_EVENT, open);
+    return () => window.removeEventListener(OPEN_FEEDBACK_EVENT, open);
   }, []);
 
   const handleClose = () => {
@@ -102,12 +112,12 @@ export function GlobalFeedbackWidget() {
 
   return (
     <>
-      {/* 1. Minimized / Floating Trigger Button (Bottom Right) */}
+      {/* 1. Minimized / Floating Trigger Button (phones only; desktop uses the right toolbar) */}
       {!isOpen && (
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-20 md:bottom-4 right-4 z-40 flex items-center gap-2 bg-[#18191d] hover:bg-[#222329] text-slate-200 border border-[#2b2c34] px-3.5 py-2 rounded-full shadow-xl text-xs font-semibold transition-all hover:scale-105 active:scale-95 group cursor-pointer"
+          className="md:hidden fixed bottom-20 right-4 z-40 flex items-center gap-2 bg-[#18191d] hover:bg-[#222329] text-slate-200 border border-[#2b2c34] px-3.5 py-2 rounded-full shadow-xl text-xs font-semibold transition-all hover:scale-105 active:scale-95 group cursor-pointer"
           title="Give App Feedback"
         >
           <MessageSquarePlus className="h-4 w-4 text-[#5C8EFA] group-hover:scale-110 transition-transform" />
@@ -117,7 +127,7 @@ export function GlobalFeedbackWidget() {
 
       {/* 2. Expanded Floating Feedback Widget Modal Card */}
       {isOpen && (
-        <div className="fixed bottom-20 md:bottom-4 right-4 z-50 w-[320px] sm:w-[360px] bg-[#18191d] border border-[#2b2c34] rounded-xl shadow-2xl overflow-hidden p-4 text-slate-100 animate-in fade-in slide-in-from-bottom-3 duration-200">
+        <div className="fixed bottom-20 md:bottom-4 right-4 md:right-16 z-50 w-[320px] sm:w-[360px] bg-[#18191d] border border-[#2b2c34] rounded-xl shadow-2xl overflow-hidden p-4 text-slate-100 animate-in fade-in slide-in-from-bottom-3 duration-200">
           {/* Header Close Button */}
           <button
             type="button"
