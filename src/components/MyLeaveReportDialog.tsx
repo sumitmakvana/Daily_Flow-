@@ -17,7 +17,7 @@ interface MyLeaveReportDialogProps {
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 // Pastel strip + icon bubble colours per leave type (tinted so they work in light and dark themes)
-const CARD_TONE: Record<string, { strip: string; bubble: string; icon: string }> = {
+export const CARD_TONE: Record<string, { strip: string; bubble: string; icon: string }> = {
   planned: { strip: "bg-blue-500/15", bubble: "bg-blue-500/15", icon: "text-blue-400" },
   tentative: { strip: "bg-orange-500/15", bubble: "bg-orange-500/15", icon: "text-orange-400" },
   sick: { strip: "bg-purple-500/15", bubble: "bg-purple-500/15", icon: "text-purple-400" },

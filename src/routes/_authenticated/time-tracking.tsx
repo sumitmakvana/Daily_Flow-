@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
@@ -45,7 +45,15 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
+// TEMP DISABLED: the page is switched off for now. To re-enable, restore the original route below
+// and remove the redirect.
+// export const Route = createFileRoute("/_authenticated/time-tracking")({
+//   component: TimeTrackingPage,
+// });
 export const Route = createFileRoute("/_authenticated/time-tracking")({
+  beforeLoad: () => {
+    throw redirect({ to: "/my-day" });
+  },
   component: TimeTrackingPage,
 });
 

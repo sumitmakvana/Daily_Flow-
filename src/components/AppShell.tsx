@@ -458,6 +458,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         className="hidden md:flex fixed right-0 top-24 bottom-0 z-20 w-12 flex-col items-center justify-between border-l border-border/60 bg-background py-3"
       >
         <div className="flex flex-col items-center gap-2">
+          {/* TEMP DISABLED: Time Tracking (manager/admin) - re-enable together with the /time-tracking route
           {(isManager || isAdmin) && (
             <Link
               to="/time-tracking"
@@ -471,6 +472,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Clock className="h-4 w-4 text-amber-400" />
             </Link>
           )}
+          */}
           {isAdmin && (
             <>
               <Link

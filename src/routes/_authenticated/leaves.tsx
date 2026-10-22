@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { leavesService } from "@/services/leaves";
 import { LeaveDialog } from "@/components/LeaveDialog";
-import { MyLeaveReportDialog } from "@/components/MyLeaveReportDialog";
+import { MyLeaveReportDialog, CARD_TONE } from "@/components/MyLeaveReportDialog";
+import { LEAVE_TYPES } from "@/components/LeaveDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,8 @@ export function TeamMemberLeavesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("__all");
   const [typeFilter, setTypeFilter] = useState<string>("__all");
+  const [memberFilter, setMemberFilter] = useState<string>("__all");
+  const [monthFilter, setMonthFilter] = useState<string>("__all"); // "YYYY-MM"
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
@@ -153,11 +156,32 @@ export function TeamMemberLeavesPage() {
     return { pending, onLeaveToday, wfhToday, total: leaves.length };
   }, [leaves]);
 
+  // Filter options come from the loaded leave records
+  const memberOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    leaves.forEach((l) => map.set(l.user_id, l.user_name || "Team Member"));
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [leaves]);
+
+  const monthOptions = useMemo(() => {
+    const months = new Set<string>();
+    leaves.forEach((l) => l.start_date && months.add(l.start_date.slice(0, 7)));
+    return Array.from(months)
+      .sort()
+      .reverse()
+      .map((ym) => {
+        const [y, m] = ym.split("-").map(Number);
+        return { id: ym, label: new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
+      });
+  }, [leaves]);
+
   // Filtered leaves
   const filteredLeaves = useMemo(() => {
     return leaves.filter((l) => {
       if (statusFilter !== "__all" && l.status !== statusFilter) return false;
       if (typeFilter !== "__all" && l.leave_type !== typeFilter) return false;
+      if (memberFilter !== "__all" && l.user_id !== memberFilter) return false;
+      if (monthFilter !== "__all" && (l.start_date || "").slice(0, 7) !== monthFilter) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
         const nameMatch = (l.user_name || "").toLowerCase().includes(q);
@@ -168,7 +192,17 @@ export function TeamMemberLeavesPage() {
       }
       return true;
     });
-  }, [leaves, statusFilter, typeFilter, search]);
+  }, [leaves, statusFilter, typeFilter, memberFilter, monthFilter, search]);
+
+  // Per-type summary of the records currently shown (follows the same filters as the table)
+  const typeSummary = useMemo(
+    () =>
+      LEAVE_TYPES.map((t) => {
+        const rows = filteredLeaves.filter((l) => (l.leave_type === "casual" ? "planned" : l.leave_type) === t.id);
+        return { ...t, records: rows.length, days: rows.reduce((a, l) => a + Number(l.days_count ?? 1), 0) };
+      }),
+    [filteredLeaves]
+  );
 
   // Pagination
   const paginatedLeaves = useMemo(() => {
@@ -229,61 +263,74 @@ export function TeamMemberLeavesPage() {
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3.5 rounded-xl border border-border bg-card shadow-xs space-y-1">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">Pending Approvals</span>
-            <Clock3 className="h-4 w-4 text-status-hold" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: "Pending Approvals", value: metrics.pending, icon: Clock3, tint: "bg-status-hold/15", text: "text-status-hold" },
+          { label: "On Leave Today", value: metrics.onLeaveToday, icon: Palmtree, tint: "bg-status-review/15", text: "text-status-review" },
+          { label: "WFH Today", value: metrics.wfhToday, icon: Home, tint: "bg-status-progress/15", text: "text-status-progress" },
+          { label: "Total Records", value: metrics.total, icon: Calendar, tint: "bg-primary/15", text: "text-primary" },
+        ].map((m) => (
+          <div key={m.label} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 shadow-xs">
+            <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", m.tint)}>
+              <m.icon className={cn("h-5 w-5", m.text)} />
+            </span>
+            <div className="min-w-0">
+              <div className={cn("text-2xl font-bold leading-none", m.text)}>{m.value}</div>
+              <div className="mt-1 truncate text-xs font-medium text-muted-foreground">{m.label}</div>
+            </div>
           </div>
-          <div className="text-2xl font-bold text-status-hold">{metrics.pending}</div>
-        </div>
+        ))}
+      </div>
 
-        <div className="p-3.5 rounded-xl border border-border bg-card shadow-xs space-y-1">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">On Leave Today</span>
-            <Palmtree className="h-4 w-4 text-status-review" />
-          </div>
-          <div className="text-2xl font-bold text-status-review">{metrics.onLeaveToday}</div>
-        </div>
-
-        <div className="p-3.5 rounded-xl border border-border bg-card shadow-xs space-y-1">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">WFH Today</span>
-            <Home className="h-4 w-4 text-status-progress" />
-          </div>
-          <div className="text-2xl font-bold text-status-progress">{metrics.wfhToday}</div>
-        </div>
-
-        <div className="p-3.5 rounded-xl border border-border bg-card shadow-xs space-y-1">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">Total Records</span>
-            <Calendar className="h-4 w-4 text-primary" />
-          </div>
-          <div className="text-2xl font-bold text-foreground">{metrics.total}</div>
-        </div>
+      {/* Leave summary by type (follows the filters below) */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        {typeSummary.map((t) => {
+          const tone = CARD_TONE[t.id] ?? CARD_TONE.planned;
+          const Icon = t.icon;
+          return (
+            <div key={t.id} className="rounded-xl border border-border bg-card p-3 text-center shadow-xs">
+              <div className="truncate text-xs font-semibold text-foreground">{t.label}</div>
+              <span className={cn("mx-auto my-2.5 flex h-10 w-10 items-center justify-center rounded-xl", tone.bubble)}>
+                <Icon className={cn("h-5 w-5", tone.icon)} />
+              </span>
+              <div className="space-y-1 border-t border-border/60 pt-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Records</span>
+                  <span className="font-bold tabular-nums text-foreground">{t.records}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Days</span>
+                  <span className="font-bold tabular-nums text-foreground">{Number.isInteger(t.days) ? t.days : t.days.toFixed(1)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Main Table Card */}
       <div className="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-        {/* Table Top Controls Bar (Show entries & Search Box) */}
-        <div className="p-3 sm:p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/20">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Show</span>
-            <Select value={pageSize.toString()} onValueChange={(val) => { setPageSize(Number(val)); setCurrentPage(1); }}>
-              <SelectTrigger className="h-8 w-16 text-xs bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                <SelectItem value="5" className="text-xs">5</SelectItem>
-                <SelectItem value="10" className="text-xs">10</SelectItem>
-                <SelectItem value="25" className="text-xs">25</SelectItem>
-                <SelectItem value="50" className="text-xs">50</SelectItem>
-              </SelectContent>
-            </Select>
-            <span>entries</span>
+        {/* Table Top Controls Bar (entries, status tabs, type filter & search) */}
+        <div className="p-3 sm:p-4 border-b border-border flex flex-col gap-3 bg-muted/20 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Show</span>
+              <Select value={pageSize.toString()} onValueChange={(val) => { setPageSize(Number(val)); setCurrentPage(1); }}>
+                <SelectTrigger className="h-8 w-16 text-xs bg-background border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border">
+                  <SelectItem value="5" className="text-xs">5</SelectItem>
+                  <SelectItem value="10" className="text-xs">10</SelectItem>
+                  <SelectItem value="25" className="text-xs">25</SelectItem>
+                  <SelectItem value="50" className="text-xs">50</SelectItem>
+                </SelectContent>
+              </Select>
+              <span>entries</span>
+            </div>
 
             {/* Quick Status Tabs */}
-            <div className="hidden md:flex items-center gap-1 ml-4 border-l border-border pl-4">
+            <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-border bg-background/60 p-0.5 no-scrollbar">
               {[
                 { id: "__all", label: "All" },
                 { id: "pending", label: "Pending" },
@@ -292,15 +339,14 @@ export function TeamMemberLeavesPage() {
                 { id: "rejected", label: "Rejected" },
                 { id: "cancelled", label: "Cancelled" },
               ].map((tab) => (
-
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => { setStatusFilter(tab.id); setCurrentPage(1); }}
                   className={cn(
-                    "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                    "shrink-0 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
                     statusFilter === tab.id
-                      ? "bg-primary text-primary-foreground font-semibold"
+                      ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                       : "text-muted-foreground hover:bg-muted"
                   )}
                 >
@@ -315,16 +361,44 @@ export function TeamMemberLeavesPage() {
             </div>
           </div>
 
-          {/* Search Input */}
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Type here to search..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-              className="h-8 pl-8 text-xs bg-background border-border"
-            />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Select value={memberFilter} onValueChange={(val) => { setMemberFilter(val); setCurrentPage(1); }}>
+              <SelectTrigger className="h-8 w-full sm:w-44 text-xs bg-background border-border" aria-label="Filter by member">
+                <Users className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border max-h-60">
+                <SelectItem value="__all" className="text-xs">All members</SelectItem>
+                {memberOptions.map((m) => (
+                  <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={monthFilter} onValueChange={(val) => { setMonthFilter(val); setCurrentPage(1); }}>
+              <SelectTrigger className="h-8 w-full sm:w-44 text-xs bg-background border-border" aria-label="Filter by month">
+                <Calendar className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border max-h-60">
+                <SelectItem value="__all" className="text-xs">All months</SelectItem>
+                {monthOptions.map((m) => (
+                  <SelectItem key={m.id} value={m.id} className="text-xs">{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Type here to search..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                className="h-8 pl-8 text-xs bg-background border-border"
+              />
+            </div>
           </div>
         </div>
 
