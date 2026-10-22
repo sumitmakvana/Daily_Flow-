@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { leavesService } from "@/services/leaves";
 import { LeaveDialog } from "@/components/LeaveDialog";
+import { MyLeaveReportDialog } from "@/components/MyLeaveReportDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,7 @@ export function TeamMemberLeavesPage() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [editingLeave, setEditingLeave] = useState<Leave | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
@@ -196,6 +198,15 @@ export function TeamMemberLeavesPage() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setReportOpen(true)}
+            className="h-8 text-xs gap-1 border-border"
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            My Leave Report
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={loadLeaves}
             disabled={loading}
             className="h-8 text-xs gap-1 border-border"
@@ -277,6 +288,7 @@ export function TeamMemberLeavesPage() {
                 { id: "__all", label: "All" },
                 { id: "pending", label: "Pending" },
                 { id: "approved", label: "Approved" },
+                { id: "tentative", label: "Tentative" },
                 { id: "rejected", label: "Rejected" },
                 { id: "cancelled", label: "Cancelled" },
               ].map((tab) => (
@@ -355,8 +367,8 @@ export function TeamMemberLeavesPage() {
                   const isWfh = l.leave_type === "wfh";
                   const isHalfDay = l.leave_type === "half_day" || l.days_count === 0.5;
                   const daysDisplay = `${l.days_count ?? 1} ${l.days_count === 1 ? "day" : "days"} (${isHalfDay ? "Half day" : isWfh ? "WFH" : "Full day"})`;
-                  const colorClass = leaveColor[l.leave_type] || leaveColor.casual;
-                  const dotClass = leaveDot[l.leave_type] || leaveDot.casual;
+                  const colorClass = leaveColor[l.leave_type] || leaveColor.planned;
+                  const dotClass = leaveDot[l.leave_type] || leaveDot.planned;
                   const initials = (l.user_name || "TM")
                     .split(" ")
                     .map((n) => n[0])
@@ -448,6 +460,10 @@ export function TeamMemberLeavesPage() {
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-status-completed/15 text-status-completed border border-status-completed/40 shadow-xs">
                             <CheckCircle2 className="h-3 w-3" /> Approved
                           </span>
+                        ) : l.status === "tentative" ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-500/10 text-orange-400 border border-dashed border-orange-500/50 shadow-xs">
+                            <Clock3 className="h-3 w-3" /> Tentative
+                          </span>
                         ) : l.status === "rejected" ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-status-blocked/15 text-status-blocked border border-status-blocked/40 shadow-xs">
                             <XCircle className="h-3 w-3" /> Rejected
@@ -498,7 +514,7 @@ export function TeamMemberLeavesPage() {
                                 <X className="h-3.5 w-3.5" /> Reject
                               </Button>
                             </>
-                          ) : l.status === "approved" ? (
+                          ) : l.status === "approved" || l.status === "tentative" ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -579,6 +595,8 @@ export function TeamMemberLeavesPage() {
           </div>
         </div>
       </div>
+
+      <MyLeaveReportDialog open={reportOpen} onOpenChange={setReportOpen} />
 
       {/* Leave Application Modal */}
       <LeaveDialog

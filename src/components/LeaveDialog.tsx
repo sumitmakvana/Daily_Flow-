@@ -15,10 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { leavesService } from "@/services/leaves";
 import { useAuth } from "@/hooks/use-auth";
-import { toLocalISO, analyzeWorkingRange, getDayOff } from "@/lib/format";
+import { toLocalISO, analyzeWorkingRange, getDayOff, earliestPlannedLeaveDate, plannedLeaveDateError } from "@/lib/format";
+import { getTodayDateStr } from "@/lib/task-date-utils";
 import { holidaysService } from "@/services/operations";
 import { supabase } from "@/integrations/supabase/client";
-import { Calendar, Palmtree, Home, Activity, Clock, UserCheck, User, Sparkles, Check } from "lucide-react";
+import { Calendar, Palmtree, Home, Activity, Clock, UserCheck, User, Sparkles, Check, HelpCircle } from "lucide-react";
 import type { Profile, Leave, HolidayCalendar } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +31,9 @@ interface LeaveDialogProps {
   onSuccess?: () => void;
 }
 
-const LEAVE_TYPES = [
-  { id: "casual", label: "Casual Leave", desc: "Planned personal time off", icon: Palmtree, dot: "bg-purple-400" },
+export const LEAVE_TYPES = [
+  { id: "planned", label: "Planned Leave", desc: "Planned personal time off", icon: Palmtree, dot: "bg-purple-400" },
+  { id: "tentative", label: "Tentative Leave", desc: "Not finalized yet - not counted as approved", icon: HelpCircle, dot: "bg-orange-400" },
   { id: "sick", label: "Sick Leave", desc: "Medical or health recovery", icon: Activity, dot: "bg-amber-400" },
   { id: "wfh", label: "Work From Home", desc: "Remote work day", icon: Home, dot: "bg-sky-400" },
   { id: "half_day", label: "Half Day", desc: "0.5 day session (morning/afternoon)", icon: Clock, dot: "bg-emerald-400" },
@@ -46,7 +48,7 @@ export function LeaveDialog({
 }: LeaveDialogProps) {
   const { user, isManager } = useAuth();
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
-  const [leaveType, setLeaveType] = useState<string>("casual");
+  const [leaveType, setLeaveType] = useState<string>("planned");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [reason, setReason] = useState<string>("");
@@ -64,7 +66,7 @@ export function LeaveDialog({
         setEndDate(leaveToEdit.end_date);
         setReason(leaveToEdit.reason || "");
         setHandoverNote(leaveToEdit.handover_note || "");
-        setLeaveType(leaveToEdit.leave_type || "casual");
+        setLeaveType(leaveToEdit.leave_type === "casual" ? "planned" : leaveToEdit.leave_type || "planned");
         setRequestTo(leaveToEdit.request_to || "default");
       } else {
         setSelectedMemberId(user?.id || "");
@@ -73,7 +75,7 @@ export function LeaveDialog({
         setEndDate(defaultDate);
         setReason("");
         setHandoverNote("");
-        setLeaveType("casual");
+        setLeaveType("planned");
         setRequestTo("default");
       }
 
@@ -97,8 +99,20 @@ export function LeaveDialog({
   const skippedWeekend = range.offDays.filter((d) => d.reason !== "Office Holiday").length;
   const skippedHolidays = range.offDays.filter((d) => d.reason === "Office Holiday").length;
 
+  // Planned Leave needs 2 days' notice (same IST "today" as the server). When editing an existing planned
+  // leave, only re-check if the type or start date was changed.
+  const todayIST = getTodayDateStr("Asia/Kolkata");
+  const plannedRuleApplies =
+    leaveType === "planned" &&
+    (!leaveToEdit || leaveToEdit.leave_type !== "planned" || leaveToEdit.start_date.slice(0, 10) !== startDate);
+  const plannedDateError = plannedRuleApplies && startDate ? plannedLeaveDateError(startDate, todayIST, officeHolidays) : null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (plannedDateError) {
+      toast.error(plannedDateError);
+      return;
+    }
     if (!startDate || !endDate) {
       toast.error("Please select start and end dates");
       return;
@@ -151,12 +165,14 @@ export function LeaveDialog({
             reason: reason.trim() || undefined,
             requestTo: requestTo === "default" ? null : requestTo,
             handoverNote: handoverNote.trim() || undefined,
-            status: "approved",
+            status: leaveType === "tentative" ? "tentative" : "approved",
           });
         }
 
         toast.success(
-          leaveType === "wfh"
+          leaveType === "tentative"
+            ? `Tentative leave saved for ${daysCount} working ${daysCount === 1 ? "day" : "days"} (not approved)`
+            : leaveType === "wfh"
             ? `WFH scheduled for ${daysCount} working ${daysCount === 1 ? "day" : "days"}`
             : `Leave request submitted (${daysCount} working ${daysCount === 1 ? "day" : "days"})`
         );
@@ -286,6 +302,7 @@ export function LeaveDialog({
               </Label>
               <Input
                 id="start_date"
+                min={leaveType === "planned" && plannedRuleApplies ? earliestPlannedLeaveDate(todayIST, officeHolidays) : undefined}
                 type="date"
                 value={startDate}
                 onChange={(e) => {
@@ -315,6 +332,12 @@ export function LeaveDialog({
               />
             </div>
           </div>
+
+          {plannedDateError && (
+            <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px] font-medium text-destructive">
+              {plannedDateError}
+            </p>
+          )}
 
           {/* Working-days summary */}
           <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5">
@@ -425,7 +448,7 @@ export function LeaveDialog({
             <Button
               type="submit"
               size="sm"
-              disabled={submitting || !startDate}
+              disabled={submitting || !startDate || !!plannedDateError}
               className="text-xs h-7.5 px-3.5 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-xs"
             >
               <Check className="h-3.5 w-3.5" />

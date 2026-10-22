@@ -343,10 +343,10 @@ function TeamCapacityPage() {
 
       // Active leave or WFH status for today (DB leaves/wfh for today)
       const wfhRecord = activeLeavesToday.find(
-        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh"
+        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type === "wfh"
       );
       const leaveRecord = activeLeavesToday.find(
-        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh"
+        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type !== "wfh"
       );
       const activeLeave = leaveRecord;
       const isOnLeave = !!activeLeave;
@@ -706,8 +706,8 @@ function TeamCapacityPage() {
 
     const result = Array.from(groupMap.values()).map((g) => {
       const membersList = Array.from(g.membersMap.values()).map((m) => {
-        const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh");
-        const activeWfh = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh");
+        const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type !== "wfh");
+        const activeWfh = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type === "wfh");
         const isOnLeave = !!activeLeave;
         const isWfh = !!activeWfh;
         const activeTasks = isOnLeave ? [] : m.tasks.filter((t) => t.status === "In Progress");
@@ -1481,7 +1481,7 @@ function TeamCapacityPage() {
                           ) : item.isOnLeave ? (
                             <div className="p-2 rounded-lg bg-muted/30 border border-border/50 text-xs space-y-0.5">
                               <div className="font-semibold text-muted-foreground flex items-center gap-1 text-[11px]">
-                                <Palmtree className="h-3 w-3 text-amber-400/80" /> On Leave ({(item.activeLeave?.leave_type || "CASUAL").replace(/^on leave\s*/i, "").replace(/^\(|\)$/g, "").toUpperCase()})
+                                <Palmtree className="h-3 w-3 text-amber-400/80" /> On Leave ({(item.activeLeave?.leave_type || "PLANNED").replace(/^on leave\s*/i, "").replace(/^\(|\)$/g, "").toUpperCase()})
                               </div>
                               <div className="text-[10px] text-muted-foreground/80 italic truncate">
                                 Timer & active tasks paused
@@ -1854,8 +1854,8 @@ function TeamCapacityPage() {
                               const liveTask = m.activeTasks[0]; // ONLY In Progress task!
                               const queuedTask = m.upcomingTasks[0];
                               const memberInfo = memberData.find((md) => md.profile.id === p.id);
-                              const activeLeave = memberInfo?.activeLeave || activeLeavesToday.find((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh");
-                              const activeWfh = memberInfo?.isWfh || activeLeavesToday.some((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh");
+                              const activeLeave = memberInfo?.activeLeave || activeLeavesToday.find((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type !== "wfh");
+                              const activeWfh = memberInfo?.isWfh || activeLeavesToday.some((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type === "wfh");
                               const isOnLeave = !!activeLeave || memberInfo?.isOnLeave;
                               const isWfh = !!activeWfh || memberInfo?.isWfh;
                               const isWorkingNow = !!liveTask && !isOnLeave;

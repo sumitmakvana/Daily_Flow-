@@ -66,6 +66,38 @@ export function toLocalISO(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Planned Leave must start at least this many calendar days after today. */
+export const PLANNED_LEAVE_MIN_DAYS_AHEAD = 2;
+
+/**
+ * Earliest allowed Planned Leave start date (YYYY-MM-DD) for a given "today" (YYYY-MM-DD):
+ * today + 2 days, moved forward to the next working day if that lands on a weekend or company holiday.
+ */
+export function earliestPlannedLeaveDate(todayISO: string, officeHolidays: OfficeHolidayLike[] = []): string {
+  const [y, m, d] = todayISO.slice(0, 10).split("-").map(Number);
+  let offset = PLANNED_LEAVE_MIN_DAYS_AHEAD;
+  let iso = new Date(Date.UTC(y, m - 1, d + offset)).toISOString().slice(0, 10);
+  for (let i = 0; i < 60 && getDayOff(iso, officeHolidays); i++) {
+    offset += 1;
+    iso = new Date(Date.UTC(y, m - 1, d + offset)).toISOString().slice(0, 10);
+  }
+  return iso;
+}
+
+/** Returns an error message if a Planned Leave starting on startDate is too soon, else null. */
+export function plannedLeaveDateError(
+  startDate: string,
+  todayISO: string,
+  officeHolidays: OfficeHolidayLike[] = []
+): string | null {
+  const earliest = earliestPlannedLeaveDate(todayISO, officeHolidays);
+  if (startDate >= earliest) return null;
+  const [y, m, d] = todayISO.slice(0, 10).split("-").map(Number);
+  const plain = new Date(Date.UTC(y, m - 1, d + PLANNED_LEAVE_MIN_DAYS_AHEAD)).toISOString().slice(0, 10);
+  const skipped = earliest !== plain ? " (weekends and company holidays are skipped)" : "";
+  return `Planned Leave must be applied at least ${PLANNED_LEAVE_MIN_DAYS_AHEAD} days in advance. The earliest allowed date is ${earliest}${skipped}. For sooner dates, use Tentative, Sick, WFH or Half Day.`;
+}
+
 /** Next working day (skip Sat/Sun) as YYYY-MM-DD. */
 export function nextWorkingDay(fromISO?: string): string {
   const base = fromISO ? (parseLocalYYYYMMDD(fromISO) || new Date()) : new Date();

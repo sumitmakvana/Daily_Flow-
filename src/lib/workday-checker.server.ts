@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getPool } from "@/integrations/postgres/client.server";
 import { getLocalHoliday } from "@/lib/format";
 import { getTodayDateStr } from "@/lib/task-date-utils";
+import { promoteDueTentativeLeaves } from "@/services/leaves.server";
 
 export interface WorkingDayCheckResult {
   isWorkingDay: boolean;
@@ -89,9 +90,10 @@ export async function checkIsWorkingDayServer(dateStr?: string): Promise<Working
 export async function getUsersOnLeaveTodayServer(dateStr?: string): Promise<Set<string>> {
   const targetDate = dateStr || getTodayDateStr("Asia/Kolkata");
   try {
+    await promoteDueTentativeLeaves(targetDate, { throttle: true });
     const pool = getPool();
     const { rows } = await pool.query<{ user_id: string }>(
-      `SELECT user_id FROM public.leaves 
+      `SELECT user_id FROM public.leaves
        WHERE status = 'approved' 
          AND start_date::text <= $1 
          AND end_date::text >= $1`,

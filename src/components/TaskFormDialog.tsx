@@ -459,7 +459,7 @@ export function TaskFormDialog({
     const targetDate = form.due_date;
     const leave = activeLeaves.find((l) => {
       if (l.user_id !== form.assigned_to) return false;
-      if (l.status === "rejected" || l.status === "cancelled") return false;
+      if (l.status === "rejected" || l.status === "cancelled" || l.status === "tentative") return false;
       return targetDate >= l.start_date && targetDate <= l.end_date;
     });
     if (!leave) return null;
