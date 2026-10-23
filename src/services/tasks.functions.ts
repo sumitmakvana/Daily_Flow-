@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser } from "@/integrations/postgres/query.server";
 import { pushTaskProgress } from "@/lib/task-push.server";
+import { bankTimer, pauseOtherRunningTimers } from "@/lib/task-timer.server";
 import type { Task } from "@/lib/types";
 
 /**
@@ -51,38 +52,15 @@ export const createTaskFn = createServerFn({ method: "POST" })
       const keys = Object.keys(payload);
       if (keys.length === 0) throw new Error("Empty task payload");
 
-      // BACKEND ENFORCEMENT: Single Active Task per user.
+      // BACKEND ENFORCEMENT: Single running timer per user. Only a running timer
+      // (started_at) counts; other tasks keep their status.
       const targetAssignee = (payload.assigned_to as string) || context.userId;
-      const isBecomingActive = payload.status === "In Progress" || (payload.started_at && payload.started_at !== null);
-
-      if (isBecomingActive && targetAssignee) {
-        const activeOtherRes = await client.query<{ id: string; started_at: string | null; system_hours: number | null; status: string }>(
-          `SELECT id, started_at::text, system_hours, status FROM public.tasks 
-           WHERE assigned_to = $1 
-             AND (status = 'In Progress' OR started_at IS NOT NULL) 
-             AND status != 'Completed'`,
-          [targetAssignee]
-        );
-
-        for (const otherTask of activeOtherRes.rows) {
-          let newSysHours = Number(otherTask.system_hours ?? 0);
-          if (otherTask.started_at) {
-            const startTs = new Date(otherTask.started_at).getTime();
-            const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
-            newSysHours += elapsed;
-          }
-          await client.query(
-            `UPDATE public.tasks 
-             SET status = 'To Do',
-                 started_at = NULL,
-                 system_hours = $1,
-                 version = version + 1,
-                 updated_at = NOW(),
-                 updated_by = $2
-             WHERE id = $3`,
-            [newSysHours, context.userId, otherTask.id]
-          );
-        }
+      if (payload.started_at && targetAssignee) {
+        await pauseOtherRunningTimers(client, {
+          userId: targetAssignee,
+          actorId: context.userId,
+          comment: "Timer paused automatically — started new active task",
+        });
       }
 
       const cols = keys.map((k) => `"${k}"`).join(", ");
@@ -139,7 +117,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       let existingSystemHours: number = 0;
       if (import.meta.env.MODE !== "test") {
         const oldTaskRes = await client.query<{ assigned_to: string | null; started_at: string | null; system_hours: number | null; status: string | null }>(
-          `SELECT assigned_to, started_at::text, system_hours, status::text AS status FROM public.tasks WHERE id = $1`,
+          `SELECT assigned_to, started_at::text, system_hours, status::text AS status FROM public.tasks WHERE id = $1 FOR UPDATE`,
           [data.id],
         );
         oldStatus = oldTaskRes.rows[0]?.status ?? null;
@@ -151,27 +129,20 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       const patch: Record<string, unknown> = { ...data.patch, updated_by: context.userId };
 
       // Handle started_at and system_hours calculations on status changes or explicit timer pauses
-      if (patch.status === "In Progress" && !existingStartedAt && patch.started_at !== null && !patch.started_at) {
+      if (existingStartedAt && typeof patch.started_at === "string" && patch.status !== "Completed") {
+        // Timer is already running (double-clicked / duplicate Resume): keep the original
+        // session start so the elapsed time so far is not thrown away.
+        delete patch.started_at;
+      } else if (patch.status === "In Progress" && !existingStartedAt && patch.started_at !== null && !patch.started_at) {
         patch.started_at = new Date().toISOString();
       } else if ((patch.status === "On Hold" || patch.status === "Blocked" || patch.status === "To Do" || patch.started_at === null) && existingStartedAt) {
-        const startTs = new Date(existingStartedAt).getTime();
-        const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+        const elapsed = await bankTimer(client, {
+          taskId: data.id,
+          userId: context.userId,
+          startedAt: existingStartedAt,
+        });
         patch.system_hours = existingSystemHours + elapsed;
         patch.started_at = null;
-        if (elapsed > 0) {
-          await client.query("SAVEPOINT worklog_insert");
-          try {
-            await client.query(
-              `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
-               VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
-              [data.id, context.userId, elapsed, existingStartedAt]
-            );
-            await client.query("RELEASE SAVEPOINT worklog_insert");
-          } catch (e) {
-            await client.query("ROLLBACK TO SAVEPOINT worklog_insert");
-            console.warn("[task_worklogs] insert failed:", (e as Error).message);
-          }
-        }
       } else if ((patch.status === "Completed" || patch.done === true)) {
         if (existingStartedAt || patch.started_at) {
           const startTs = new Date((patch.started_at as string) || existingStartedAt!).getTime();
@@ -197,66 +168,16 @@ export const updateTaskFn = createServerFn({ method: "POST" })
         patch.started_at = null;
       }
 
-      // BACKEND ENFORCEMENT: Single Active Task per user.
+      // BACKEND ENFORCEMENT: Single running timer per user. Only a running timer
+      // (started_at) counts; paused / carried-forward tasks neither block nor get changed.
       const targetAssignee = (patch.assigned_to as string | undefined) || oldAssignedTo || context.userId;
-      const isBecomingActive = patch.status === "In Progress" || (patch.started_at && patch.started_at !== null);
-
-      if (isBecomingActive && targetAssignee) {
-        const activeOtherRes = await client.query<{ id: string; started_at: string | null; system_hours: number | null; status: string }>(
-          `SELECT id, started_at::text, system_hours, status FROM public.tasks 
-           WHERE assigned_to = $1 
-             AND (status = 'In Progress' OR started_at IS NOT NULL) 
-             AND status != 'Completed'
-             AND id != $2`,
-          [targetAssignee, data.id]
-        );
-
-        for (const otherTask of activeOtherRes.rows) {
-          let newSysHours = Number(otherTask.system_hours ?? 0);
-          if (otherTask.started_at) {
-            const startTs = new Date(otherTask.started_at).getTime();
-            const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
-            newSysHours += elapsed;
-            if (elapsed > 0) {
-              await client.query("SAVEPOINT worklog_auto_pause");
-              try {
-                await client.query(
-                  `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
-                   VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
-                  [otherTask.id, context.userId, elapsed, otherTask.started_at]
-                );
-                await client.query("RELEASE SAVEPOINT worklog_auto_pause");
-              } catch (e) {
-                await client.query("ROLLBACK TO SAVEPOINT worklog_auto_pause");
-                console.warn("[task_worklogs] insert failed on single active auto-pause:", (e as Error).message);
-              }
-            }
-          }
-          await client.query(
-            `UPDATE public.tasks 
-             SET status = 'To Do',
-                 started_at = NULL,
-                 system_hours = $1,
-                 version = version + 1,
-                 updated_at = NOW(),
-                 updated_by = $2
-             WHERE id = $3`,
-            [newSysHours, context.userId, otherTask.id]
-          );
-
-          await client.query("SAVEPOINT history_auto_pause");
-          try {
-            await client.query(
-              `INSERT INTO public.task_history (task_id, old_status, new_status, updated_by, comment)
-               VALUES ($1, $2, 'To Do', $3, 'Timer paused automatically — started new active task')`,
-              [otherTask.id, otherTask.status, context.userId]
-            );
-            await client.query("RELEASE SAVEPOINT history_auto_pause");
-          } catch (e) {
-            await client.query("ROLLBACK TO SAVEPOINT history_auto_pause");
-            console.warn("[tasks] history insert failed on single-active auto-pause:", (e as Error).message);
-          }
-        }
+      if (patch.started_at && targetAssignee) {
+        await pauseOtherRunningTimers(client, {
+          userId: targetAssignee,
+          actorId: context.userId,
+          exceptTaskId: data.id,
+          comment: "Timer paused automatically — started new active task",
+        });
       }
 
       delete patch.id;

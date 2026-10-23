@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const queries: string[] = [];
-let taskRow: { assigned_to: string | null; status: string } | undefined;
+let taskRow: { assigned_to: string | null; status: string; started_at?: string | null } | undefined;
 let profileActive: boolean | null = true;
 let otherActive: Array<Record<string, unknown>> = [];
 
@@ -11,7 +11,7 @@ const client = {
     if (/FROM public\.tasks WHERE id = \$1 FOR UPDATE/.test(sql))
       return { rows: taskRow ? [taskRow] : [] };
     if (/SELECT is_active/.test(sql)) return { rows: [{ is_active: profileActive }] };
-    if (/AND id != \$2/.test(sql)) return { rows: otherActive };
+    if (/started_at IS NOT NULL\s+AND status <> 'Completed'/.test(sql)) return { rows: otherActive };
     return { rows: [] };
   }),
   release: vi.fn(),
@@ -70,8 +70,13 @@ describe("startTaskForUser (notification action)", () => {
     expect((await startTaskForUser(USER, TASK)).result).toBe("forbidden");
   });
 
-  it("is idempotent for an already started task", async () => {
-    taskRow = { assigned_to: USER, status: "In Progress" };
+  it("resumes an In Progress task whose timer is paused", async () => {
+    taskRow = { assigned_to: USER, status: "In Progress", started_at: null };
+    expect((await startTaskForUser(USER, TASK)).result).toBe("started");
+  });
+
+  it("is idempotent for an already running task", async () => {
+    taskRow = { assigned_to: USER, status: "In Progress", started_at: "2026-03-10T10:00:00Z" };
     expect((await startTaskForUser(USER, TASK)).result).toBe("already_in_progress");
     expect(queries.some((q) => q.startsWith("UPDATE"))).toBe(false);
   });

@@ -2,6 +2,7 @@ import type { CarryForwardEvent, Task } from "@/lib/types";
 import { nextWorkingDay, todayISO } from "@/lib/format";
 import {
   carryTaskForwardFn,
+  carryForwardWithTimerFn,
   listOverdueForUserFn,
   listCarryEventsForTaskFn,
 } from "./carry-forward.functions";
@@ -29,6 +30,17 @@ export const carryForwardService = {
         expectedVersion: task.version,
       },
     });
+  },
+
+  /** Stop the timer, bank today's hours, keep In Progress, move to the next working day. */
+  async carryWithTimer(task: Task): Promise<Task> {
+    return (await carryForwardWithTimerFn({
+      data: {
+        taskId: task.id,
+        toDate: nextWorkingDay(todayISO()),
+        expectedVersion: task.version,
+      },
+    })) as Task;
   },
 
   async carryAllOverdue(userId: string, ownerId: string): Promise<CarryAllResult> {
