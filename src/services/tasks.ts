@@ -178,7 +178,9 @@ export const tasksService = {
     if (import.meta.env.MODE === "test") {
       (globalThis as any).__test_user_id = userId;
     }
-    return this.update(task, { status: task.status === "In Progress" ? "To Do" : task.status, started_at: null } as Partial<Task>, userId);
+    // Stops the timer and banks the elapsed time server-side; the task status is left untouched
+    // (a paused In Progress task stays In Progress).
+    return this.update(task, { started_at: null } as Partial<Task>, userId);
   },
 
   async resumeTimer(task: Task, userId: string): Promise<Task> {
@@ -195,7 +197,7 @@ export const tasksService = {
         .from("tasks")
         .select("*")
         .eq("assigned_to", userId)
-        .or("status.eq.In Progress,started_at.not.is.null")
+        .not("started_at", "is", null)
         .neq("status", "Completed")
         .order("updated_at", { ascending: false })
         .limit(1)
@@ -226,7 +228,7 @@ export const tasksService = {
   },
 
   async switchActiveTask(oldTask: Task, newTask: Task, userId: string): Promise<{ stoppedTask: Task; startedTask: Task }> {
-    const stoppedTask = await this.update(oldTask, { status: "To Do", started_at: null } as Partial<Task>, userId);
+    const stoppedTask = await this.pauseTimer(oldTask, userId);
     const startedTask = await this.resumeTimer(newTask, userId);
     return { stoppedTask, startedTask };
   },

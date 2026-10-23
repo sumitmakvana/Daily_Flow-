@@ -73,7 +73,7 @@ export function MorningResumePromptModal() {
         const midnightTodayTs = new Date().setHours(0, 0, 0, 0);
         if (startTs < midnightTodayTs) {
           // Task timer was left running overnight from yesterday! Auto-pause it so it can be resumed via morning prompt.
-          await tasksService.setStatus(active, "To Do", user.id);
+          await tasksService.pauseTimer(active, user.id);
         } else {
           // Timer was started TODAY, user is actively working today
           localStorage.setItem("last_morning_resume_prompt_date", todayStr);
@@ -98,7 +98,8 @@ export function MorningResumePromptModal() {
       // Priority 1: Check for yesterday's paused/in-progress candidate task
       const pausedCandidate = pendingTasks.find(
         (t) =>
-          (t.status === "To Do" || t.status === "On Hold") &&
+          // A paused / carried-forward task is In Progress with no running timer.
+          (t.status === "To Do" || t.status === "On Hold" || (t.status === "In Progress" && !t.started_at)) &&
           (Number(t.system_hours ?? 0) > 0 || t.started_at !== null),
       );
 

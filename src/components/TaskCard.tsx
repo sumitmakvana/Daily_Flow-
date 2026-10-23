@@ -31,6 +31,7 @@ import {
   Pause,
   PauseCircle,
   ArrowRight,
+  CalendarClock,
   CheckCircle2,
   AlertOctagon,
   MoreHorizontal,
@@ -76,6 +77,7 @@ import type { Profile, Task, TaskStatus, WorkItemType, Attachment } from "@/lib/
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { taskEodService } from "@/services/task-eod";
+import { carryForwardService } from "@/services/carry-forward";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
@@ -219,6 +221,25 @@ export function TaskCard({
       onChanged();
     } catch (e) {
       handleError(e);
+    }
+  };
+
+  // Carry Forward → Tomorrow: only for In Progress tasks that are still due today or earlier.
+  const [carryBusy, setCarryBusy] = useState(false);
+  const canCarryWithTimer =
+    isOwner && task.status === "In Progress" && !!task.due_date && task.due_date <= toLocalISO(new Date());
+
+  const handleCarryWithTimer = async () => {
+    if (carryBusy) return;
+    setCarryBusy(true);
+    try {
+      await carryForwardService.carryWithTimer(task);
+      toast.success(`${task.task_code} carried forward to tomorrow · hours saved`);
+      onChanged();
+    } catch (e) {
+      handleError(e);
+    } finally {
+      setCarryBusy(false);
     }
   };
 
@@ -420,6 +441,11 @@ export function TaskCard({
               {canAct && task.status === "In Progress" && !task.started_at && (
                 <DropdownMenuItem onClick={() => handleStartOrResumeWithCheck()}>
                   <Play className="mr-2 h-3.5 w-3.5" /> Resume timer
+                </DropdownMenuItem>
+              )}
+              {canCarryWithTimer && (
+                <DropdownMenuItem disabled={carryBusy} onClick={handleCarryWithTimer}>
+                  <ArrowRight className="mr-2 h-3.5 w-3.5" /> Carry Forward → Tomorrow
                 </DropdownMenuItem>
               )}
               {canAct && task.status !== "On Hold" && task.status !== "Completed" && (
@@ -828,11 +854,24 @@ export function TaskCard({
                   </PopoverContent>
                 </Popover>
 
-
+                {canCarryWithTimer && (
+                  <button
+                    type="button"
+                    disabled={carryBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCarryWithTimer();
+                    }}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 h-6 px-2.5 rounded-md whitespace-nowrap leading-none bg-transparent border border-slate-600 text-slate-300 hover:bg-[#282a32] hover:text-slate-100 text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {carryBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarClock className="h-3 w-3" />}
+                    Carry to tomorrow
+                  </button>
+                )}
               </div>
 
-              <div className="flex items-center gap-1 ml-auto">
-                <TaskHoursBadges task={task} onToggleTimer={handleStartOrResumeWithCheck} />
+              <div className="flex items-center gap-1 ml-auto min-w-0 max-w-full">
+                <TaskHoursBadges task={task} className="whitespace-nowrap" onToggleTimer={handleStartOrResumeWithCheck} />
               </div>
             </div>
           </div>

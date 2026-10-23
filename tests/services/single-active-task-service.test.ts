@@ -60,12 +60,12 @@ describe("tasksService Single Active Task", () => {
 
   it("switchActiveTask pauses old active task and starts new task", async () => {
     vi.spyOn(tasksService, "update")
-      .mockResolvedValueOnce({ ...mockActiveTask, status: "To Do", started_at: null })
+      .mockResolvedValueOnce({ ...mockActiveTask, started_at: null })
       .mockResolvedValueOnce({ ...mockNewTask, status: "In Progress", started_at: new Date().toISOString() });
 
     const result = await tasksService.switchActiveTask(mockActiveTask, mockNewTask, "u1");
 
-    expect(result.stoppedTask.status).toBe("To Do");
+    expect(result.stoppedTask.status).toBe("In Progress"); // paused, not demoted to To Do
     expect(result.stoppedTask.started_at).toBeNull();
     expect(result.startedTask.status).toBe("In Progress");
     expect(result.startedTask.started_at).not.toBeNull();
