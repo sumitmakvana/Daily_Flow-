@@ -17,6 +17,40 @@ import type { Task } from "@/lib/types";
 
 const PartialTaskSchema = z.record(z.string(), z.unknown());
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Pulls the optional `reviewers` list out of a task payload. `undefined` means "not provided"
+ * (leave the reviewers alone); an array (possibly empty) is the complete new reviewer list.
+ */
+function takeReviewers(payload: Record<string, unknown>): string[] | undefined {
+  const raw = payload.reviewers;
+  delete payload.reviewers;
+  if (!Array.isArray(raw)) return undefined;
+  const ids: string[] = [];
+  for (const v of raw) {
+    if (typeof v === "string" && UUID_RE.test(v) && !ids.includes(v)) ids.push(v);
+  }
+  // tasks.reviewer is only a mirror of the primary reviewer; the list is the source of truth.
+  delete payload.reviewer;
+  return ids;
+}
+
+/** Applies a reviewer list through set_task_reviewers, but only when it actually changed. */
+async function applyReviewers(
+  client: import("pg").PoolClient,
+  taskId: string,
+  ids: string[],
+): Promise<void> {
+  const cur = await client.query<{ reviewer_id: string }>(
+    `SELECT reviewer_id FROM public.task_reviewers WHERE task_id = $1 ORDER BY position, created_at`,
+    [taskId],
+  );
+  const same = cur.rows.length === ids.length && cur.rows.every((r, i) => r.reviewer_id === ids[i]);
+  if (same) return;
+  await client.query(`SELECT * FROM public.set_task_reviewers($1, $2::uuid[])`, [taskId, ids]);
+}
+
 export const createTaskFn = createServerFn({ method: "POST" })
   .validator((d: { payload: Record<string, unknown> }) =>
     z.object({ payload: PartialTaskSchema }).parse(d),
@@ -29,6 +63,8 @@ export const createTaskFn = createServerFn({ method: "POST" })
         created_by: context.userId,
         updated_by: context.userId,
       };
+      const reviewerIds = takeReviewers(payload);
+      if (reviewerIds && reviewerIds.length > 0) payload.reviewer = reviewerIds[0];
 
       // Clean up auto-generated/system columns and virtual fields that shouldn't be explicitly inserted
       const keysToClean = ["id", "task_code", "created_at", "updated_at", "version", "today_system_hours", "worklogs"];
@@ -71,6 +107,10 @@ export const createTaskFn = createServerFn({ method: "POST" })
         values,
       );
       const insertedTask = res.rows[0];
+      // The insert trigger registered the primary reviewer; this sets the complete list.
+      if (insertedTask && reviewerIds && reviewerIds.length > 1) {
+        await applyReviewers(client, insertedTask.id, reviewerIds);
+      }
 
       // Send notification if assigned_to is set and is not the creator
       if (import.meta.env.MODE !== "test" && insertedTask && insertedTask.assigned_to && insertedTask.assigned_to !== context.userId) {
@@ -127,6 +167,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       }
 
       const patch: Record<string, unknown> = { ...data.patch, updated_by: context.userId };
+      const reviewerIds = takeReviewers(patch);
 
       // Handle started_at and system_hours calculations on status changes or explicit timer pauses
       if (existingStartedAt && typeof patch.started_at === "string" && patch.status !== "Completed") {
@@ -136,9 +177,11 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       } else if (patch.status === "In Progress" && !existingStartedAt && patch.started_at !== null && !patch.started_at) {
         patch.started_at = new Date().toISOString();
       } else if ((patch.status === "On Hold" || patch.status === "Blocked" || patch.status === "To Do" || patch.started_at === null) && existingStartedAt) {
+        // Worklogs belong to the person who worked the task (the assignee), not whoever
+        // pressed the button (e.g. a manager pausing it).
         const elapsed = await bankTimer(client, {
           taskId: data.id,
-          userId: context.userId,
+          userId: oldAssignedTo ?? context.userId,
           startedAt: existingStartedAt,
         });
         patch.system_hours = existingSystemHours + elapsed;
@@ -156,7 +199,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
               await client.query(
                 `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
                  VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
-                [data.id, context.userId, diffHrs, existingStartedAt || (patch.started_at as string)]
+                [data.id, oldAssignedTo ?? context.userId, diffHrs, existingStartedAt || (patch.started_at as string)]
               );
               await client.query("RELEASE SAVEPOINT worklog_insert_comp");
             } catch (e) {
@@ -212,6 +255,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       }
 
       const updatedTask = res.rows[0] ?? null;
+      if (updatedTask && reviewerIds) await applyReviewers(client, data.id, reviewerIds);
 
       // Send notification if assigned_to has changed and is not the updater
       if (import.meta.env.MODE !== "test" && updatedTask && updatedTask.assigned_to && updatedTask.assigned_to !== oldAssignedTo && updatedTask.assigned_to !== context.userId) {

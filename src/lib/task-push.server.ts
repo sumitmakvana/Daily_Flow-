@@ -18,7 +18,10 @@ interface TaskRow {
   priority: string | null;
   due_date: string | null;
   assigned_to: string | null;
+  /** Primary reviewer (mirror column). */
   reviewer: string | null;
+  /** Every assigned reviewer (task_reviewers). */
+  reviewer_ids?: string[] | null;
   created_by: string | null;
   actor_id: string | null;
   actor_name: string | null;
@@ -28,6 +31,8 @@ interface TaskRow {
 const TASK_SQL = `
   SELECT t.id, t.task_code, t.task_name, t.status::text AS status, t.priority::text AS priority,
          t.due_date::text AS due_date, t.assigned_to, t.reviewer, t.created_by,
+         COALESCE((SELECT array_agg(r.reviewer_id) FROM public.task_reviewers r WHERE r.task_id = t.id),
+                  ARRAY[]::uuid[]) AS reviewer_ids,
          COALESCE(t.updated_by, t.created_by) AS actor_id,
          actor.display_name AS actor_name, assignee.display_name AS assignee_name
     FROM public.tasks t
@@ -108,7 +113,9 @@ export async function pushTaskProgress(
       [actorId],
     );
     const actor = firstName(rows[0]?.display_name) ?? "Someone";
-    const recipients = [...new Set([t.assigned_to, t.reviewer, t.created_by])].filter(
+    const recipients = [
+      ...new Set([t.assigned_to, t.reviewer, ...(t.reviewer_ids ?? []), t.created_by]),
+    ].filter(
       (id): id is string => !!id && id !== actorId,
     );
     const title = kind === "started" ? "Task started" : "Task completed";

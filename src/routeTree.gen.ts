@@ -20,6 +20,7 @@ import { Route as AuthenticatedTimeTrackingRouteImport } from './routes/_authent
 import { Route as AuthenticatedTeamCapacityRouteImport } from './routes/_authenticated/team-capacity'
 import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
 import { Route as AuthenticatedSyncRouteImport } from './routes/_authenticated/sync'
+import { Route as AuthenticatedReviewsRouteImport } from './routes/_authenticated/reviews'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedPlanningSuggestionsRouteImport } from './routes/_authenticated/planning-suggestions'
 import { Route as AuthenticatedPlanningRouteImport } from './routes/_authenticated/planning'
@@ -119,6 +120,11 @@ const AuthenticatedTasksRoute = AuthenticatedTasksRouteImport.update({
 const AuthenticatedSyncRoute = AuthenticatedSyncRouteImport.update({
   id: '/sync',
   path: '/sync',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedReviewsRoute = AuthenticatedReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
@@ -392,6 +398,7 @@ export interface FileRoutesByFullPath {
   '/planning': typeof AuthenticatedPlanningRoute
   '/planning-suggestions': typeof AuthenticatedPlanningSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
+  '/reviews': typeof AuthenticatedReviewsRoute
   '/sync': typeof AuthenticatedSyncRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/team-capacity': typeof AuthenticatedTeamCapacityRoute
@@ -448,6 +455,7 @@ export interface FileRoutesByTo {
   '/planning': typeof AuthenticatedPlanningRoute
   '/planning-suggestions': typeof AuthenticatedPlanningSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
+  '/reviews': typeof AuthenticatedReviewsRoute
   '/sync': typeof AuthenticatedSyncRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/team-capacity': typeof AuthenticatedTeamCapacityRoute
@@ -506,6 +514,7 @@ export interface FileRoutesById {
   '/_authenticated/planning': typeof AuthenticatedPlanningRoute
   '/_authenticated/planning-suggestions': typeof AuthenticatedPlanningSuggestionsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
+  '/_authenticated/reviews': typeof AuthenticatedReviewsRoute
   '/_authenticated/sync': typeof AuthenticatedSyncRoute
   '/_authenticated/tasks': typeof AuthenticatedTasksRoute
   '/_authenticated/team-capacity': typeof AuthenticatedTeamCapacityRoute
@@ -564,6 +573,7 @@ export interface FileRouteTypes {
     | '/planning'
     | '/planning-suggestions'
     | '/reports'
+    | '/reviews'
     | '/sync'
     | '/tasks'
     | '/team-capacity'
@@ -620,6 +630,7 @@ export interface FileRouteTypes {
     | '/planning'
     | '/planning-suggestions'
     | '/reports'
+    | '/reviews'
     | '/sync'
     | '/tasks'
     | '/team-capacity'
@@ -677,6 +688,7 @@ export interface FileRouteTypes {
     | '/_authenticated/planning'
     | '/_authenticated/planning-suggestions'
     | '/_authenticated/reports'
+    | '/_authenticated/reviews'
     | '/_authenticated/sync'
     | '/_authenticated/tasks'
     | '/_authenticated/team-capacity'
@@ -807,6 +819,13 @@ declare module '@tanstack/react-router' {
       path: '/sync'
       fullPath: '/sync'
       preLoaderRoute: typeof AuthenticatedSyncRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/reviews': {
+      id: '/_authenticated/reviews'
+      path: '/reviews'
+      fullPath: '/reviews'
+      preLoaderRoute: typeof AuthenticatedReviewsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/reports': {
@@ -1162,6 +1181,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPlanningRoute: typeof AuthenticatedPlanningRoute
   AuthenticatedPlanningSuggestionsRoute: typeof AuthenticatedPlanningSuggestionsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
+  AuthenticatedReviewsRoute: typeof AuthenticatedReviewsRoute
   AuthenticatedSyncRoute: typeof AuthenticatedSyncRoute
   AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
   AuthenticatedTeamCapacityRoute: typeof AuthenticatedTeamCapacityRoute
@@ -1198,6 +1218,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPlanningRoute: AuthenticatedPlanningRoute,
   AuthenticatedPlanningSuggestionsRoute: AuthenticatedPlanningSuggestionsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
+  AuthenticatedReviewsRoute: AuthenticatedReviewsRoute,
   AuthenticatedSyncRoute: AuthenticatedSyncRoute,
   AuthenticatedTasksRoute: AuthenticatedTasksRoute,
   AuthenticatedTeamCapacityRoute: AuthenticatedTeamCapacityRoute,

@@ -885,7 +885,7 @@ function ExecutiveRealDashboard({
     const list = [
       { name: "Completed", value: metrics.completed, color: "#10b981" },
       { name: "In Progress", value: metrics.inProgress, color: "#3b82f6" },
-      { name: "In Review", value: metrics.inReview, color: "#a855f7" },
+      { name: "In Review", value: metrics.inReview, color: "#b4a9f0" },
       { name: "Pending", value: metrics.pending, color: "#f59e0b" },
       { name: "Blocked", value: metrics.blocked, color: "#f43f5e" },
     ].filter((item) => item.value > 0);
@@ -1158,8 +1158,8 @@ function ExecutiveRealDashboard({
                 <span className="flex items-center gap-1 text-blue-400 font-medium">
                   <span className="h-2 w-2 rounded-sm bg-[#3b82f6]" /> In Prog
                 </span>
-                <span className="flex items-center gap-1 text-purple-400 font-medium">
-                  <span className="h-2 w-2 rounded-sm bg-[#a855f7]" /> Review
+                <span className="flex items-center gap-1 text-review font-medium">
+                  <span className="h-2 w-2 rounded-sm bg-review" /> Review
                 </span>
                 <span className="flex items-center gap-1 text-amber-400 font-medium">
                   <span className="h-2 w-2 rounded-sm bg-[#f59e0b]" /> Pending
@@ -1217,7 +1217,7 @@ function ExecutiveRealDashboard({
                   />
                   <Bar dataKey="Completed" fill="#10b981" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
                   <Bar dataKey="InProgress" fill="#3b82f6" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
-                  <Bar dataKey="InReview" fill="#a855f7" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
+                  <Bar dataKey="InReview" fill="#b4a9f0" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
                   <Bar dataKey="Pending" fill="#f59e0b" stackId="a" radius={[0, 0, 0, 0]} barSize={18} />
                   <Bar dataKey="Blocked" fill="#f43f5e" stackId="a" radius={[2, 2, 0, 0]} barSize={18} />
                 </BarChart>
@@ -2836,9 +2836,9 @@ function StatusDetailSheet({
     "In Review": {
       title: "In Review Tasks — QA & Approvals",
       badge: "In Review",
-      badgeCls: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+      badgeCls: "bg-review/10 text-review border-review/30",
       icon: Clock,
-      iconCls: "text-purple-400 bg-purple-500/10 border-purple-500/30",
+      iconCls: "text-review bg-review/10 border-review/30",
     },
     Blocked: {
       title: "Blocked Tasks & Risk Analysis",

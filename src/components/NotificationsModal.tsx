@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Sun,
   ShieldCheck,
+  Eye,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -44,6 +45,15 @@ function getNotifIconConfig(n: AppNotification) {
   const title = (n.title || "").toLowerCase();
   const type = (n.type || "").toLowerCase();
 
+  if (type === "review_requested") {
+    return { icon: Eye, bg: "bg-review/15 text-review border-review/25" };
+  }
+  if (type === "review_approved") {
+    return { icon: CheckCheck, bg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" };
+  }
+  if (type === "review_changes_requested") {
+    return { icon: AlertOctagon, bg: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20" };
+  }
   if (type.includes("blocked") || title.includes("blocked")) {
     return {
       icon: AlertOctagon,

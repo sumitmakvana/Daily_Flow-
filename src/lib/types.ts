@@ -111,6 +111,53 @@ export interface Task {
   type_id: string | null;
   status_id: string | null;
   custom_fields: Record<string, unknown>;
+  /** When the current/latest review cycle was submitted (null if never reviewed). */
+  review_submitted_at?: string | null;
+  /**
+   * Every reviewer of the task (from task_reviewers, the single source of truth). Only present
+   * on form payloads; `reviewer` above is just the primary reviewer, kept for older readers.
+   */
+  reviewers?: string[];
+}
+
+export type ReviewDecision = "pending" | "approved" | "changes_requested" | "withdrawn";
+
+/** One reviewer's OWN status in one review cycle (task_review_decisions). */
+export interface ReviewerDecision {
+  reviewer_id: string | null;
+  decision: ReviewDecision;
+  /** Who actually decided; differs from reviewer_id when a manager decided on their behalf. */
+  decided_by: string | null;
+  decided_at: string | null;
+  feedback: string | null;
+}
+
+/** A reviewer assigned to a task (task_reviewers). */
+export interface TaskReviewer {
+  reviewer_id: string;
+  position: number;
+}
+
+/** One review cycle: submitted -> decided. `decided_by` is who actually decided (may differ from `reviewer_id`). */
+export interface TaskReview {
+  id: string;
+  task_id: string;
+  cycle_no: number;
+  submitted_by: string | null;
+  submitted_at: string;
+  reviewer_id: string | null;
+  decision: ReviewDecision;
+  decided_by: string | null;
+  decided_at: string | null;
+  feedback: string | null;
+  /** Set when the assignee entered/confirmed manual EOD logged hours for this cycle. */
+  logged_hours_confirmed_at?: string | null;
+  logged_hours_today?: number | null;
+  logged_hours_total?: number | null;
+  /** Total tracked timer hours (system_hours) when the cycle was submitted. */
+  system_hours_total?: number | null;
+  /** Each reviewer's own status for this cycle. The cycle's `decision` is derived from these. */
+  reviewers?: ReviewerDecision[];
 }
 
 export interface TaskHistory {

@@ -107,6 +107,12 @@ export const Route = createFileRoute("/api/public/actions/complete-task")({
           }
 
           const oldStatus = task.status;
+          if (oldStatus === "In Review") {
+            return htmlRedirectResponse(
+              `${origin}/?toast_error=This task is awaiting review and must be approved by its reviewer`,
+              "Awaiting Review",
+            );
+          }
           if (oldStatus !== "Completed") {
             await pool.query(
               `UPDATE public.tasks 

@@ -65,6 +65,10 @@ import { tasksService } from "@/services/tasks";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ReviewActions } from "./review/ReviewActions";
+import { ReviewHistory, ReviewHours, ReviewTimeline } from "./review/ReviewInfo";
+import { ReviewProgress } from "./review/ReviewProgress";
+import { reviewSubmitStore } from "@/services/review-submit-store";
 
 export type DetailViewMode = "modal" | "fullscreen" | "sidebar";
 
@@ -171,6 +175,10 @@ export function TaskDetailModal({
 
   const handleStatusChange = async (newStatus: TaskStatus) => {
     if (!user) return;
+    if (newStatus === "In Review") {
+      reviewSubmitStore.open(task, "submit", () => onTaskUpdated?.());
+      return;
+    }
     setIsUpdating(true);
     try {
       if (newStatus === "In Progress") {
@@ -503,6 +511,7 @@ export function TaskDetailModal({
                       <DropdownMenuItem
                         key={st}
                         onClick={() => handleStatusChange(st)}
+                        disabled={task.status === "In Review" ? st !== "In Review" : st === "In Review"}
                         className={cn("flex items-center justify-between text-xs cursor-pointer", task.status === st && "font-bold bg-accent")}
                       >
                         <StatusBadge status={st} />
@@ -511,6 +520,17 @@ export function TaskDetailModal({
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                {user && (
+                  <ReviewActions
+                    task={task}
+                    userId={user.id}
+                    isManager={isManager}
+                    onChanged={() => onTaskUpdated?.()}
+                    profiles={profiles}
+                    className="h-7 px-3 text-xs"
+                  />
+                )}
 
                 {task.status === "Completed" && (
                   <Button
@@ -526,6 +546,11 @@ export function TaskDetailModal({
                 )}
               </div>
             </div>
+
+            <ReviewTimeline task={task} />
+            <ReviewHours task={task} />
+            <ReviewProgress task={task} profiles={profiles} />
+            <ReviewHistory taskId={task.id} profiles={profiles} refreshKey={task.version} />
 
             <div className="grid grid-cols-[130px_1fr] items-center text-xs gap-2">
               <span className="text-muted-foreground font-medium flex items-center gap-1.5">

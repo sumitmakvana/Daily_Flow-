@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser } from "@/integrations/postgres/query.server";
 import { pushTaskProgress } from "@/lib/task-push.server";
+import { bankTimer } from "@/lib/task-timer.server";
 
 export type EodProgressStatus = "done" | "in_progress" | "blocked";
 
@@ -157,23 +158,53 @@ export const upsertTaskEodFn = createServerFn({ method: "POST" })
         );
         completedNow = isCompleted && !!prevRes.rows[0] && prevRes.rows[0].status !== "Completed";
 
-        // 4. Update the main tasks table to stay in sync with explicit type casting
+        // A task in review only changes status through the reviewer's decision; an EOD
+        // check-in may still record the hours.
+        if (prevRes.rows[0]?.status === "In Review") {
+          completedNow = false;
+          await client.query(
+            `UPDATE public.tasks SET actual_hours = $1, updated_by = $2 WHERE id = $3`,
+            [totalHours, context.userId, data.taskId],
+          );
+          return res.rows[0];
+        }
+
+        // 4. Bank any running timer exactly once (a worklog row for the assignee + system_hours),
+        //    then update the task. The timer is restarted from "now" when the task stays In
+        //    Progress: keeping the old start time while also adding the elapsed hours counted
+        //    the same stretch twice on the next pause.
+        const cur = await client.query<{
+          started_at: string | null;
+          system_hours: number | null;
+          assigned_to: string | null;
+        }>(
+          `SELECT started_at::text AS started_at, system_hours, assigned_to
+             FROM public.tasks WHERE id = $1 FOR UPDATE`,
+          [data.taskId],
+        );
+        let sysHours = Number(cur.rows[0]?.system_hours ?? 0);
+        const runningSince = cur.rows[0]?.started_at ?? null;
+        if (runningSince) {
+          sysHours += await bankTimer(client, {
+            taskId: data.taskId,
+            userId: cur.rows[0]?.assigned_to ?? context.userId,
+            startedAt: runningSince,
+          });
+        }
+
+        // 5. Update the main tasks table to stay in sync with explicit type casting
         await client.query(
           `UPDATE public.tasks
               SET status = $1::public.task_status,
                   completed_at = CASE WHEN $2::boolean THEN COALESCE(completed_at, now()) ELSE NULL END,
                   blocked_at = CASE WHEN $3::boolean THEN COALESCE(blocked_at, now()) ELSE NULL END,
-                  started_at = CASE WHEN $1::text = 'In Progress' THEN COALESCE(started_at, now()) ELSE NULL END,
-                  system_hours = CASE 
-                                   WHEN started_at IS NOT NULL 
-                                   THEN COALESCE(system_hours, 0) + LEAST(8.0, ROUND(EXTRACT(EPOCH FROM (COALESCE(completed_at, now()) - started_at)) / 3600.0, 2))
-                                   ELSE COALESCE(system_hours, 0) 
-                                 END,
+                  started_at = CASE WHEN $1::text = 'In Progress' THEN now() ELSE NULL END,
+                  system_hours = $7,
                   actual_hours = $4,
                   updated_at = now(),
                   updated_by = $5
             WHERE id = $6`,
-          [nextStatus, isCompleted, isBlocked, totalHours, context.userId, data.taskId]
+          [nextStatus, isCompleted, isBlocked, totalHours, context.userId, data.taskId, sysHours]
         );
       }
 
