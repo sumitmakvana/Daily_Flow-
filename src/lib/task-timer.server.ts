@@ -118,7 +118,9 @@ export async function pauseOtherRunningTimers(
   for (const other of others.rows) {
     const elapsed = await bankTimer(client, {
       taskId: other.id,
-      userId: args.actorId,
+      // These are the assignee's own tasks (WHERE assigned_to = args.userId): credit the
+      // worklog to them, not to the actor who triggered the pause.
+      userId: args.userId,
       startedAt: other.started_at,
     });
     await client.query(

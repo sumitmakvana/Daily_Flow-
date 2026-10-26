@@ -92,6 +92,19 @@ describe("task push messages", () => {
     expect(sent[0].msg.data.action).toBeUndefined();
   });
 
+  it("started: goes to EVERY reviewer, not just the primary one", async () => {
+    const R2 = "55555555-5555-4555-8555-555555555555";
+    taskRow = { ...baseTask(), reviewer: MANAGER, reviewer_ids: [MANAGER, R2] };
+    await pushTaskProgress("started", TASK, ASSIGNEE);
+    expect(sent.map((s) => s.userId).sort()).toEqual([MANAGER, R2].sort());
+  });
+
+  it("a person who is both reviewer and creator is notified once", async () => {
+    taskRow = { ...baseTask(), reviewer: MANAGER, reviewer_ids: [MANAGER], created_by: MANAGER };
+    await pushTaskProgress("started", TASK, ASSIGNEE);
+    expect(sent.map((s) => s.userId)).toEqual([MANAGER]);
+  });
+
   it("completed: notifies the assignee when someone else completes it", async () => {
     await pushTaskProgress("completed", TASK, MANAGER);
     expect(sent.map((s) => s.userId)).toEqual([ASSIGNEE]);

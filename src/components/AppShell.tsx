@@ -54,6 +54,8 @@ import { useNativeApp, getStoredPushToken } from "@/hooks/use-native-app";
 import { unregisterDeviceTokenFn } from "@/services/device-tokens.functions";
 import { storePushToken } from "@/lib/native-bridge";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
+import { GlobalReviewSubmitDialog } from "@/components/review/ReviewSubmitDialog";
+import { useInvalidateReviewDecisions, useReviewDecisionsRealtime } from "@/hooks/use-review-decisions";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { GlobalSearchModal } from "@/components/GlobalSearchModal";
 import { DraggableNotepadModal } from "@/components/notebook/DraggableNotepadModal";
@@ -76,6 +78,7 @@ const memberNav = [
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod-tasks", icon: Sun, label: "EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
+  { to: "/reviews", icon: Eye, label: "Reviews" },
   { to: "/notifications", icon: Bell, label: "Inbox" },
   { to: "/desktop-hub", icon: Download, label: "Install" },
 ];
@@ -91,12 +94,16 @@ const managerNav = [
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
+  { to: "/reviews", icon: Eye, label: "Reviews" },
   { to: "/exports", icon: Download, label: "Exports & Reports" },
   { to: "/desktop-hub", icon: Download, label: "Install" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isManager, isAdmin } = useAuth();
+  // Another reviewer's decision refreshes every per-reviewer view on screen.
+  const invalidateReviewDecisions = useInvalidateReviewDecisions();
+  useReviewDecisionsRealtime(invalidateReviewDecisions, "shell-review-decisions");
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -778,6 +785,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onOpenCreateTask={() => setAddTaskOpen(true)}
       />
       <GlobalCompleteTaskEodDialog />
+      <GlobalReviewSubmitDialog />
       <GlobalFeedbackWidget />
       <DockNotepadBar
         onOpenNote={handleOpenDockNote}

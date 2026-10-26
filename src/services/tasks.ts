@@ -21,6 +21,7 @@ import {
   addTaskCommentHistoryFn,
 } from "./tasks.functions";
 import { supabase } from "@/integrations/supabase/client";
+import { reviewsService } from "./reviews";
 
 export class TaskConflictError extends Error {
   constructor() {
@@ -128,11 +129,34 @@ export const tasksService = {
     task: Task,
     newStatus: TaskStatus,
     userId: string,
-    extras: { blocker_reason?: string; hold_reason?: string; actual_hours?: number } = {},
+    extras: {
+      blocker_reason?: string;
+      hold_reason?: string;
+      actual_hours?: number;
+      /** For "In Review": the assignee's manual EOD logged hours for today. */
+      logged_hours?: number;
+    } = {},
   ): Promise<Task> {
     if (import.meta.env.MODE === "test") {
       (globalThis as any).__test_user_id = userId;
     }
+    // In Review is a workflow, not a plain status: entering it opens a review cycle and
+    // notifies the reviewer; leaving it is the reviewer's decision (approve / request changes).
+    if (newStatus === "In Review") {
+      if (task.status === "In Review") return task;
+      const review = await reviewsService.submit(task, { loggedHours: extras.logged_hours });
+      return {
+        ...task,
+        status: "In Review",
+        started_at: null,
+        review_submitted_at: review?.submitted_at ?? new Date().toISOString(),
+        version: task.version + 1,
+      };
+    }
+    if (task.status === "In Review") {
+      throw new Error("This task is in review. The reviewer must approve it or request changes.");
+    }
+
     const patch: Partial<Task> = { status: newStatus };
     if (newStatus === "Completed") {
       patch.done = true;
@@ -186,6 +210,9 @@ export const tasksService = {
   async resumeTimer(task: Task, userId: string): Promise<Task> {
     if (import.meta.env.MODE === "test") {
       (globalThis as any).__test_user_id = userId;
+    }
+    if (task.status === "In Review") {
+      throw new Error("This task is in review. Changes must be requested before work can resume.");
     }
     return this.update(task, { status: "In Progress", started_at: new Date().toISOString() } as Partial<Task>, userId);
   },

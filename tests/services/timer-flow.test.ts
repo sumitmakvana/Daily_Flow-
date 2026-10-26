@@ -289,3 +289,52 @@ describe("Switching between tasks", () => {
     expect(results.map((r) => r.result).sort()).toEqual(["already_in_progress", "started"]);
   });
 });
+
+describe("Worklogs are credited to the assignee, not whoever pressed the button", () => {
+  const ASSIGNEE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // U (the actor) is a different person
+
+  it("a manager pausing someone else's timer", async () => {
+    add({ id: A, assigned_to: ASSIGNEE, status: "In Progress", started_at: ago(1), system_hours: 0 });
+
+    await tasksService.pauseTimer(asTask(A), U);
+
+    expect(db.logsFor(A)).toHaveLength(1);
+    expect(db.logsFor(A)[0]).toMatchObject({ system_hours: 1, user_id: ASSIGNEE });
+  });
+
+  it("starting a task for someone auto-pauses THEIR other timer, credited to them", async () => {
+    add({ id: A, assigned_to: ASSIGNEE, status: "In Progress", started_at: ago(1), system_hours: 0 });
+    add({ id: C, assigned_to: ASSIGNEE, status: "To Do" });
+
+    await tasksService.resumeTimer(asTask(C), U);
+
+    expect(db.logsFor(A)).toHaveLength(1);
+    expect(db.logsFor(A)[0].user_id).toBe(ASSIGNEE);
+  });
+
+  it("a manager completing someone else's running task", async () => {
+    add({ id: A, assigned_to: ASSIGNEE, status: "In Progress", started_at: ago(2), system_hours: 0 });
+
+    await tasksService.setStatus(asTask(A), "Completed", U);
+
+    const log = db.worklogs.find((w) => w.task_id === A);
+    expect(log?.user_id).toBe(ASSIGNEE);
+  });
+
+  it("carry forward with the timer", async () => {
+    add({ id: A, assigned_to: ASSIGNEE, status: "In Progress", started_at: ago(1.5), system_hours: 0 });
+
+    await carryForwardService.carryWithTimer(asTask(A));
+
+    expect(db.logsFor(A)).toHaveLength(1);
+    expect(db.logsFor(A)[0]).toMatchObject({ system_hours: 1.5, user_id: ASSIGNEE });
+  });
+
+  it("the assignee acting on their own task is unchanged", async () => {
+    add({ id: A, assigned_to: U, status: "In Progress", started_at: ago(1), system_hours: 0 });
+
+    await tasksService.pauseTimer(asTask(A), U);
+
+    expect(db.logsFor(A)[0].user_id).toBe(U);
+  });
+});

@@ -54,13 +54,14 @@ export const carryForwardWithTimerFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     return await withUser(context.userId, async (client) => {
       const cur = await client.query<{
+        assigned_to: string | null;
         status: string;
         started_at: string | null;
         system_hours: number | null;
         due_date: string | null;
         version: number;
       }>(
-        `SELECT status::text AS status, started_at::text, system_hours, due_date::text, version
+        `SELECT assigned_to, status::text AS status, started_at::text, system_hours, due_date::text, version
            FROM public.tasks WHERE id = $1 FOR UPDATE`,
         [data.taskId],
       );
@@ -78,7 +79,7 @@ export const carryForwardWithTimerFn = createServerFn({ method: "POST" })
       if (task.started_at) {
         sysHours += await bankTimer(client, {
           taskId: data.taskId,
-          userId: context.userId,
+          userId: task.assigned_to ?? context.userId,
           startedAt: task.started_at,
         });
       }

@@ -359,9 +359,14 @@ function TasksPage() {
 
   const handleBulkComplete = async () => {
     try {
-      const tasksToUpdate = tasks.filter((t) => selectedTaskIds.has(t.id));
+      const selected = tasks.filter((t) => selectedTaskIds.has(t.id));
+      // Tasks in review are completed by their reviewer's approval, not in bulk.
+      const tasksToUpdate = selected.filter((t) => t.status !== "In Review");
       await Promise.all(tasksToUpdate.map((t) => tasksService.setStatus(t, "Completed", user?.id || "")));
       toast.success(`Successfully completed ${tasksToUpdate.length} tasks`);
+      if (selected.length > tasksToUpdate.length) {
+        toast.info(`${selected.length - tasksToUpdate.length} task(s) in review were skipped. They need reviewer approval.`);
+      }
       setSelectedTaskIds(new Set());
       load(true);
     } catch (err) {
