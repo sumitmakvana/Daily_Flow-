@@ -1,31 +1,33 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, Reply, Pencil, Trash2, Check, X, AtSign, Image as ImageIcon, Paperclip, FileText } from "lucide-react";
-import { commentsService, extractMentionTokens, type CommentWithMentions } from "@/services/comments";
+import { MentionTextarea } from "@/components/MentionTextarea";
+import { MessageSquare, Reply, Pencil, Trash2, Check, X, Image as ImageIcon, Paperclip, FileText } from "lucide-react";
+import { commentsService, type CommentWithMentions } from "@/services/comments";
 import { attachmentsService } from "@/services/attachments";
+import { resolveMentionIds, splitMentions, type MentionUser } from "@/lib/mentions";
 import type { Profile } from "@/lib/types";
 import { formatRelative } from "@/lib/format";
 import { toast } from "sonner";
 
-/**
- * Resolves `@token` strings in `body` against `profiles.display_name`
- * (normalized to lower / spaces→underscore). Returns user ids of every
- * profile that matches at least one token.
- */
-function resolveMentions(body: string, profiles: Profile[]): string[] {
-  const tokens = extractMentionTokens(body).map((t) => t.toLowerCase());
-  if (tokens.length === 0) return [];
-  return profiles
-    .filter((p) => {
-      const norm = (p.display_name ?? "").toLowerCase().replace(/\s+/g, "_");
-      return tokens.some((t) => norm === t || norm.startsWith(t));
-    })
-    .map((p) => p.id);
-}
-
 function nameOf(id: string | null, profiles: Profile[]) {
   return profiles.find((p) => p.id === id)?.display_name ?? "—";
+}
+
+/** Comment body with the `@Name` runs of the people it mentions highlighted. */
+function CommentBody({ body, mentioned }: { body: string; mentioned: MentionUser[] }) {
+  return (
+    <>
+      {splitMentions(body, mentioned).map((seg, i) =>
+        seg.type === "mention" ? (
+          <span key={i} className="rounded-sm bg-primary/15 px-0.5 font-medium text-primary">
+            {seg.text}
+          </span>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        ),
+      )}
+    </>
+  );
 }
 
 export function CommentsPanel({
@@ -42,6 +44,10 @@ export function CommentsPanel({
 }) {
   const [items, setItems] = useState<CommentWithMentions[]>([]);
   const [body, setBody] = useState("");
+  const [replyBody, setReplyBody] = useState("");
+  const [fetchedUsers, setFetchedUsers] = useState<MentionUser[] | null>(null);
+  // Synchronous guard: `busy` state alone lets a fast double Enter/click submit twice.
+  const submitting = useRef(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -57,6 +63,26 @@ export function CommentsPanel({
   }, [workItemId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Mention candidates (with emails) come from the server; fall back to the
+  // profiles the host already loaded if that call fails.
+  useEffect(() => {
+    let cancelled = false;
+    commentsService
+      .mentionableUsers()
+      .then((u) => { if (!cancelled) setFetchedUsers(u); })
+      .catch(() => { /* fall back to the profiles prop */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const mentionUsers: MentionUser[] = useMemo(
+    () =>
+      fetchedUsers ??
+      profiles
+        .filter((p) => p.is_active !== false)
+        .map((p) => ({ id: p.id, display_name: p.display_name, email: p.email ?? null, avatar_url: p.avatar_url })),
+    [fetchedUsers, profiles],
+  );
 
   const addPendingFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
@@ -104,51 +130,70 @@ export function CommentsPanel({
     }
   };
 
-  const submit = async () => {
-    if (!body.trim() && pendingFiles.length === 0) return;
+  const submit = async (kind: "root" | "reply" = "root") => {
+    if (submitting.current) return;
+    const text = kind === "reply" ? replyBody : body;
+    if (!text.trim() && (kind === "reply" || pendingFiles.length === 0)) return;
+    submitting.current = true;
     setBusy(true);
     try {
-      const mentionUserIds = resolveMentions(body, profiles);
       const created = await commentsService.add({
         workItemId,
         userId,
-        body: body.trim() || "(Attachment uploaded)",
-        parentId: replyTo,
-        mentionUserIds,
+        body: text.trim() || "(Attachment uploaded)",
+        parentId: kind === "reply" ? replyTo : null,
+        mentionUserIds: resolveMentionIds(text, mentionUsers, userId),
       });
+      // The comment is saved: clear the draft now, whatever happens to uploads.
+      setItems((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]));
+      if (kind === "reply") {
+        setReplyBody("");
+        setReplyTo(null);
+      } else {
+        setBody("");
+      }
 
-      if (pendingFiles.length > 0) {
+      if (kind === "root" && pendingFiles.length > 0) {
+        const failed: typeof pendingFiles = [];
         for (const item of pendingFiles) {
           try {
             await attachmentsService.upload(workItemId, item.file, userId);
+            URL.revokeObjectURL(item.previewUrl);
           } catch (err) {
             console.error("Failed uploading comment attachment:", err);
+            failed.push(item);
           }
         }
-        pendingFiles.forEach((x) => URL.revokeObjectURL(x.previewUrl));
-        setPendingFiles([]);
+        // Keep files that failed so the user can retry instead of losing them.
+        setPendingFiles(failed);
+        if (failed.length > 0) toast.error(`Comment posted, but ${failed.length} attachment(s) failed to upload`);
       }
-
-      setItems((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]));
-      setBody("");
-      setReplyTo(null);
     } catch (e) {
+      // Draft (text + attachments) is left untouched so nothing is lost.
       toast.error((e as Error).message);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
 
   const saveEdit = async () => {
-    if (!editing) return;
+    if (!editing || submitting.current) return;
+    if (!editing.body.trim()) {
+      toast.error("Comment cannot be empty");
+      return;
+    }
+    submitting.current = true;
     setBusy(true);
     try {
-      await commentsService.edit(editing.id, editing.body);
+      await commentsService.edit(editing.id, editing.body, resolveMentionIds(editing.body, mentionUsers, userId));
       setEditing(null);
       await load();
     } catch (e) {
+      // Stay in edit mode with the typed text.
       toast.error((e as Error).message);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -183,16 +228,21 @@ export function CommentsPanel({
     if (editing?.id === c.id) {
       return (
         <div key={c.id} className={isReply ? "ml-6 mt-2" : ""}>
-          <Textarea
+          <MentionTextarea
             rows={2}
+            autoFocus
+            users={mentionUsers}
             value={editing.body}
-            onChange={(e) => setEditing({ id: c.id, body: e.target.value })}
+            onValueChange={(v) => setEditing({ id: c.id, body: v })}
+            onSubmit={() => void saveEdit()}
+            onCancel={() => setEditing(null)}
+            className="text-xs"
           />
           <div className="mt-1 flex gap-1 justify-end">
             <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
               <X className="h-3 w-3 mr-1" /> Cancel
             </Button>
-            <Button size="sm" disabled={busy} onClick={saveEdit}>
+            <Button size="sm" disabled={busy} onClick={() => void saveEdit()}>
               <Check className="h-3 w-3 mr-1" /> Save
             </Button>
           </div>
@@ -209,21 +259,16 @@ export function CommentsPanel({
           </span>
         </div>
         <div className={`mt-1 text-xs whitespace-pre-wrap ${isDeleted ? "italic text-muted-foreground" : "text-foreground"}`}>
-          {c.body}
+          {isDeleted ? (
+            c.body
+          ) : (
+            <CommentBody body={c.body} mentioned={mentionUsers.filter((u) => c.mentions.includes(u.id))} />
+          )}
         </div>
-        {c.mentions.length > 0 && !isDeleted && (
-          <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-muted-foreground">
-            {c.mentions.map((uid) => (
-              <span key={uid} className="inline-flex items-center gap-0.5 rounded-sm bg-accent px-1">
-                <AtSign className="h-2.5 w-2.5" /> {nameOf(uid, profiles)}
-              </span>
-            ))}
-          </div>
-        )}
         {!isDeleted && (
           <div className="mt-1 flex gap-1 justify-end">
             {!isReply && (
-              <Button size="sm" variant="ghost" className="h-6 px-1 text-xs" onClick={() => setReplyTo(c.id)}>
+              <Button size="sm" variant="ghost" className="h-6 px-1 text-xs" onClick={() => { setReplyTo(c.id); setReplyBody(""); }}>
                 <Reply className="h-3 w-3 mr-1" /> Reply
               </Button>
             )}
@@ -258,17 +303,22 @@ export function CommentsPanel({
             {(repliesByParent[c.id] ?? []).map((r) => renderComment(r, true))}
             {replyTo === c.id && (
               <div className="ml-6 mt-2 space-y-1">
-                <Textarea
+                <MentionTextarea
                   rows={2}
-                  placeholder="Reply… use @name to mention"
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
+                  autoFocus
+                  placeholder="Reply… type @ to mention (Enter to send, Shift+Enter for a new line)"
+                  users={mentionUsers}
+                  value={replyBody}
+                  onValueChange={setReplyBody}
+                  onSubmit={() => void submit("reply")}
+                  onCancel={() => { setReplyTo(null); setReplyBody(""); }}
+                  className="text-xs"
                 />
                 <div className="flex justify-end gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => { setReplyTo(null); setBody(""); }}>
+                  <Button size="sm" variant="ghost" onClick={() => { setReplyTo(null); setReplyBody(""); }}>
                     Cancel
                   </Button>
-                  <Button size="sm" disabled={busy || !body.trim()} onClick={submit}>
+                  <Button size="sm" disabled={busy || !replyBody.trim()} onClick={() => void submit("reply")}>
                     Reply
                   </Button>
                 </div>
@@ -305,11 +355,13 @@ export function CommentsPanel({
             />
           </div>
 
-          <Textarea
-            placeholder="Add a comment… use @name to mention (Tip: Press Ctrl+V to paste screenshot!)"
+          <MentionTextarea
+            placeholder="Add a comment… type @ to mention (Enter to send, Shift+Enter for a new line, Ctrl+V to paste a screenshot)"
             rows={2}
+            users={mentionUsers}
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onValueChange={setBody}
+            onSubmit={() => void submit("root")}
             onPaste={handlePaste}
             className="text-xs bg-background border-border text-foreground"
           />
@@ -365,7 +417,7 @@ export function CommentsPanel({
           )}
 
           <div className="flex justify-end">
-            <Button size="sm" disabled={busy || (!body.trim() && pendingFiles.length === 0)} onClick={submit} className="h-7 text-xs gap-1">
+            <Button size="sm" disabled={busy || (!body.trim() && pendingFiles.length === 0)} onClick={() => void submit("root")} className="h-7 text-xs gap-1">
               <MessageSquare className="h-3.5 w-3.5" /> Post Comment
             </Button>
           </div>
