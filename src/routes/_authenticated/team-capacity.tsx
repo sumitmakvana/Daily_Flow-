@@ -72,6 +72,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import { useAuth } from "@/hooks/use-auth";
+import { TeamReviewQueue } from "@/components/review/TeamReviewQueue";
+import { isReviewAging, reviewSubmittedAt } from "@/lib/review";
 import { tasksService } from "@/services/tasks";
 import { leavesService } from "@/services/leaves";
 import { cn } from "@/lib/utils";
@@ -170,7 +172,7 @@ function MemberProjectsBadge({
 }
 
 function TeamCapacityPage() {
-  const { user } = useAuth();
+  const { user, isManager } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("all");
@@ -333,6 +335,7 @@ function TeamCapacityPage() {
       );
       const completedTasks = memberTasks.filter((t) => t.status === "Completed");
       const blockedTasks = memberTasks.filter((t) => t.status === "Blocked");
+      const inReviewTasks = memberTasks.filter((t) => t.status === "In Review");
 
       const overdueTasks = memberTasks.filter((t) => {
         if (t.status === "Completed") return false;
@@ -343,10 +346,10 @@ function TeamCapacityPage() {
 
       // Active leave or WFH status for today (DB leaves/wfh for today)
       const wfhRecord = activeLeavesToday.find(
-        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh"
+        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type === "wfh"
       );
       const leaveRecord = activeLeavesToday.find(
-        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh"
+        (l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type !== "wfh"
       );
       const activeLeave = leaveRecord;
       const isOnLeave = !!activeLeave;
@@ -520,6 +523,7 @@ function TeamCapacityPage() {
         completedTasks,
         blockedTasks,
         overdueTasks,
+        inReviewTasks,
         plannedHours,
         maxDailyHours,
         capacityPct,
@@ -572,6 +576,7 @@ function TeamCapacityPage() {
         statusFilter === "all" ||
         (statusFilter === "completed" && item.completedTodayTasks.length > 0) ||
         (statusFilter === "in_progress" && item.activeTasks.length > 0) ||
+        (statusFilter === "in_review" && item.inReviewTasks.length > 0) ||
         (statusFilter === "to_do" && item.upcomingTasks.length > 0) ||
         (statusFilter === "overdue" && item.overdueTasks.length > 0) ||
         (statusFilter === "low_queue" && item.isLowQueue);
@@ -605,6 +610,9 @@ function TeamCapacityPage() {
     } else if (statusFilter === "in_progress") {
       const activeCount = filteredMembers.reduce((s, m) => s + m.activeTasks.length, 0);
       parts.push(`In Progress Work (${filteredMembers.length} members, ${activeCount} active tasks)`);
+    } else if (statusFilter === "in_review") {
+      const reviewCount = filteredMembers.reduce((s, m) => s + m.inReviewTasks.length, 0);
+      parts.push(`In Review (${filteredMembers.length} members, ${reviewCount} waiting for review)`);
     } else if (statusFilter === "to_do") {
       const toDoCount = filteredMembers.reduce((s, m) => s + m.upcomingTasks.length, 0);
       parts.push(`Queued To Do (${filteredMembers.length} members, ${toDoCount} pending tasks)`);
@@ -661,6 +669,8 @@ function TeamCapacityPage() {
         tasksToProcess = memberTasks.filter((t) => isTaskCompletedToday(t, todayStr));
       } else if (statusFilter === "in_progress") {
         tasksToProcess = memberTasks.filter((t) => t.status === "In Progress");
+      } else if (statusFilter === "in_review") {
+        tasksToProcess = memberTasks.filter((t) => t.status === "In Review");
       } else if (statusFilter === "to_do") {
         tasksToProcess = memberTasks.filter((t) => t.status === "To Do" || (t.status as string) === "Pending");
       } else if (statusFilter === "overdue") {
@@ -706,8 +716,8 @@ function TeamCapacityPage() {
 
     const result = Array.from(groupMap.values()).map((g) => {
       const membersList = Array.from(g.membersMap.values()).map((m) => {
-        const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh");
-        const activeWfh = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh");
+        const activeLeave = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type !== "wfh");
+        const activeWfh = activeLeavesToday.find((l: any) => l.user_id === m.profile.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type === "wfh");
         const isOnLeave = !!activeLeave;
         const isWfh = !!activeWfh;
         const activeTasks = isOnLeave ? [] : m.tasks.filter((t) => t.status === "In Progress");
@@ -738,6 +748,7 @@ function TeamCapacityPage() {
         : membersList.filter((m) => {
             if (statusFilter === "completed") return m.completedTodayTasks.length > 0;
             if (statusFilter === "in_progress") return m.activeTasks.length > 0;
+            if (statusFilter === "in_review") return m.tasks.some((t) => t.status === "In Review");
             if (statusFilter === "to_do") return m.upcomingTasks.length > 0;
             if (statusFilter === "overdue") return m.overdueTasks.length > 0;
             return true;
@@ -792,6 +803,10 @@ function TeamCapacityPage() {
     const inProgressCount = tasks.filter((t) => t.status === "In Progress").length;
     const inProgressPct = totalTasksCount > 0 ? Math.round((inProgressCount / totalTasksCount) * 100) : 0;
 
+    const inReviewTasksAll = tasks.filter((t) => t.status === "In Review");
+    const inReviewCount = inReviewTasksAll.length;
+    const inReviewAgingCount = inReviewTasksAll.filter((t) => isReviewAging(reviewSubmittedAt(t))).length;
+
     const toDoCount = tasks.filter((t) => t.status === "To Do" || (t.status as string) === "Pending").length;
     const toDoPct = totalTasksCount > 0 ? Math.round((toDoCount / totalTasksCount) * 100) : 0;
 
@@ -812,6 +827,8 @@ function TeamCapacityPage() {
       completedTodayHoursTotal,
       inProgressCount,
       inProgressPct,
+      inReviewCount,
+      inReviewAgingCount,
       toDoCount,
       toDoPct,
       overdueCount,
@@ -907,7 +924,7 @@ function TeamCapacityPage() {
       </div>
 
       {/* Top Metric KPI Cards Bar (Clean, Minimal, Neutral) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
         {/* Card 1: Total Tasks */}
         <div
           onClick={() => {
@@ -968,6 +985,28 @@ function TeamCapacityPage() {
           </div>
           <div className="text-2xl md:text-3xl font-bold text-foreground font-mono tracking-tight">{kpis.inProgressCount}</div>
           <div className="text-[11px] text-muted-foreground">{kpis.inProgressPct}% of total</div>
+        </div>
+
+        {/* Card: In Review (tasks waiting on their reviewers) */}
+        <div
+          onClick={() => {
+            setStatusFilter(statusFilter === "in_review" ? "all" : "in_review");
+            setCurrentPage(1);
+          }}
+          className={cn(
+            "bg-card border rounded-xl p-4 space-y-2 cursor-pointer transition-all hover:border-border",
+            statusFilter === "in_review" ? "border-review/60 ring-1 ring-review/30" : "border-border/70"
+          )}
+          title="Click to see every task waiting for review, with reviewer status and approve / request-changes actions"
+        >
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Eye className="h-3.5 w-3.5 text-review" />
+            <span>In Review</span>
+          </div>
+          <div className="text-2xl md:text-3xl font-bold text-foreground font-mono tracking-tight">{kpis.inReviewCount}</div>
+          <div className={cn("text-[11px]", kpis.inReviewAgingCount > 0 ? "text-amber-400 font-medium" : "text-muted-foreground")}>
+            {kpis.inReviewAgingCount > 0 ? `${kpis.inReviewAgingCount} waiting over 24h` : "None waiting over 24h"}
+          </div>
         </div>
 
         {/* Card 4: To Do */}
@@ -1226,6 +1265,7 @@ function TeamCapacityPage() {
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="completed">Completed Today</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="in_review">In Review</SelectItem>
               <SelectItem value="to_do">To Do</SelectItem>
               <SelectItem value="overdue">Overdue</SelectItem>
               <SelectItem value="low_queue">⚡ Low Backlog (&lt;16h)</SelectItem>
@@ -1273,6 +1313,7 @@ function TeamCapacityPage() {
             "flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-xs text-foreground shadow-2xs border transition-all",
             statusFilter === "completed" && "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
             statusFilter === "in_progress" && "bg-blue-500/10 border-blue-500/30 text-blue-400",
+            statusFilter === "in_review" && "bg-review/10 border-review/30 text-review",
             statusFilter === "to_do" && "bg-amber-500/10 border-amber-500/30 text-amber-400",
             statusFilter === "overdue" && "bg-rose-500/10 border-rose-500/30 text-rose-400",
             availabilityFilter === "low_queue" && "bg-emerald-500/10 border-emerald-500/30 text-emerald-300",
@@ -1300,8 +1341,28 @@ function TeamCapacityPage() {
         </div>
       )}
 
+      {/* IN REVIEW QUEUE: every task waiting for review in the current filters */}
+      {statusFilter === "in_review" && (
+        <TeamReviewQueue
+          tasks={filteredMembers
+            .flatMap((m) => m.inReviewTasks)
+            .filter(
+              (t) =>
+                projectFilter === "all" ||
+                (t.project_name ?? "").toLowerCase().includes(projectFilter.toLowerCase()),
+            )}
+          profiles={profiles}
+          userId={user?.id ?? ""}
+          isManager={isManager}
+          onChanged={() => queryClient.invalidateQueries({ queryKey: ["capacity-tasks"] })}
+          onOpenTask={(task) =>
+            setInspectTaskItem({ task, profile: profiles.find((pr) => pr.id === task.assigned_to) })
+          }
+        />
+      )}
+
       {/* MAIN TABLE VIEW */}
-      {viewMode === "table" && (
+      {viewMode === "table" && statusFilter !== "in_review" && (
         <div className="bg-card border border-border/70 rounded-xl overflow-x-auto shadow-2xs">
           <table className="w-full min-w-[900px] text-left text-xs border-collapse table-fixed">
             <thead>
@@ -1481,7 +1542,7 @@ function TeamCapacityPage() {
                           ) : item.isOnLeave ? (
                             <div className="p-2 rounded-lg bg-muted/30 border border-border/50 text-xs space-y-0.5">
                               <div className="font-semibold text-muted-foreground flex items-center gap-1 text-[11px]">
-                                <Palmtree className="h-3 w-3 text-amber-400/80" /> On Leave ({(item.activeLeave?.leave_type || "CASUAL").replace(/^on leave\s*/i, "").replace(/^\(|\)$/g, "").toUpperCase()})
+                                <Palmtree className="h-3 w-3 text-amber-400/80" /> On Leave ({(item.activeLeave?.leave_type || "PLANNED").replace(/^on leave\s*/i, "").replace(/^\(|\)$/g, "").toUpperCase()})
                               </div>
                               <div className="text-[10px] text-muted-foreground/80 italic truncate">
                                 Timer & active tasks paused
@@ -1730,7 +1791,7 @@ function TeamCapacityPage() {
       )}
 
       {/* CARD GRID VIEW MODE (COMPACT ODOO-STYLE PROJECT CARDS) */}
-      {viewMode === "card" && (
+      {viewMode === "card" && statusFilter !== "in_review" && (
         <div>
           {projectGroupedData.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1854,8 +1915,8 @@ function TeamCapacityPage() {
                               const liveTask = m.activeTasks[0]; // ONLY In Progress task!
                               const queuedTask = m.upcomingTasks[0];
                               const memberInfo = memberData.find((md) => md.profile.id === p.id);
-                              const activeLeave = memberInfo?.activeLeave || activeLeavesToday.find((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type !== "wfh");
-                              const activeWfh = memberInfo?.isWfh || activeLeavesToday.some((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.leave_type === "wfh");
+                              const activeLeave = memberInfo?.activeLeave || activeLeavesToday.find((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type !== "wfh");
+                              const activeWfh = memberInfo?.isWfh || activeLeavesToday.some((l: any) => l.user_id === p.id && l.status !== "rejected" && l.status !== "cancelled" && l.status !== "tentative" && l.leave_type === "wfh");
                               const isOnLeave = !!activeLeave || memberInfo?.isOnLeave;
                               const isWfh = !!activeWfh || memberInfo?.isWfh;
                               const isWorkingNow = !!liveTask && !isOnLeave;

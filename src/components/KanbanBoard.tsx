@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, CheckCircle2, PlayCircle, AlertOctagon, CircleDashed } from "lucide-react";
+import { Plus, CheckCircle2, PlayCircle, AlertOctagon, CircleDashed, Eye } from "lucide-react";
 import { TaskCard } from "./TaskCard";
 import type { Profile, Task, TaskStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,8 @@ import { tasksService, TaskConflictError } from "@/services/tasks";
 import { completeEodStore } from "@/services/complete-eod-store";
 import { ActiveTaskConflictModal } from "./ActiveTaskConflictModal";
 import { toast } from "sonner";
+import { submitBlocker } from "@/lib/review";
+import { reviewSubmitStore } from "@/services/review-submit-store";
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -35,7 +37,8 @@ export function KanbanBoard({
   const [pendingActiveTask, setPendingActiveTask] = useState<Task | null>(null);
   const [switchBusy, setSwitchBusy] = useState(false);
 
-  // Define visible board columns. In Review is intentionally omitted from My Day kanban.
+  // Visible board columns. In Review is its own column: tasks enter it via "Send for review"
+  // and leave it through the reviewer's Approve / Request changes.
   const columns: {
     key: TaskStatus;
     label: string;
@@ -56,6 +59,13 @@ export function KanbanBoard({
       icon: <PlayCircle className="h-3.5 w-3.5 text-blue-400 fill-blue-400/20" />,
       badgeStyle: "bg-[#1d273b] text-blue-400 border-blue-500/40",
       addBtnStyle: "text-blue-400 hover:text-blue-300 hover:bg-[#1a2336]",
+    },
+    {
+      key: "In Review",
+      label: "IN REVIEW",
+      icon: <Eye className="h-3.5 w-3.5 text-review" />,
+      badgeStyle: "bg-review/15 text-review border-review/30",
+      addBtnStyle: "text-review hover:text-review/80 hover:bg-review/10",
     },
     {
       key: "Completed",
@@ -80,6 +90,21 @@ export function KanbanBoard({
 
   const handleDropStatus = async (task: Task, status: TaskStatus) => {
     if (!userId || task.status === status) return;
+
+    if (task.status === "In Review") {
+      toast.info("This task is in review. The reviewer must approve it or request changes.");
+      return;
+    }
+    if (status === "In Review") {
+      const blocker = submitBlocker(task, { userId, isManager });
+      if (blocker) {
+        toast.error(blocker);
+        return;
+      }
+      // The assignee confirms their logged hours before the task goes to the reviewer.
+      reviewSubmitStore.open(task, "submit", onChanged);
+      return;
+    }
 
     if (status === "Completed") {
       completeEodStore.open(task, onChanged);
@@ -140,11 +165,12 @@ export function KanbanBoard({
   return (
     <div className="space-y-3">
       {/* Dynamic Grid Columns Container (Fits on screen without horizontal scroll) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full pt-1 select-none items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 w-full pt-1 select-none items-start">
         {columns.map((col) => {
           const colTasks = tasks.filter((t) => {
             if (col.key === "To Do") return t.status === "To Do" || !t.status;
-            if (col.key === "In Progress") return t.status === "In Progress" || t.status === "In Review";
+            if (col.key === "In Progress") return t.status === "In Progress";
+            if (col.key === "In Review") return t.status === "In Review";
             if (col.key === "Completed") {
               return completedTodayOnly ? isTaskCompletedToday(t) : t.status === "Completed";
             }
@@ -176,6 +202,8 @@ export function KanbanBoard({
               }}
               className={cn(
                 "flex flex-col bg-[#141518] border border-[#23242a] rounded-2xl p-2.5 min-w-0 w-full shrink-0 shadow-lg space-y-2.5 transition-colors",
+                // the In Review column gets the same soft lavender outline as its cards
+                col.key === "In Review" && "border-review/40",
                 dropTargetStatus === col.key && "border-primary/70 bg-primary/5",
               )}
             >
@@ -194,15 +222,17 @@ export function KanbanBoard({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 text-slate-400">
-                  <button
-                    type="button"
-                    onClick={() => onAddTask?.(col.key)}
-                    className="p-1 hover:text-slate-200 rounded hover:bg-[#23242a]"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                {col.key !== "In Review" && (
+                  <div className="flex items-center gap-1 text-slate-400">
+                    <button
+                      type="button"
+                      onClick={() => onAddTask?.(col.key)}
+                      className="p-1 hover:text-slate-200 rounded hover:bg-[#23242a]"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Column Cards List */}
@@ -235,8 +265,8 @@ export function KanbanBoard({
                 ))}
               </div>
 
-              {/* Column Add Task Button (Screenshot 4) */}
-              <button
+              {/* Column Add Task Button (Screenshot 4). Tasks only enter review via "Send for review". */}
+              {col.key !== "In Review" && <button
                 type="button"
                 onClick={() => onAddTask?.(col.key)}
                 className={cn(
@@ -245,7 +275,7 @@ export function KanbanBoard({
                 )}
               >
                 <Plus className="h-4 w-4" /> Add Task
-              </button>
+              </button>}
             </div>
           );
         })}

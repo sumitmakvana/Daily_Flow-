@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { onRealtime, onRealtimeConnect } from "@/integrations/realtime/socket";
 import { automationsService, type AutomationHealth } from "@/services/automations";
 
 const SOFT_CAP = 5000;
@@ -14,8 +15,10 @@ export function HealthPanel() {
     let alive = true;
     const load = () => automationsService.health().then((d) => alive && setH(d)).catch(() => {});
     load();
-    const t = setInterval(load, 15_000);
-    return () => { alive = false; clearInterval(t); };
+    // Pushed by the server (`automation:health`); the shared socket is owned by the app shell. Refetch on reconnect to catch up.
+    const offEvent = onRealtime("automation:health", load);
+    const offConnect = onRealtimeConnect((isReconnect) => { if (isReconnect) load(); });
+    return () => { alive = false; offEvent(); offConnect(); };
   }, []);
 
   if (!h) return <Card className="p-4 text-xs text-muted-foreground">Loading…</Card>;

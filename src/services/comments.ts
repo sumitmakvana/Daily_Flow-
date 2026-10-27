@@ -9,10 +9,14 @@
 import type { Comment } from "@/lib/types";
 import {
   listCommentsFn,
+  listMentionableUsersFn,
   addCommentFn,
   editCommentFn,
   removeCommentFn,
+  type MentionableUser,
 } from "./comments.functions";
+
+export type { MentionableUser };
 
 export interface CommentWithMentions extends Comment {
   mentions: string[]; // user ids
@@ -21,6 +25,10 @@ export interface CommentWithMentions extends Comment {
 export const commentsService = {
   async list(workItemId: string): Promise<CommentWithMentions[]> {
     return (await listCommentsFn({ data: { workItemId } })) as unknown as CommentWithMentions[];
+  },
+
+  async mentionableUsers(): Promise<MentionableUser[]> {
+    return (await listMentionableUsersFn()) as unknown as MentionableUser[];
   },
 
   async add(opts: {
@@ -44,8 +52,9 @@ export const commentsService = {
     })) as unknown as CommentWithMentions;
   },
 
-  async edit(commentId: string, body: string): Promise<void> {
-    await editCommentFn({ data: { commentId, body } });
+  /** `mentionUserIds` re-syncs the comment's mentions; omit to leave them alone. */
+  async edit(commentId: string, body: string, mentionUserIds?: string[]): Promise<void> {
+    await editCommentFn({ data: { commentId, body, mentionUserIds } });
   },
 
   async remove(commentId: string): Promise<void> {

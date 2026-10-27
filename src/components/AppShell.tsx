@@ -34,6 +34,7 @@ import {
   Palmtree,
   Clock,
   BookOpen,
+  MessageSquarePlus,
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -41,7 +42,7 @@ import { HolidayBanner } from "@/components/HolidayBanner";
 import { AnnouncementNoticeBanner } from "@/components/AnnouncementNoticeBanner";
 import { DesktopNotificationPromptBanner } from "@/components/DesktopNotificationPromptBanner";
 import { UX4GAccessibilityToolbar } from "@/components/UX4GAccessibilityToolbar";
-import { GlobalFeedbackWidget } from "@/components/GlobalFeedbackWidget";
+import { GlobalFeedbackWidget, OPEN_FEEDBACK_EVENT } from "@/components/GlobalFeedbackWidget";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth, signOut } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -49,7 +50,12 @@ import { cn } from "@/lib/utils";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { NotificationsModal } from "@/components/NotificationsModal";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useNativeApp, getStoredPushToken } from "@/hooks/use-native-app";
+import { unregisterDeviceTokenFn } from "@/services/device-tokens.functions";
+import { storePushToken } from "@/lib/native-bridge";
 import { GlobalCompleteTaskEodDialog } from "@/components/CompleteTaskEodDialog";
+import { GlobalReviewSubmitDialog } from "@/components/review/ReviewSubmitDialog";
+import { useInvalidateReviewDecisions, useReviewDecisionsRealtime } from "@/hooks/use-review-decisions";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { GlobalSearchModal } from "@/components/GlobalSearchModal";
 import { DraggableNotepadModal } from "@/components/notebook/DraggableNotepadModal";
@@ -72,6 +78,7 @@ const memberNav = [
   { to: "/calendar", icon: CalendarRange, label: "Calendar" },
   { to: "/eod-tasks", icon: Sun, label: "EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
+  { to: "/reviews", icon: Eye, label: "Reviews" },
   { to: "/notifications", icon: Bell, label: "Inbox" },
   { to: "/desktop-hub", icon: Download, label: "Install" },
 ];
@@ -87,12 +94,16 @@ const managerNav = [
   { to: "/eod", icon: Sun, label: "EOD" },
   { to: "/eod-tasks", icon: Sun, label: "My EOD" },
   { to: "/blockers", icon: AlertOctagon, label: "Blockers" },
+  { to: "/reviews", icon: Eye, label: "Reviews" },
   { to: "/exports", icon: Download, label: "Exports & Reports" },
   { to: "/desktop-hub", icon: Download, label: "Install" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isManager, isAdmin } = useAuth();
+  // Another reviewer's decision refreshes every per-reviewer view on screen.
+  const invalidateReviewDecisions = useInvalidateReviewDecisions();
+  useReviewDecisionsRealtime(invalidateReviewDecisions, "shell-review-decisions");
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -229,7 +240,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         { to: "/eod-tasks", icon: Sun, label: "EOD" },
       ];
 
+  // Android (Capacitor) app: back button, deep links, FCM registration. No-op elsewhere.
+  useNativeApp(user?.id);
+
   const handleLogout = async () => {
+    // Stop pushes for this account on this device (must run while the token is still valid).
+    const pushToken = getStoredPushToken();
+    if (pushToken) {
+      await unregisterDeviceTokenFn({ data: { token: pushToken } }).catch(() => {});
+      storePushToken(null);
+    }
     await queryClient.cancelQueries();
     queryClient.clear();
     const res = await signOut();
@@ -327,7 +347,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => handleOpenDockNote()}
-              className="flex items-center justify-center h-8 w-8 rounded-md text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors"
+              className="md:hidden flex items-center justify-center h-8 w-8 rounded-md text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors"
               title="Open Draggable Notepad"
             >
               <BookOpen className="h-4 w-4 text-primary" />
@@ -369,58 +389,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to="/my-day" className="cursor-pointer">
-                      <Sunrise className="mr-2 h-4 w-4" />
-                      <span>My Day</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/time-tracking" className="cursor-pointer">
-                      <Clock className="mr-2 h-4 w-4 text-amber-400" />
-                      <span>Time Tracking</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/desktop-hub" className="cursor-pointer">
-                      <Download className="mr-2 h-4 w-4" />
-                      <span>Get Desktop App</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
                     <Link to="/settings/notifications" className="cursor-pointer">
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
                     </Link>
                   </DropdownMenuItem>
-                  {(isManager || isAdmin) && (
-                    <DropdownMenuItem asChild>
-                      <Link to="/exports" className="cursor-pointer">
-                        <Download className="mr-2 h-4 w-4 text-primary" />
-                        <span>Exports & Reports</span>
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => setAccessibilityOpen(true)} className="cursor-pointer">
-                    <Accessibility className="mr-2 h-4 w-4" />
-                    <span>Accessibility Toolbar</span>
-                  </DropdownMenuItem>
-                  {isAdmin && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/configure" className="cursor-pointer">
-                          <Settings className="mr-2 h-4 w-4" />
-                          <span>Configure</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/admin" className="cursor-pointer">
-                          <ShieldAlert className="mr-2 h-4 w-4" />
-                          <span>Admin Controls</span>
-                        </Link>
-                      </DropdownMenuItem>
-                    </>
-                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
                     <LogOut className="mr-2 h-4 w-4" />
@@ -482,8 +455,92 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
+      {/* RIGHT VERTICAL TOOLBAR - Desktop only. Holds the tools that used to be hidden in the account menu */}
+      <aside
+        aria-label="Quick tools"
+        className="hidden md:flex fixed right-0 top-24 bottom-0 z-20 w-12 flex-col items-center justify-between border-l border-border/60 bg-background py-3"
+      >
+        <div className="flex flex-col items-center gap-2">
+          {/* TEMP DISABLED: Time Tracking (manager/admin) - re-enable together with the /time-tracking route
+          {(isManager || isAdmin) && (
+            <Link
+              to="/time-tracking"
+              title="Time Tracking"
+              aria-label="Time Tracking"
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-slate-800/60",
+                location.pathname.startsWith("/time-tracking") ? "bg-[#141F36]" : "bg-slate-800/30",
+              )}
+            >
+              <Clock className="h-4 w-4 text-amber-400" />
+            </Link>
+          )}
+          */}
+          {isAdmin && (
+            <>
+              <Link
+                to="/configure"
+                title="Configure"
+                aria-label="Configure"
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-slate-800/60",
+                  location.pathname.startsWith("/configure") ? "bg-[#141F36]" : "bg-slate-800/30",
+                )}
+              >
+                <Settings className="h-4 w-4 text-slate-300" />
+              </Link>
+              <Link
+                to="/admin"
+                title="Admin Controls"
+                aria-label="Admin Controls"
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-slate-800/60",
+                  location.pathname.startsWith("/admin") ? "bg-[#141F36]" : "bg-slate-800/30",
+                )}
+              >
+                <ShieldAlert className="h-4 w-4 text-rose-400" />
+              </Link>
+            </>
+          )}
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleOpenDockNote()}
+            title="Open Quick Notepad"
+            aria-label="Open Quick Notepad"
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-slate-800/30 transition-colors hover:bg-slate-800/60"
+          >
+            <BookOpen className="h-4 w-4 text-primary" />
+          </button>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(OPEN_FEEDBACK_EVENT))}
+            title="Give App Feedback"
+            aria-label="Give App Feedback"
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-slate-800/30 transition-colors hover:bg-slate-800/60"
+          >
+            <MessageSquarePlus className="h-4 w-4 text-[#5C8EFA]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setAccessibilityOpen(true)}
+            title="Accessibility Toolbar"
+            aria-label="Accessibility Toolbar"
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-slate-800/30 text-slate-300 transition-colors hover:bg-slate-800/60 hover:text-white"
+          >
+            {/* Universal-access symbol: figure inside a circle */}
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9.25" />
+              <circle cx="12" cy="7.6" r="1.2" fill="currentColor" stroke="none" />
+              <path d="M7.5 10.4h9M12 10.4v3.4M12 13.8l-2.2 3.9M12 13.8l2.2 3.9" />
+            </svg>
+          </button>
+        </div>
+      </aside>
+
       {/* MAIN CONTENT AREA */}
-      <main id="main-content" tabIndex={-1} className="flex-1 pb-16 md:pb-0 focus:outline-none">
+      <main id="main-content" tabIndex={-1} className="flex-1 pb-16 md:pb-0 md:pr-12 focus:outline-none">
         <HolidayBanner />
         {/* <AnnouncementNoticeBanner /> */}
         {children}
@@ -687,20 +744,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
               <SheetClose asChild>
                 <Link
-                  to="/desktop-hub"
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md text-xs font-semibold transition-colors",
-                    location.pathname === "/desktop-hub"
-                      ? "bg-[#141F36] text-[#5C8EFA] font-bold"
-                      : "text-slate-300 hover:text-white hover:bg-slate-800/50",
-                  )}
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Get Desktop App</span>
-                </Link>
-              </SheetClose>
-              <SheetClose asChild>
-                <Link
                   to="/settings/notifications"
                   className={cn(
                     "flex items-center gap-3 px-3 py-2 rounded-md text-xs font-semibold transition-colors",
@@ -738,6 +781,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onOpenCreateTask={() => setAddTaskOpen(true)}
       />
       <GlobalCompleteTaskEodDialog />
+      <GlobalReviewSubmitDialog />
       <GlobalFeedbackWidget />
       <DockNotepadBar
         onOpenNote={handleOpenDockNote}

@@ -7,7 +7,7 @@ type Rows = Array<{ k: string | null; fp: string }>;
 
 /** A fake database: per-table fingerprint rows that a test can change, plus which triggers "exist". */
 function fakeDb() {
-  const tables: Record<string, Rows> = { tasks: [], nudges: [], risk_events: [], planning_suggestions: [], approval_requests: [] };
+  const tables: Record<string, Rows> = { tasks: [], nudges: [], risk_events: [], planning_suggestions: [], approval_requests: [], automation_queue_stats: [] };
   const triggers = new Set<string>();
   const sqlSeen: string[] = [];
   let failTable: string | null = null;
@@ -138,6 +138,17 @@ describe("it only ever reads", () => {
       expect(sql.trim()).toMatch(/^SELECT\b/i);
       expect(sql).not.toMatch(/\b(INSERT|UPDATE\s+\w|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT)\b/i);
     }
+  });
+
+  it("an automation health change emits automation:health to admins only", async () => {
+    const { db, emit, w } = setup();
+    db.tables.automation_queue_stats = [{ k: null, fp: "0|a" }];
+    await w.tick();
+    db.tables.automation_queue_stats = [{ k: null, fp: "7|b" }];
+    await w.tick();
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit.mock.calls[0][0]).toEqual(["role:admin"]);
+    expect(emit.mock.calls[0][1]).toBe("automation:health");
   });
 
   it("the shipped specs are all read-only SELECTs", () => {

@@ -28,6 +28,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task, type TaskHistory, type WorkItemType, type HolidayCalendar, type Leave } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
+import { ReviewerPicker } from "@/components/review/ReviewerPicker";
+import { cleanReviewerList } from "@/lib/review";
+import { reviewsService } from "@/services/reviews";
 import { getLocalHoliday, fetchIndianHolidays, formatRelative, getDefaultStartDate, todayISO, parseHoursOrMins, type Holiday } from "@/lib/format";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { workItemTypesService } from "@/services/work-item-types";
@@ -131,6 +135,7 @@ export function TaskFormDialog({
   userId: string;
   onSaved: () => void;
 }) {
+  const { isManager } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [types, setTypes] = useState<WorkItemType[]>([]);
   const [projects, setProjects] = useState<Array<{ id: string; name: string; client: string | null }>>([]);
@@ -159,6 +164,31 @@ export function TaskFormDialog({
         }
   );
   const [fieldDefs, setFieldDefs] = useState<WorkItemFieldDef[]>([]);
+
+  // Reviewers: task_reviewers is the source of truth, so the edit form loads the real list
+  // (the single `reviewer` column only mirrors the primary one).
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    if (initial?.id) {
+      reviewsService
+        .listReviewers(initial.id)
+        .then((rows) => alive && setForm((f) => ({ ...f, reviewers: rows.map((r) => r.reviewer_id) })))
+        .catch(() => alive && setForm((f) => ({ ...f, reviewers: initial.reviewer ? [initial.reviewer] : [] })));
+    }
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial?.id]);
+
+  // The assignee can never be one of the reviewers.
+  useEffect(() => {
+    setForm((f) => {
+      const cleaned = cleanReviewerList(f.reviewers ?? [], f.assigned_to);
+      return cleaned.length === (f.reviewers ?? []).length ? f : { ...f, reviewers: cleaned };
+    });
+  }, [form.assigned_to]);
 
   // UI State
   const [isExpanded, setIsExpanded] = useState(false);
@@ -459,7 +489,7 @@ export function TaskFormDialog({
     const targetDate = form.due_date;
     const leave = activeLeaves.find((l) => {
       if (l.user_id !== form.assigned_to) return false;
-      if (l.status === "rejected" || l.status === "cancelled") return false;
+      if (l.status === "rejected" || l.status === "cancelled" || l.status === "tentative") return false;
       return targetDate >= l.start_date && targetDate <= l.end_date;
     });
     if (!leave) return null;
@@ -821,6 +851,8 @@ export function TaskFormDialog({
                 {
                   ...form,
                   assigned_to: assigneeId,
+                  // a person cannot review the task they are assigned
+                  reviewers: cleanReviewerList(form.reviewers ?? [], assigneeId),
                 },
                 userId
               )
@@ -1539,9 +1571,15 @@ export function TaskFormDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {TASK_STATUSES.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
+                        {TASK_STATUSES.map((s) => {
+                          // In Review is entered via "Send for review" and left via Approve /
+                          // Request changes, never by picking it here.
+                          const inReviewNow = !!initial?.id && initial.status === "In Review";
+                          const locked = inReviewNow ? s !== "In Review" : s === "In Review";
+                          return (
+                            <SelectItem key={s} value={s} disabled={locked}>{s}</SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1561,20 +1599,18 @@ export function TaskFormDialog({
                     </Select>
                   </div>
 
-                  {/* Reviewer */}
+                  {/* Reviewers (one or more; the task is approved when ALL have approved) */}
                   <div>
-                    <Label className="text-xs text-muted-foreground">Reviewer</Label>
-                    <Select value={form.reviewer ?? NONE} onValueChange={(v) => setForm({ ...form, reviewer: v === NONE ? null : v })}>
-                      <SelectTrigger className="h-9 text-xs bg-card border-border">
-                        <SelectValue placeholder="None" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NONE}>None</SelectItem>
-                        {profiles.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs text-muted-foreground">Reviewers</Label>
+                    <ReviewerPicker
+                      // new/duplicated tasks start from the single legacy reviewer, if any
+                      value={form.reviewers ?? (form.reviewer ? [form.reviewer] : [])}
+                      onChange={(ids) => setForm({ ...form, reviewers: ids })}
+                      profiles={profiles}
+                      assigneeId={form.assigned_to}
+                      disabled={!!initial?.id && initial.status === "In Review" && !isManager}
+                      disabledReason="Only a manager can change the reviewers while the task is in review"
+                    />
                   </div>
 
                   {/* Project Field (Select or Type Custom) */}

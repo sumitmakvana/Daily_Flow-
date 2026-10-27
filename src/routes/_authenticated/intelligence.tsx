@@ -26,8 +26,17 @@ function IntelligencePage() {
   const [data, setData] = useState<IntelligenceBundle | null>(null);
   const [adoption, setAdoption] = useState<AdoptionDaily[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [pendingReviewerIds, setPendingReviewerIds] = useState<string[]>([]);
 
   useEffect(() => {
+    supabase
+      .from("pending_review_assignments" as never)
+      .select("reviewer_id")
+      .then(({ data: rows }) =>
+        setPendingReviewerIds(
+          ((rows ?? []) as unknown as Array<{ reviewer_id: string }>).map((r) => r.reviewer_id),
+        ),
+      );
     intelligenceService.load(14).then(setData);
     adoptionService.last14().then(setAdoption);
     supabase.from("profiles").select("id,display_name,avatar_url").then(({ data: p }) => setProfiles((p ?? []) as Profile[]));
@@ -44,7 +53,8 @@ function IntelligencePage() {
   const carryOffenders = [...data.tasks].filter((t) => (t.carry_forward_count ?? 0) >= 2 && t.status !== "Completed").sort((a, b) => (b.carry_forward_count ?? 0) - (a.carry_forward_count ?? 0)).slice(0, 6);
   const slaAtRisk = data.tasks.filter((t) => t.sla_due_at && new Date(t.sla_due_at) < new Date(Date.now() + 48 * 3600 * 1000) && t.status !== "Completed");
   const reviewerQueue = new Map<string, number>();
-  for (const t of data.tasks) if (t.status === "In Review" && t.reviewer) reviewerQueue.set(t.reviewer, (reviewerQueue.get(t.reviewer) ?? 0) + 1);
+  // Every reviewer who still has to decide counts, not only the primary reviewer.
+  for (const rid of pendingReviewerIds) reviewerQueue.set(rid, (reviewerQueue.get(rid) ?? 0) + 1);
   const reviewers = Array.from(reviewerQueue.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const rootCauses = blockerRootCauses(data.tasks);
   const profileName = (id: string) => profiles.find((p) => p.id === id)?.display_name ?? id.slice(0, 6);

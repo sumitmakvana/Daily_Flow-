@@ -34,6 +34,8 @@ export type WatchSpec = {
   row: (key: string | null) => Record<string, unknown>;
   /** If this DB trigger exists, the DB pushes events itself and we stand down. */
   standDownTrigger?: string;
+  /** Socket event name; defaults to `entity:changed`. */
+  event?: string;
 };
 
 const fp = (...cols: string[]) => `concat_ws('|', count(*), ${cols.join(", ")})`;
@@ -77,6 +79,21 @@ export const DEFAULT_SPECS: WatchSpec[] = [
     sql: `SELECT NULL::text AS k, ${fp(mx("updated_at"), mx("completed_at"), "count(*) FILTER (WHERE status = 'pending')")} AS fp
           FROM public.approval_requests`,
     rooms: () => [ALL_USERS_ROOM],
+    row: () => ({}),
+  },
+  {
+    // Automation health panel (admins): queue depth, 24h run counts, rule counts.
+    // The payload carries no data; the panel refetches over HTTP, which enforces auth.
+    table: "automation_health",
+    event: "automation:health",
+    sql: `SELECT NULL::text AS k, concat_ws('|',
+            (SELECT concat_ws('|', pending_count, updated_at) FROM public.automation_queue_stats LIMIT 1),
+            (SELECT concat_ws('|', count(*), count(*) FILTER (WHERE status = 'failed'), count(*) FILTER (WHERE status = 'dead'))
+               FROM public.automation_runs WHERE started_at >= now() - INTERVAL '24 hours'),
+            (SELECT concat_ws('|', count(*) FILTER (WHERE is_active AND auto_disabled_at IS NULL), count(*) FILTER (WHERE auto_disabled_at IS NOT NULL))
+               FROM public.automation_rules)
+          ) AS fp`,
+    rooms: () => ["role:admin"],
     row: () => ({}),
   },
 ];
@@ -239,14 +256,14 @@ export class EntityChangeWatcher {
     try {
       if (changed.length > this.bulkThreshold) {
         const rooms = [...new Set(changed.flatMap((k) => spec.rooms(k === "" ? null : k)))];
-        this.o.emit(rooms, "entity:changed", { schema: "public", table: spec.table, eventType: "UPDATE", new: {}, old: {}, bulk: true });
+        this.o.emit(rooms, spec.event ?? "entity:changed", { schema: "public", table: spec.table, eventType: "UPDATE", new: {}, old: {}, bulk: true });
         return;
       }
       for (const k of changed) {
         const key = k === "" ? null : k;
         const rooms = spec.rooms(key);
         if (rooms.length === 0) continue;
-        this.o.emit(rooms, "entity:changed", { schema: "public", table: spec.table, eventType: "UPDATE", new: spec.row(key), old: {} });
+        this.o.emit(rooms, spec.event ?? "entity:changed", { schema: "public", table: spec.table, eventType: "UPDATE", new: spec.row(key), old: {} });
       }
     } catch (err) {
       this.o.log?.(`[EntityWatcher] emit failed: ${(err as Error).message}`);
@@ -284,6 +301,6 @@ export async function startEntityWatcher(): Promise<EntityChangeWatcher | null> 
   g.__operonEntityWatcher = w;
   setPokeHandler(() => w.poke());
   w.start();
-  console.log(`[EntityWatcher] watching tasks, nudges, risk_events, planning_suggestions, approval_requests every ${intervalMs}ms (read-only SELECTs)`);
+  console.log(`[EntityWatcher] watching tasks, nudges, risk_events, planning_suggestions, approval_requests, automation_health every ${intervalMs}ms (read-only SELECTs)`);
   return w;
 }

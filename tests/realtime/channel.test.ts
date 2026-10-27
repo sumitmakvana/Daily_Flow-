@@ -196,11 +196,15 @@ describe("realtime channel — task/nudge/risk/suggestion events", () => {
     expect(cb.mock.calls.length).toBeLessThanOrEqual(2); // leading + one trailing
   });
 
-  it("a table-less subscription keeps the legacy poll and ignores socket events", () => {
+  it("a table-less or unsupported-table subscription never polls; it logs a warning", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const cb = vi.fn();
     createRealtimeChannel("x").on("postgres_changes", { event: "*" }, cb).subscribe();
-    vi.advanceTimersByTime(4000);
-    expect(cb).toHaveBeenCalledTimes(1);
+    createRealtimeChannel("y").on("postgres_changes", { event: "*", table: "unknown_table" }, cb).subscribe();
+    vi.advanceTimersByTime(60_000);
+    expect(cb).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 
   it("a table-less subscription on a channel that also has a pushed table gets NO socket events", () => {

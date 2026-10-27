@@ -40,6 +40,8 @@
   --color-status-todo: var(--status-todo);
   --color-status-progress: var(--status-progress);
   --color-status-review: var(--status-review);
+  --color-review: var(--review);
+  --color-status-inreview: var(--review);
   --color-status-blocked: var(--status-blocked);
   --color-status-hold: var(--status-hold);
   --color-status-completed: var(--status-completed);
@@ -85,7 +87,8 @@
   /* Status colors */
   --status-todo: oklch(0.68 0.015 264);       /* muted */
   --status-progress: oklch(0.70 0.16 235);    /* blue */
-  --status-review: oklch(0.70 0.18 310);      /* purple */
+  --status-review: oklch(0.70 0.18 310);      /* purple (kept for non-status uses) */
+  --review: oklch(0.80 0.09 285);             /* In Review: soft lavender, used for every In Review surface */
   --status-blocked: oklch(0.55 0.22 22);      /* dark red */
   --status-hold: oklch(0.78 0.15 75);         /* amber */
   --status-completed: oklch(0.72 0.18 152);   /* green */

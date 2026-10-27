@@ -31,6 +31,7 @@ import {
   Pause,
   PauseCircle,
   ArrowRight,
+  CalendarClock,
   CheckCircle2,
   AlertOctagon,
   MoreHorizontal,
@@ -76,8 +77,12 @@ import type { Profile, Task, TaskStatus, WorkItemType, Attachment } from "@/lib/
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { taskEodService } from "@/services/task-eod";
+import { carryForwardService } from "@/services/carry-forward";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { ReviewActions } from "./review/ReviewActions";
+import { ReviewPanel } from "./review/ReviewPanel";
+import { reviewSubmitStore } from "@/services/review-submit-store";
 
 export function TaskCard({
   task,
@@ -130,6 +135,10 @@ export function TaskCard({
   const [inlineBusy, setInlineBusy] = useState(false);
 
   const openCompleteModal = () => {
+    if (task.status === "In Review") {
+      toast.info("This task is in review. The reviewer completes it by approving.");
+      return;
+    }
     const runningSys = (task as any).started_at
       ? Math.min(8.0, Math.max(0, (Date.now() - new Date((task as any).started_at).getTime()) / 3600000))
       : 0;
@@ -188,6 +197,11 @@ export function TaskCard({
   };
 
   const setStatus = async (s: TaskStatus, extras = {}) => {
+    // Sending for review goes through the dialog where the assignee confirms logged hours.
+    if (s === "In Review") {
+      reviewSubmitStore.open(task, "submit", onChanged);
+      return;
+    }
     try {
       if (s === "In Progress" && userId) {
         const currentActive = await tasksService.getActiveTask(userId);
@@ -207,6 +221,10 @@ export function TaskCard({
 
   const handleStartOrResumeWithCheck = async () => {
     if (!userId) return;
+    if (task.status === "In Review") {
+      toast.info("This task is in review. Changes must be requested before work can resume.");
+      return;
+    }
     try {
       const currentActive = await tasksService.getActiveTask(userId);
       if (currentActive && currentActive.id !== task.id) {
@@ -219,6 +237,25 @@ export function TaskCard({
       onChanged();
     } catch (e) {
       handleError(e);
+    }
+  };
+
+  // Carry Forward → Tomorrow: only for In Progress tasks that are still due today or earlier.
+  const [carryBusy, setCarryBusy] = useState(false);
+  const canCarryWithTimer =
+    isOwner && task.status === "In Progress" && !!task.due_date && task.due_date <= toLocalISO(new Date());
+
+  const handleCarryWithTimer = async () => {
+    if (carryBusy) return;
+    setCarryBusy(true);
+    try {
+      await carryForwardService.carryWithTimer(task);
+      toast.success(`${task.task_code} carried forward to tomorrow · hours saved`);
+      onChanged();
+    } catch (e) {
+      handleError(e);
+    } finally {
+      setCarryBusy(false);
     }
   };
 
@@ -272,6 +309,8 @@ export function TaskCard({
         className={cn(
           "group relative p-3 bg-[#1e1f23] hover:bg-[#25262c] border border-[#2b2c34] hover:border-[#3e414c] rounded-xl transition-all flex flex-col gap-2.5 items-stretch cursor-pointer shadow-xs",
           overdue && "border-priority-high/40 bg-priority-high/[0.02]",
+          // a thin lavender edge marks cards that are waiting on reviewers, in the board and the list
+          task.status === "In Review" && "border-review/30 border-l-2 border-l-review/60",
           needsSplit && "border-amber-500/80 bg-amber-500/[0.06] ring-1 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
         )}
         onClick={(e) => {
@@ -420,6 +459,11 @@ export function TaskCard({
               {canAct && task.status === "In Progress" && !task.started_at && (
                 <DropdownMenuItem onClick={() => handleStartOrResumeWithCheck()}>
                   <Play className="mr-2 h-3.5 w-3.5" /> Resume timer
+                </DropdownMenuItem>
+              )}
+              {canCarryWithTimer && (
+                <DropdownMenuItem disabled={carryBusy} onClick={handleCarryWithTimer}>
+                  <ArrowRight className="mr-2 h-3.5 w-3.5" /> Carry Forward → Tomorrow
                 </DropdownMenuItem>
               )}
               {canAct && task.status !== "On Hold" && task.status !== "Completed" && (
@@ -734,6 +778,14 @@ export function TaskCard({
                         <button
                           key={s}
                           type="button"
+                          disabled={task.status === "In Review" ? s !== "In Review" : s === "In Review" && task.status !== "In Progress"}
+                          title={
+                            task.status === "In Review" && s !== "In Review"
+                              ? "Use Approve or Request changes"
+                              : s === "In Review" && task.status !== "In Progress"
+                                ? "Start the task first, then send it for review"
+                                : undefined
+                          }
                           onClick={async (e) => {
                             e.stopPropagation();
                             if (!userId) return;
@@ -744,7 +796,7 @@ export function TaskCard({
                             }
                             await setStatus(s as TaskStatus);
                           }}
-                          className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer"
+                          className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium hover:bg-[#282a32] text-slate-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           <span className="flex items-center gap-2">
                             <StatusBadge status={s as TaskStatus} />
@@ -828,15 +880,56 @@ export function TaskCard({
                   </PopoverContent>
                 </Popover>
 
-
+                {canCarryWithTimer && (
+                  <button
+                    type="button"
+                    disabled={carryBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCarryWithTimer();
+                    }}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 h-6 px-2.5 rounded-md whitespace-nowrap leading-none bg-transparent border border-slate-600 text-slate-300 hover:bg-[#282a32] hover:text-slate-100 text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {carryBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarClock className="h-3 w-3" />}
+                    Carry to tomorrow
+                  </button>
+                )}
               </div>
 
-              <div className="flex items-center gap-1 ml-auto">
-                <TaskHoursBadges task={task} onToggleTimer={handleStartOrResumeWithCheck} />
+              <div className="flex items-center gap-1 ml-auto min-w-0 max-w-full">
+                <TaskHoursBadges task={task} className="whitespace-nowrap" onToggleTimer={handleStartOrResumeWithCheck} />
               </div>
             </div>
           </div>
         </div>
+        {/* In Review: one aligned panel (submitted / waiting / logged / timer gap / reviewers) */}
+        {task.status === "In Review" && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <ReviewPanel task={task} profiles={profiles}>
+              <ReviewActions
+                task={task}
+                userId={userId}
+                isManager={canManage}
+                onChanged={onChanged}
+                profiles={profiles}
+                className="h-6 px-2 text-[11px]"
+              />
+            </ReviewPanel>
+          </div>
+        )}
+        {/* In Progress: the "Send for review" action for the assignee / a manager */}
+        {task.status === "In Progress" && (task.assigned_to === userId || canManage) && (
+          <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <ReviewActions
+              task={task}
+              userId={userId}
+              isManager={canManage}
+              onChanged={onChanged}
+              profiles={profiles}
+              className="h-7 px-2.5 text-xs"
+            />
+          </div>
+        )}
         {/* Inline Expandable Completion Panel (matching screenshot design) */}
         {completeModalOpen && (
           <div

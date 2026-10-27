@@ -3,6 +3,8 @@ import { emitToRooms, emitToUser } from "@/lib/realtime.server";
 import { EntityEventBatcher } from "@/lib/entity-events.server";
 import { isReadOnlyMode } from "@/lib/read-only-mode.server";
 import { sendEodEmail } from "@/services/email-dispatcher";
+import { sendPushToUser, isPushConfigured } from "@/lib/fcm.server";
+import { pushTaskAssigned } from "@/lib/task-push.server";
 import {
   getZeroTasksNudgeHtml,
   getUnstartedTasksNudgeHtml,
@@ -182,6 +184,36 @@ export function startNotificationListener() {
   connectAndListen();
 }
 
+async function sendPushForPayload(payload: NotificationPayload) {
+  if (!isPushConfigured()) return;
+  if (["system", "eod_team_digest", "sod_team_digest"].includes(payload.type)) return;
+  try {
+    const prefsRes = await getPool().query(
+      "SELECT notify_assignment, notify_blocker_resolved FROM public.notification_prefs WHERE user_id = $1",
+      [payload.user_id],
+    );
+    const prefs = prefsRes.rows[0];
+    if (payload.type === "task_assigned" && prefs?.notify_assignment === false) return;
+    if (payload.type === "task_blocked" && prefs?.notify_blocker_resolved === false) return;
+  } catch {
+    /* prefs unavailable: default to sending */
+  }
+  if (payload.type === "task_assigned" && payload.task_id) {
+    // Rich, task-specific message with the Start Task action.
+    await pushTaskAssigned({
+      userId: payload.user_id,
+      taskId: payload.task_id,
+      notificationId: payload.id,
+    });
+    return;
+  }
+  await sendPushToUser(payload.user_id, {
+    title: payload.title,
+    body: payload.body,
+    data: { type: payload.type, task_id: payload.task_id, notification_id: payload.id },
+  });
+}
+
 function enqueueNotificationPayload(payload: NotificationPayload) {
   // Push the in-app event first and independently of the email batching and
   // dedupe below, which exist only to avoid duplicate emails. Never let a
@@ -196,6 +228,7 @@ function enqueueNotificationPayload(payload: NotificationPayload) {
   // for notifications that production itself is already handling.
   if (isReadOnlyMode()) return;
 
+  void sendPushForPayload(payload);
   if (payload.type === "task_assigned" && payload.task_id) {
     const existing = userTaskAssignmentBatches.get(payload.user_id);
     if (existing) {

@@ -4,69 +4,11 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getPool } from "@/integrations/postgres/client.server";
 import { selectAsUser, withUser } from "@/integrations/postgres/query.server";
 import type { Leave } from "@/lib/types";
+import { getTodayDateStr } from "@/lib/task-date-utils";
+import { plannedLeaveDateError } from "@/lib/format";
 
-let tableEnsured = false;
-async function ensureLeavesTableAdmin() {
-  if (tableEnsured) return;
-  try {
-    const pool = getPool();
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS public.leaves (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-        leave_type text NOT NULL DEFAULT 'casual',
-        start_date date NOT NULL,
-        end_date date NOT NULL,
-        days_count numeric(4,1) DEFAULT 1.0,
-        reason text DEFAULT '',
-        status text NOT NULL DEFAULT 'approved',
-        handover_note text,
-        request_to uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-        reviewed_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-        reviewed_at timestamptz,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now()
-      );
-      ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS request_to uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
-      ALTER TABLE public.leaves ALTER COLUMN reason DROP NOT NULL;
-      CREATE INDEX IF NOT EXISTS idx_leaves_dates ON public.leaves(start_date, end_date);
-      CREATE INDEX IF NOT EXISTS idx_leaves_user ON public.leaves(user_id);
-    `);
-    tableEnsured = true;
-  } catch (err) {
-    console.warn("[leaves] ensure table check:", (err as Error).message);
-  }
-}
+import { ensureLeavesTableAdmin, autoPauseTasksForUserOnLeave, promoteDueTentativeLeaves, fetchCompanyHolidays } from "./leaves.server";
 
-export async function autoPauseTasksForUserOnLeave(pool: any, userId: string, leaveType?: string) {
-  try {
-    const leaveReason = leaveType ? `On Leave (${leaveType.toUpperCase()})` : "On Leave";
-    // Find active tasks for this user (status = 'In Progress' or started_at IS NOT NULL)
-    const activeRes = await pool.query(
-      `SELECT id, started_at::text, system_hours FROM public.tasks 
-       WHERE assigned_to = $1 AND (status = 'In Progress' OR started_at IS NOT NULL)`,
-      [userId]
-    );
-
-    for (const t of activeRes.rows) {
-      let sysHours = Number(t.system_hours || 0);
-      if (t.started_at) {
-        const startTs = new Date(t.started_at).getTime();
-        const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
-        sysHours += elapsed;
-      }
-
-      await pool.query(
-        `UPDATE public.tasks 
-         SET status = 'On Hold', hold_reason = $1, started_at = NULL, system_hours = $2, updated_at = now()
-         WHERE id = $3`,
-        [leaveReason, sysHours, t.id]
-      );
-    }
-  } catch (err) {
-    console.warn("[leaves] autoPauseTasksForUserOnLeave error:", err);
-  }
-}
 
 export const fetchLeavesFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -83,6 +25,7 @@ export const fetchLeavesFn = createServerFn({ method: "GET" })
   )
   .handler(async ({ data, context }) => {
     await ensureLeavesTableAdmin();
+    await promoteDueTentativeLeaves(undefined, { throttle: true });
     const startDate = data?.startDate;
     const endDate = data?.endDate;
     const status = data?.status;
@@ -187,7 +130,13 @@ export const createLeaveFn = createServerFn({ method: "POST" })
     }
 
     const days = data.daysCount ?? 1.0;
-    const initialStatus = data.status || "approved";
+    // Tentative leave is never confirmed: it is stored with status 'tentative' regardless of input
+    const isTentative = data.leaveType === "tentative";
+    if (data.leaveType === "planned") {
+      const dateError = plannedLeaveDateError(data.startDate, getTodayDateStr("Asia/Kolkata"), await fetchCompanyHolidays());
+      if (dateError) throw new Error(dateError);
+    }
+    const initialStatus = isTentative ? "tentative" : data.status || "approved";
 
     const insertRes = await pool.query<Leave>(
       `INSERT INTO public.leaves (user_id, leave_type, start_date, end_date, days_count, reason, status, handover_note, request_to)
@@ -213,6 +162,9 @@ export const createLeaveFn = createServerFn({ method: "POST" })
     if (initialStatus === "approved" && data.startDate <= todayStr && data.endDate >= todayStr) {
       await autoPauseTasksForUserOnLeave(pool, targetUserId, data.leaveType);
     }
+
+    // Tentative leave does not notify anyone: it is not a request or a confirmed absence
+    if (isTentative) return created;
 
     // Notifications
     try {
@@ -369,8 +321,8 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
     await ensureLeavesTableAdmin();
     const pool = getPool();
 
-    const existing = await pool.query<{ user_id: string }>(
-      `SELECT user_id FROM public.leaves WHERE id = $1`,
+    const existing = await pool.query<{ user_id: string; status: string; leave_type: string; start_date: string }>(
+      `SELECT user_id, status, leave_type, start_date::text FROM public.leaves WHERE id = $1`,
       [data.id]
     );
     if (existing.rows.length === 0) {
@@ -386,6 +338,16 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
       if (roleRes.rows.length === 0) {
         throw new Error("Only the leave creator, manager, or admin can edit this leave request.");
       }
+    }
+
+    // Planned Leave needs 2 days' notice; only re-check when the type or start date actually changes,
+    // so editing e.g. the reason of an already-started planned leave is not blocked.
+    const prev = existing.rows[0];
+    const nextType = data.leaveType ?? prev.leave_type;
+    const nextStart = data.startDate ?? prev.start_date;
+    if (nextType === "planned" && (nextType !== prev.leave_type || nextStart !== prev.start_date)) {
+      const dateError = plannedLeaveDateError(nextStart, getTodayDateStr("Asia/Kolkata"), await fetchCompanyHolidays());
+      if (dateError) throw new Error(dateError);
     }
 
     const updates: string[] = [];
@@ -404,9 +366,18 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
     }
 
 
+    let confirmedFromTentative = false;
     if (data.leaveType !== undefined) {
       params.push(data.leaveType);
       updates.push(`leave_type = $${params.length}`);
+      const prevStatus = existing.rows[0].status;
+      if (data.leaveType === "tentative" && prevStatus !== "cancelled" && prevStatus !== "rejected") {
+        updates.push(`status = 'tentative'`);
+      } else if (data.leaveType !== "tentative" && prevStatus === "tentative") {
+        // Converting a tentative entry into a real leave follows the normal create flow (auto-approved)
+        updates.push(`status = 'approved'`);
+        confirmedFromTentative = true;
+      }
     }
     if (data.startDate !== undefined) {
       params.push(data.startDate);
@@ -443,7 +414,14 @@ export const updateLeaveDetailsFn = createServerFn({ method: "POST" })
     `;
 
     const res = await pool.query<Leave>(query, params);
-    return res.rows[0];
+    const updatedLeave = res.rows[0];
+    if (confirmedFromTentative && updatedLeave) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (updatedLeave.start_date <= todayStr && updatedLeave.end_date >= todayStr) {
+        await autoPauseTasksForUserOnLeave(pool, updatedLeave.user_id, updatedLeave.leave_type);
+      }
+    }
+    return updatedLeave;
   });
 
 
@@ -612,7 +590,7 @@ export const checkUnstartedTasksTodayFn = createServerFn({ method: "GET" })
 
     // 1. Check if user already has an approved or pending leave for today
     const existingLeave = await pool.query(
-      `SELECT id FROM public.leaves WHERE user_id = $1 AND status != 'cancelled' AND $2::date BETWEEN start_date AND end_date`,
+      `SELECT id FROM public.leaves WHERE user_id = $1 AND status NOT IN ('cancelled', 'tentative') AND $2::date BETWEEN start_date AND end_date`,
       [userId, todayStr]
     );
 
@@ -682,7 +660,7 @@ export const quickMarkLeaveTodayFn = createServerFn({ method: "POST" })
 
     // Check if leave exists for today
     const existing = await pool.query<{ id: string }>(
-      `SELECT id FROM public.leaves WHERE user_id = $1 AND status != 'cancelled' AND $2::date BETWEEN start_date AND end_date`,
+      `SELECT id FROM public.leaves WHERE user_id = $1 AND status NOT IN ('cancelled', 'tentative') AND $2::date BETWEEN start_date AND end_date`,
       [userId, todayStr]
     );
 
@@ -692,13 +670,13 @@ export const quickMarkLeaveTodayFn = createServerFn({ method: "POST" })
 
     const inserted = await pool.query<{ id: string }>(
       `INSERT INTO public.leaves (user_id, leave_type, start_date, end_date, days_count, reason, status)
-       VALUES ($1, 'casual', $2::date, $2::date, 1.0, $3, 'approved')
+       VALUES ($1, 'planned', $2::date, $2::date, 1.0, $3, 'approved')
        RETURNING id`,
       [userId, todayStr, reasonText]
     );
 
     // Auto-pause active tasks & timers for this user
-    await autoPauseTasksForUserOnLeave(pool, userId, "casual");
+    await autoPauseTasksForUserOnLeave(pool, userId, "planned");
 
     // Notify managers
     try {

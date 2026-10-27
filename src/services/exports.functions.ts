@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser, adminSelect } from "@/integrations/postgres/query.server";
+import { promoteDueTentativeLeaves } from "@/services/leaves.server";
+import { buildMemberRows } from "@/services/capacity-report";
 
 const KIND = [
   "task_audit",
@@ -189,6 +191,11 @@ export interface CapacityReportRow {
   pctProject: string;
   isTotalRow?: boolean;
   isSeparatorRow?: boolean;
+  /** Approved leave hours in the period (member rows only). */
+  leaveHours?: number;
+  /** Monthly capacity minus leave hours, never below 0 (member rows only). */
+  availableCapacity?: number;
+  rowType?: "project" | "unassigned" | "leave" | "unused" | "over" | "total";
 }
 
 export interface ProjectSummaryRow {
@@ -326,18 +333,26 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
         eodProjectWhere = ` AND (t.project_id = $4::uuid OR pr.id = $4::uuid OR t.project_name = $4 OR pr.name = $4)`;
       }
 
+      // EOD hours are first collapsed to one row per (user, task) so that a task's
+      // system_hours is counted once, not once per EOD submission.
       const eodRes = await client.query<{ user_id: string; project_name: string; hours: string; auto_hours: string }>(
-        `SELECT e.user_id,
+        `WITH eod AS (
+           SELECT e.user_id, e.task_id, SUM(e.actual_hours) AS hrs
+             FROM public.task_eod_submissions e
+            WHERE e.submission_date >= $1 AND e.submission_date <= $2
+              AND e.user_id = ANY($3::uuid[])
+            GROUP BY e.user_id, e.task_id
+         )
+         SELECT eod.user_id,
                 COALESCE(NULLIF(t.project_name, ''), NULLIF(pr.name, ''), 'Unassigned') AS project_name,
-                SUM(e.actual_hours)::text AS hours,
+                SUM(eod.hrs)::text AS hours,
                 SUM(COALESCE(t.system_hours, 0))::text AS auto_hours
-           FROM public.task_eod_submissions e
-           JOIN public.tasks t ON t.id = e.task_id
+           FROM eod
+           JOIN public.tasks t ON t.id = eod.task_id
            LEFT JOIN public.projects pr ON pr.id = t.project_id
-          WHERE e.submission_date >= $1 AND e.submission_date <= $2
-            AND e.user_id = ANY($3::uuid[])
+          WHERE TRUE
             ${eodProjectWhere}
-          GROUP BY e.user_id, COALESCE(NULLIF(t.project_name, ''), NULLIF(pr.name, ''), 'Unassigned')`,
+          GROUP BY eod.user_id, COALESCE(NULLIF(t.project_name, ''), NULLIF(pr.name, ''), 'Unassigned')`,
         eodParams,
       );
 
@@ -361,16 +376,13 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
       const tasksRes = await client.query<{ user_id: string; project_name: string; hours: string; auto_hours: string }>(
         `SELECT t.assigned_to AS user_id,
                 COALESCE(NULLIF(t.project_name, ''), NULLIF(pr.name, ''), 'Unassigned') AS project_name,
-                SUM(COALESCE(t.actual_hours, t.planned_hours, 0))::text AS hours,
+                SUM(COALESCE(t.actual_hours, 0))::text AS hours,
                 SUM(COALESCE(t.system_hours, 0))::text AS auto_hours
            FROM public.tasks t
            LEFT JOIN public.projects pr ON pr.id = t.project_id
           WHERE t.assigned_to = ANY($3::uuid[])
-            AND (
-              (t.completed_at IS NOT NULL AND t.completed_at::date >= $1 AND t.completed_at::date <= $2)
-              OR (t.due_date IS NOT NULL AND t.due_date >= $1 AND t.due_date <= $2)
-              OR (t.created_at::date >= $1 AND t.created_at::date <= $2)
-            )
+            AND COALESCE(t.completed_at, t.updated_at)::date >= $1
+            AND COALESCE(t.completed_at, t.updated_at)::date <= $2
             AND NOT EXISTS (
               SELECT 1 FROM public.task_eod_submissions e2 WHERE e2.task_id = t.id
             )
@@ -388,6 +400,7 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
       }> = [];
 
       try {
+        await promoteDueTentativeLeaves(undefined, { throttle: true });
         leavesRows = await adminSelect<{
           user_id: string;
           leave_type: string;
@@ -399,7 +412,7 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
                   l.start_date::text,
                   l.end_date::text
              FROM public.leaves l
-            WHERE l.status NOT IN ('rejected', 'cancelled')
+            WHERE l.status NOT IN ('rejected', 'cancelled', 'tentative')
               AND l.leave_type <> 'wfh'
               AND l.start_date <= $2
               AND l.end_date >= $1
@@ -464,52 +477,14 @@ export const getMonthlyCapacityReportFn = createServerFn({ method: "POST" })
       const reportRows: CapacityReportRow[] = [];
 
       profiles.forEach((p, pIdx) => {
-        const projectHours = userProjectsMap[p.id] || {};
-        const autoProjectHours = userAutoProjectsMap[p.id] || {};
-        let totalLoggedAndLeave = 0;
-
-        Object.entries(projectHours).forEach(([projName, hrs]) => {
-          if (projName !== "Unassigned") {
-            totalLoggedAndLeave += hrs;
-          }
-        });
-
-        // Compute Unassigned hours if any
-        if (totalWorkingHours > totalLoggedAndLeave) {
-          const unassignedHrs = totalWorkingHours - totalLoggedAndLeave;
-          projectHours["Unassigned"] = (projectHours["Unassigned"] || 0) + unassignedHrs;
-        }
-
-        const projectEntries = Object.entries(projectHours).filter(([, hrs]) => hrs > 0);
-
-        if (projectEntries.length === 0) {
-          projectEntries.push(["Unassigned", totalWorkingHours]);
-        }
-
-        // Add rows for each project
-        projectEntries.forEach(([projName, hrs]) => {
-          const displayHrs = Math.round(hrs * 10) / 10;
-          const displayAutoHrs = Math.round((autoProjectHours[projName] || 0) * 10) / 10;
-          const pctNum = totalWorkingHours > 0 ? Math.round((hrs / totalWorkingHours) * 100) : 0;
-          reportRows.push({
-            teamMember: p.display_name,
-            projectName: projName,
-            hours: displayHrs,
-            autoHours: displayAutoHrs,
+        reportRows.push(
+          ...buildMemberRows(
+            p.display_name,
+            userProjectsMap[p.id] || {},
+            userAutoProjectsMap[p.id] || {},
             totalWorkingHours,
-            pctProject: `${pctNum}%`,
-          });
-        });
-
-        // Total row for member
-        reportRows.push({
-          teamMember: p.display_name,
-          projectName: "Total",
-          hours: totalWorkingHours,
-          totalWorkingHours,
-          pctProject: "100%",
-          isTotalRow: true,
-        });
+          ),
+        );
 
         // Separator between members
         if (pIdx < profiles.length - 1) {

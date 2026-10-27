@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser } from "@/integrations/postgres/query.server";
+import { pushTaskProgress } from "@/lib/task-push.server";
+import { bankTimer, pauseOtherRunningTimers } from "@/lib/task-timer.server";
 import type { Task } from "@/lib/types";
 
 /**
@@ -15,6 +17,40 @@ import type { Task } from "@/lib/types";
 
 const PartialTaskSchema = z.record(z.string(), z.unknown());
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Pulls the optional `reviewers` list out of a task payload. `undefined` means "not provided"
+ * (leave the reviewers alone); an array (possibly empty) is the complete new reviewer list.
+ */
+function takeReviewers(payload: Record<string, unknown>): string[] | undefined {
+  const raw = payload.reviewers;
+  delete payload.reviewers;
+  if (!Array.isArray(raw)) return undefined;
+  const ids: string[] = [];
+  for (const v of raw) {
+    if (typeof v === "string" && UUID_RE.test(v) && !ids.includes(v)) ids.push(v);
+  }
+  // tasks.reviewer is only a mirror of the primary reviewer; the list is the source of truth.
+  delete payload.reviewer;
+  return ids;
+}
+
+/** Applies a reviewer list through set_task_reviewers, but only when it actually changed. */
+async function applyReviewers(
+  client: import("pg").PoolClient,
+  taskId: string,
+  ids: string[],
+): Promise<void> {
+  const cur = await client.query<{ reviewer_id: string }>(
+    `SELECT reviewer_id FROM public.task_reviewers WHERE task_id = $1 ORDER BY position, created_at`,
+    [taskId],
+  );
+  const same = cur.rows.length === ids.length && cur.rows.every((r, i) => r.reviewer_id === ids[i]);
+  if (same) return;
+  await client.query(`SELECT * FROM public.set_task_reviewers($1, $2::uuid[])`, [taskId, ids]);
+}
+
 export const createTaskFn = createServerFn({ method: "POST" })
   .validator((d: { payload: Record<string, unknown> }) =>
     z.object({ payload: PartialTaskSchema }).parse(d),
@@ -27,6 +63,8 @@ export const createTaskFn = createServerFn({ method: "POST" })
         created_by: context.userId,
         updated_by: context.userId,
       };
+      const reviewerIds = takeReviewers(payload);
+      if (reviewerIds && reviewerIds.length > 0) payload.reviewer = reviewerIds[0];
 
       // Clean up auto-generated/system columns and virtual fields that shouldn't be explicitly inserted
       const keysToClean = ["id", "task_code", "created_at", "updated_at", "version", "today_system_hours", "worklogs"];
@@ -50,38 +88,15 @@ export const createTaskFn = createServerFn({ method: "POST" })
       const keys = Object.keys(payload);
       if (keys.length === 0) throw new Error("Empty task payload");
 
-      // BACKEND ENFORCEMENT: Single Active Task per user.
+      // BACKEND ENFORCEMENT: Single running timer per user. Only a running timer
+      // (started_at) counts; other tasks keep their status.
       const targetAssignee = (payload.assigned_to as string) || context.userId;
-      const isBecomingActive = payload.status === "In Progress" || (payload.started_at && payload.started_at !== null);
-
-      if (isBecomingActive && targetAssignee) {
-        const activeOtherRes = await client.query<{ id: string; started_at: string | null; system_hours: number | null; status: string }>(
-          `SELECT id, started_at::text, system_hours, status FROM public.tasks 
-           WHERE assigned_to = $1 
-             AND (status = 'In Progress' OR started_at IS NOT NULL) 
-             AND status != 'Completed'`,
-          [targetAssignee]
-        );
-
-        for (const otherTask of activeOtherRes.rows) {
-          let newSysHours = Number(otherTask.system_hours ?? 0);
-          if (otherTask.started_at) {
-            const startTs = new Date(otherTask.started_at).getTime();
-            const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
-            newSysHours += elapsed;
-          }
-          await client.query(
-            `UPDATE public.tasks 
-             SET status = 'To Do',
-                 started_at = NULL,
-                 system_hours = $1,
-                 version = version + 1,
-                 updated_at = NOW(),
-                 updated_by = $2
-             WHERE id = $3`,
-            [newSysHours, context.userId, otherTask.id]
-          );
-        }
+      if (payload.started_at && targetAssignee) {
+        await pauseOtherRunningTimers(client, {
+          userId: targetAssignee,
+          actorId: context.userId,
+          comment: "Timer paused automatically — started new active task",
+        });
       }
 
       const cols = keys.map((k) => `"${k}"`).join(", ");
@@ -92,6 +107,10 @@ export const createTaskFn = createServerFn({ method: "POST" })
         values,
       );
       const insertedTask = res.rows[0];
+      // The insert trigger registered the primary reviewer; this sets the complete list.
+      if (insertedTask && reviewerIds && reviewerIds.length > 1) {
+        await applyReviewers(client, insertedTask.id, reviewerIds);
+      }
 
       // Send notification if assigned_to is set and is not the creator
       if (import.meta.env.MODE !== "test" && insertedTask && insertedTask.assigned_to && insertedTask.assigned_to !== context.userId) {
@@ -130,45 +149,43 @@ export const updateTaskFn = createServerFn({ method: "POST" })
   )
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
+    let oldStatus: string | null = null;
     const result = await withUser(context.userId, async (client) => {
       // Get old assigned_to, started_at, and status before update
       let oldAssignedTo: string | null = null;
       let existingStartedAt: string | null = null;
       let existingSystemHours: number = 0;
       if (import.meta.env.MODE !== "test") {
-        const oldTaskRes = await client.query<{ assigned_to: string | null; started_at: string | null; system_hours: number | null }>(
-          `SELECT assigned_to, started_at::text, system_hours FROM public.tasks WHERE id = $1`,
+        const oldTaskRes = await client.query<{ assigned_to: string | null; started_at: string | null; system_hours: number | null; status: string | null }>(
+          `SELECT assigned_to, started_at::text, system_hours, status::text AS status FROM public.tasks WHERE id = $1 FOR UPDATE`,
           [data.id],
         );
+        oldStatus = oldTaskRes.rows[0]?.status ?? null;
         oldAssignedTo = oldTaskRes.rows[0]?.assigned_to ?? null;
         existingStartedAt = oldTaskRes.rows[0]?.started_at ?? null;
         existingSystemHours = Number(oldTaskRes.rows[0]?.system_hours ?? 0);
       }
 
       const patch: Record<string, unknown> = { ...data.patch, updated_by: context.userId };
+      const reviewerIds = takeReviewers(patch);
 
       // Handle started_at and system_hours calculations on status changes or explicit timer pauses
-      if (patch.status === "In Progress" && !existingStartedAt && patch.started_at !== null && !patch.started_at) {
+      if (existingStartedAt && typeof patch.started_at === "string" && patch.status !== "Completed") {
+        // Timer is already running (double-clicked / duplicate Resume): keep the original
+        // session start so the elapsed time so far is not thrown away.
+        delete patch.started_at;
+      } else if (patch.status === "In Progress" && !existingStartedAt && patch.started_at !== null && !patch.started_at) {
         patch.started_at = new Date().toISOString();
       } else if ((patch.status === "On Hold" || patch.status === "Blocked" || patch.status === "To Do" || patch.started_at === null) && existingStartedAt) {
-        const startTs = new Date(existingStartedAt).getTime();
-        const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
+        // Worklogs belong to the person who worked the task (the assignee), not whoever
+        // pressed the button (e.g. a manager pausing it).
+        const elapsed = await bankTimer(client, {
+          taskId: data.id,
+          userId: oldAssignedTo ?? context.userId,
+          startedAt: existingStartedAt,
+        });
         patch.system_hours = existingSystemHours + elapsed;
         patch.started_at = null;
-        if (elapsed > 0) {
-          await client.query("SAVEPOINT worklog_insert");
-          try {
-            await client.query(
-              `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
-               VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
-              [data.id, context.userId, elapsed, existingStartedAt]
-            );
-            await client.query("RELEASE SAVEPOINT worklog_insert");
-          } catch (e) {
-            await client.query("ROLLBACK TO SAVEPOINT worklog_insert");
-            console.warn("[task_worklogs] insert failed:", (e as Error).message);
-          }
-        }
       } else if ((patch.status === "Completed" || patch.done === true)) {
         if (existingStartedAt || patch.started_at) {
           const startTs = new Date((patch.started_at as string) || existingStartedAt!).getTime();
@@ -182,7 +199,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
               await client.query(
                 `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
                  VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
-                [data.id, context.userId, diffHrs, existingStartedAt || (patch.started_at as string)]
+                [data.id, oldAssignedTo ?? context.userId, diffHrs, existingStartedAt || (patch.started_at as string)]
               );
               await client.query("RELEASE SAVEPOINT worklog_insert_comp");
             } catch (e) {
@@ -194,66 +211,16 @@ export const updateTaskFn = createServerFn({ method: "POST" })
         patch.started_at = null;
       }
 
-      // BACKEND ENFORCEMENT: Single Active Task per user.
+      // BACKEND ENFORCEMENT: Single running timer per user. Only a running timer
+      // (started_at) counts; paused / carried-forward tasks neither block nor get changed.
       const targetAssignee = (patch.assigned_to as string | undefined) || oldAssignedTo || context.userId;
-      const isBecomingActive = patch.status === "In Progress" || (patch.started_at && patch.started_at !== null);
-
-      if (isBecomingActive && targetAssignee) {
-        const activeOtherRes = await client.query<{ id: string; started_at: string | null; system_hours: number | null; status: string }>(
-          `SELECT id, started_at::text, system_hours, status FROM public.tasks 
-           WHERE assigned_to = $1 
-             AND (status = 'In Progress' OR started_at IS NOT NULL) 
-             AND status != 'Completed'
-             AND id != $2`,
-          [targetAssignee, data.id]
-        );
-
-        for (const otherTask of activeOtherRes.rows) {
-          let newSysHours = Number(otherTask.system_hours ?? 0);
-          if (otherTask.started_at) {
-            const startTs = new Date(otherTask.started_at).getTime();
-            const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
-            newSysHours += elapsed;
-            if (elapsed > 0) {
-              await client.query("SAVEPOINT worklog_auto_pause");
-              try {
-                await client.query(
-                  `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
-                   VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
-                  [otherTask.id, context.userId, elapsed, otherTask.started_at]
-                );
-                await client.query("RELEASE SAVEPOINT worklog_auto_pause");
-              } catch (e) {
-                await client.query("ROLLBACK TO SAVEPOINT worklog_auto_pause");
-                console.warn("[task_worklogs] insert failed on single active auto-pause:", (e as Error).message);
-              }
-            }
-          }
-          await client.query(
-            `UPDATE public.tasks 
-             SET status = 'To Do',
-                 started_at = NULL,
-                 system_hours = $1,
-                 version = version + 1,
-                 updated_at = NOW(),
-                 updated_by = $2
-             WHERE id = $3`,
-            [newSysHours, context.userId, otherTask.id]
-          );
-
-          await client.query("SAVEPOINT history_auto_pause");
-          try {
-            await client.query(
-              `INSERT INTO public.task_history (task_id, old_status, new_status, updated_by, comment)
-               VALUES ($1, $2, 'To Do', $3, 'Timer paused automatically — started new active task')`,
-              [otherTask.id, otherTask.status, context.userId]
-            );
-            await client.query("RELEASE SAVEPOINT history_auto_pause");
-          } catch (e) {
-            await client.query("ROLLBACK TO SAVEPOINT history_auto_pause");
-            console.warn("[tasks] history insert failed on single-active auto-pause:", (e as Error).message);
-          }
-        }
+      if (patch.started_at && targetAssignee) {
+        await pauseOtherRunningTimers(client, {
+          userId: targetAssignee,
+          actorId: context.userId,
+          exceptTaskId: data.id,
+          comment: "Timer paused automatically — started new active task",
+        });
       }
 
       delete patch.id;
@@ -288,6 +255,7 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       }
 
       const updatedTask = res.rows[0] ?? null;
+      if (updatedTask && reviewerIds) await applyReviewers(client, data.id, reviewerIds);
 
       // Send notification if assigned_to has changed and is not the updater
       if (import.meta.env.MODE !== "test" && updatedTask && updatedTask.assigned_to && updatedTask.assigned_to !== oldAssignedTo && updatedTask.assigned_to !== context.userId) {
@@ -307,6 +275,11 @@ export const updateTaskFn = createServerFn({ method: "POST" })
 
       return updatedTask;
     });
+    // Push "started" / "completed" to the people following the task (after commit, best effort).
+    if (import.meta.env.MODE !== "test" && result && oldStatus !== null && result.status !== oldStatus) {
+      if (result.status === "In Progress") void pushTaskProgress("started", result.id, context.userId);
+      else if (result.status === "Completed") void pushTaskProgress("completed", result.id, context.userId);
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return result as any;
   });

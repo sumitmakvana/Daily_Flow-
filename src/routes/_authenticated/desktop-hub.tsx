@@ -1,9 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Download, Laptop, Apple, Monitor, Terminal, BellRing, Keyboard, PanelBottomClose } from "lucide-react";
+import { Download, Laptop, Apple, Monitor, Terminal, BellRing, Keyboard, PanelBottomClose, Smartphone } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DESKTOP_DOWNLOADS, detectDesktopPlatform, type DesktopPlatform } from "@/lib/desktop-downloads";
+import {
+  ANDROID_DOWNLOAD,
+  DESKTOP_DOWNLOADS,
+  detectDesktopPlatform,
+  isAndroidDevice,
+  type DesktopPlatform,
+} from "@/lib/desktop-downloads";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/desktop-hub")({
@@ -24,7 +30,11 @@ const FEATURES = [
 
 function DownloadHubPage() {
   const [current, setCurrent] = useState<DesktopPlatform | null>(null);
-  useEffect(() => setCurrent(detectDesktopPlatform()), []);
+  const [onAndroid, setOnAndroid] = useState(false);
+  useEffect(() => {
+    setCurrent(detectDesktopPlatform());
+    setOnAndroid(isAndroidDevice());
+  }, []);
 
   return (
     <div className="max-w-3xl mx-auto px-3 md:px-6 py-5 space-y-5">
@@ -72,6 +82,39 @@ function DownloadHubPage() {
         <p className="text-[11px] text-muted-foreground mt-3">
           Installers are unsigned: Windows SmartScreen or macOS Gatekeeper may ask you to confirm. On Linux run{" "}
           <span className="font-mono">chmod +x Operon-Linux.AppImage</span> first.
+        </p>
+      </Card>
+
+      <Card className="p-4 bg-card border-border/50">
+        <h2 className="text-base font-semibold text-foreground">Android</h2>
+        <p className="text-xs text-muted-foreground mb-3">Task alerts on your phone, with a one-tap Start Task button.</p>
+        <div className="divide-y divide-border/50 border-t border-border/50">
+          <div className="flex items-center justify-between gap-3 py-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <Smartphone className="h-5 w-5 text-foreground shrink-0" />
+              <span className="text-sm font-medium text-foreground">{ANDROID_DOWNLOAD.label}</span>
+              <span className="font-mono text-[10px] text-muted-foreground">{ANDROID_DOWNLOAD.ext}</span>
+              {onAndroid && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-primary/10 text-primary border-primary/30">
+                  Your device
+                </span>
+              )}
+            </div>
+            <Button
+              asChild
+              size="sm"
+              variant={onAndroid ? "default" : "outline"}
+              className={cn("h-8 text-xs gap-1.5")}
+            >
+              <a href={ANDROID_DOWNLOAD.href} download={ANDROID_DOWNLOAD.file}>
+                <Download className="h-3.5 w-3.5" /> Download
+              </a>
+            </Button>
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-3">
+          The APK is not from the Play Store: Android will ask you to allow installs from your browser or
+          file manager the first time.
         </p>
       </Card>
 

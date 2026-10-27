@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getPool } from "@/integrations/postgres/client.server";
+import { startTaskForUser } from "@/lib/task-start.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -124,63 +125,29 @@ export const Route = createFileRoute("/api/public/actions/start-task")({
             });
           }
 
-          const oldStatus = task.status;
-          if (oldStatus !== "In Progress") {
-            // Auto-pause any existing active tasks for this user
-            const activeOtherRes = await pool.query(
-              `SELECT id, started_at::text, system_hours, status FROM public.tasks
-               WHERE assigned_to = $1
-                 AND (status = 'In Progress' OR started_at IS NOT NULL)
-                 AND status != 'Completed'
-                 AND id != $2`,
-              [userId, taskId],
-            );
-            for (const otherTask of activeOtherRes.rows) {
-              let newSysHours = Number(otherTask.system_hours ?? 0);
-              if (otherTask.started_at) {
-                const startTs = new Date(otherTask.started_at).getTime();
-                const elapsed = Math.min(8.0, Math.max(0, Math.round(((Date.now() - startTs) / 3600000) * 100) / 100));
-                newSysHours += elapsed;
-                if (elapsed > 0) {
-                  try {
-                    await pool.query(
-                      `INSERT INTO public.task_worklogs (task_id, user_id, work_date, system_hours, started_at, ended_at)
-                       VALUES ($1, $2, CURRENT_DATE, $3, $4, NOW())`,
-                      [otherTask.id, userId, elapsed, otherTask.started_at],
-                    );
-                  } catch (e) {
-                    console.warn("[task_worklogs] insert failed in start-task:", (e as Error).message);
-                  }
-                }
-              }
-              await pool.query(
-                `UPDATE public.tasks
-                 SET status = 'To Do', started_at = NULL, system_hours = $1, version = version + 1, updated_at = NOW(), updated_by = $2
-                 WHERE id = $3`,
-                [newSysHours, userId, otherTask.id],
-              );
-            }
-
-            await pool.query(
-              `UPDATE public.tasks
-               SET status = 'In Progress', started_at = NOW(), version = version + 1, updated_at = NOW(), updated_by = $2
-               WHERE id = $1`,
-              [taskId, userId],
-            );
-
-            await pool.query(
-              `INSERT INTO public.task_history (task_id, old_status, new_status, updated_by, comment)
-               VALUES ($1, $2, 'In Progress', $3, 'Started directly from email nudge')`,
-              [taskId, oldStatus, userId],
-            );
+          // Same transactional, row-locked start as the push action (single running timer,
+          // paused/carried tasks resumable, other tasks keep their status).
+          const outcome = await startTaskForUser(userId, taskId, {
+            source: "Started directly from email nudge",
+            anyOpenStatus: true,
+          });
+          const alreadyRunning = outcome.result === "already_in_progress";
+          if (outcome.result !== "started" && !alreadyRunning) {
+            return statusPage({
+              kind: "error",
+              title: "Could not start task",
+              message: outcome.message,
+              origin,
+              status: 409,
+            });
           }
 
           return statusPage({
             kind: "success",
-            title: oldStatus === "In Progress" ? "Task already in progress" : "Task started",
+            title: alreadyRunning ? "Task already in progress" : "Task started",
             taskLabel,
             message:
-              oldStatus === "In Progress"
+              alreadyRunning
                 ? "This task was already started. Nothing else to do."
                 : "Your task is now In Progress and the timer has started.",
             badge: "In Progress",

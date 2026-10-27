@@ -1,0 +1,21 @@
+{
+  "appId": "in.co.noesisanalytics.operon",
+  "appName": "Operon",
+  "webDir": "www",
+  "server": {
+    "url": "https://operon.noesisanalytics.co.in",
+    "cleartext": false,
+    "allowNavigation": ["*.noesisanalytics.co.in"],
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": true
+  },
+  "plugins": {
+    "Keyboard": { "resize": "native", "resizeOnFullScreen": true },
+    "StatusBar": { "overlaysWebView": false, "style": "DARK", "backgroundColor": "#0b0d12" },
+    "SplashScreen": { "launchShowDuration": 800, "backgroundColor": "#0F172A" },
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}

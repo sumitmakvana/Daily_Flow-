@@ -92,13 +92,28 @@ export const getMyDay = createServerFn({ method: "GET" })
     const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return isoDate(d); })();
     const weekEnd = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return isoDate(d); })();
 
+    // Tasks where I am ANY of the reviewers (task_reviewers), not just the primary one
+    const reviewerLinks = await supabase
+      .from("task_reviewers" as never)
+      .select("task_id")
+      .eq("reviewer_id", userId);
+    const myReviewTaskIds = new Set(
+      ((reviewerLinks.data ?? []) as unknown as Array<{ task_id: string }>).map((r) => r.task_id),
+    );
+
     // Parallel reads
     const [tasksRes, settingsRes, riskRes, apprReqRes, apprStepsRes] = await Promise.all([
       // Open tasks assigned to me OR where I am the reviewer
       supabase
         .from("tasks")
         .select("id,task_code,task_name,project_name,status,priority,due_date,planned_hours,carry_forward_count,assigned_to,reviewer,last_carry_forward_at,completed_at")
-        .or(`assigned_to.eq.${userId},reviewer.eq.${userId}`)
+        .or(
+          [
+            `assigned_to.eq.${userId}`,
+            `reviewer.eq.${userId}`,
+            ...(myReviewTaskIds.size > 0 ? [`id.in.(${[...myReviewTaskIds].join(",")})`] : []),
+          ].join(","),
+        )
         .order("due_date", { ascending: true, nullsFirst: false })
         .limit(400),
       supabase.from("work_settings").select("daily_capacity_hours").eq("id", 1).maybeSingle(),
@@ -175,7 +190,7 @@ export const getMyDay = createServerFn({ method: "GET" })
     let completed_today = 0;
     for (const t of allTasks) {
       const isMine = t.assigned_to === userId;
-      const isReviewer = t.reviewer === userId;
+      const isReviewer = t.reviewer === userId || myReviewTaskIds.has(t.id);
       if (!isMine && !isReviewer) continue;
       if (t.status === "Completed") {
         if (t.completed_at && t.completed_at.slice(0, 10) === today) completed_today += 1;

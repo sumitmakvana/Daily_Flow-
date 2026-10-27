@@ -20,6 +20,7 @@ import { Route as AuthenticatedTimeTrackingRouteImport } from './routes/_authent
 import { Route as AuthenticatedTeamCapacityRouteImport } from './routes/_authenticated/team-capacity'
 import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
 import { Route as AuthenticatedSyncRouteImport } from './routes/_authenticated/sync'
+import { Route as AuthenticatedReviewsRouteImport } from './routes/_authenticated/reviews'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedPlanningSuggestionsRouteImport } from './routes/_authenticated/planning-suggestions'
 import { Route as AuthenticatedPlanningRouteImport } from './routes/_authenticated/planning'
@@ -61,6 +62,7 @@ import { Route as ApiPublicHooksAutomationTickRouteImport } from './routes/api/p
 import { Route as ApiPublicHooksAutomationDueEnqueueRouteImport } from './routes/api/public/hooks/automation-due-enqueue'
 import { Route as ApiPublicHooksAdoptionRollupRouteImport } from './routes/api/public/hooks/adoption-rollup'
 import { Route as ApiPublicActionsStartTaskRouteImport } from './routes/api/public/actions/start-task'
+import { Route as ApiPublicActionsPushStartTaskRouteImport } from './routes/api/public/actions/push-start-task'
 import { Route as ApiPublicActionsCompleteTaskRouteImport } from './routes/api/public/actions/complete-task'
 import { Route as ApiPublicActionsCarryForwardTaskRouteImport } from './routes/api/public/actions/carry-forward-task'
 
@@ -118,6 +120,11 @@ const AuthenticatedTasksRoute = AuthenticatedTasksRouteImport.update({
 const AuthenticatedSyncRoute = AuthenticatedSyncRouteImport.update({
   id: '/sync',
   path: '/sync',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedReviewsRoute = AuthenticatedReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
@@ -345,6 +352,12 @@ const ApiPublicActionsStartTaskRoute =
     path: '/api/public/actions/start-task',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicActionsPushStartTaskRoute =
+  ApiPublicActionsPushStartTaskRouteImport.update({
+    id: '/api/public/actions/push-start-task',
+    path: '/api/public/actions/push-start-task',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicActionsCompleteTaskRoute =
   ApiPublicActionsCompleteTaskRouteImport.update({
     id: '/api/public/actions/complete-task',
@@ -385,6 +398,7 @@ export interface FileRoutesByFullPath {
   '/planning': typeof AuthenticatedPlanningRoute
   '/planning-suggestions': typeof AuthenticatedPlanningSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
+  '/reviews': typeof AuthenticatedReviewsRoute
   '/sync': typeof AuthenticatedSyncRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/team-capacity': typeof AuthenticatedTeamCapacityRoute
@@ -400,6 +414,7 @@ export interface FileRoutesByFullPath {
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
   '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
@@ -440,6 +455,7 @@ export interface FileRoutesByTo {
   '/planning': typeof AuthenticatedPlanningRoute
   '/planning-suggestions': typeof AuthenticatedPlanningSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
+  '/reviews': typeof AuthenticatedReviewsRoute
   '/sync': typeof AuthenticatedSyncRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/team-capacity': typeof AuthenticatedTeamCapacityRoute
@@ -455,6 +471,7 @@ export interface FileRoutesByTo {
   '/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
   '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
@@ -497,6 +514,7 @@ export interface FileRoutesById {
   '/_authenticated/planning': typeof AuthenticatedPlanningRoute
   '/_authenticated/planning-suggestions': typeof AuthenticatedPlanningSuggestionsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
+  '/_authenticated/reviews': typeof AuthenticatedReviewsRoute
   '/_authenticated/sync': typeof AuthenticatedSyncRoute
   '/_authenticated/tasks': typeof AuthenticatedTasksRoute
   '/_authenticated/team-capacity': typeof AuthenticatedTeamCapacityRoute
@@ -512,6 +530,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/operations': typeof AuthenticatedSettingsOperationsRoute
   '/api/public/actions/carry-forward-task': typeof ApiPublicActionsCarryForwardTaskRoute
   '/api/public/actions/complete-task': typeof ApiPublicActionsCompleteTaskRoute
+  '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
   '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
@@ -554,6 +573,7 @@ export interface FileRouteTypes {
     | '/planning'
     | '/planning-suggestions'
     | '/reports'
+    | '/reviews'
     | '/sync'
     | '/tasks'
     | '/team-capacity'
@@ -569,6 +589,7 @@ export interface FileRouteTypes {
     | '/settings/operations'
     | '/api/public/actions/carry-forward-task'
     | '/api/public/actions/complete-task'
+    | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
@@ -609,6 +630,7 @@ export interface FileRouteTypes {
     | '/planning'
     | '/planning-suggestions'
     | '/reports'
+    | '/reviews'
     | '/sync'
     | '/tasks'
     | '/team-capacity'
@@ -624,6 +646,7 @@ export interface FileRouteTypes {
     | '/settings/operations'
     | '/api/public/actions/carry-forward-task'
     | '/api/public/actions/complete-task'
+    | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
@@ -665,6 +688,7 @@ export interface FileRouteTypes {
     | '/_authenticated/planning'
     | '/_authenticated/planning-suggestions'
     | '/_authenticated/reports'
+    | '/_authenticated/reviews'
     | '/_authenticated/sync'
     | '/_authenticated/tasks'
     | '/_authenticated/team-capacity'
@@ -680,6 +704,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/operations'
     | '/api/public/actions/carry-forward-task'
     | '/api/public/actions/complete-task'
+    | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
     | '/api/public/hooks/automation-due-enqueue'
@@ -702,6 +727,7 @@ export interface RootRouteChildren {
   AppStorageUploadRoute: typeof AppStorageUploadRoute
   ApiPublicActionsCarryForwardTaskRoute: typeof ApiPublicActionsCarryForwardTaskRoute
   ApiPublicActionsCompleteTaskRoute: typeof ApiPublicActionsCompleteTaskRoute
+  ApiPublicActionsPushStartTaskRoute: typeof ApiPublicActionsPushStartTaskRoute
   ApiPublicActionsStartTaskRoute: typeof ApiPublicActionsStartTaskRoute
   ApiPublicHooksAdoptionRollupRoute: typeof ApiPublicHooksAdoptionRollupRoute
   ApiPublicHooksAutomationDueEnqueueRoute: typeof ApiPublicHooksAutomationDueEnqueueRoute
@@ -793,6 +819,13 @@ declare module '@tanstack/react-router' {
       path: '/sync'
       fullPath: '/sync'
       preLoaderRoute: typeof AuthenticatedSyncRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/reviews': {
+      id: '/_authenticated/reviews'
+      path: '/reviews'
+      fullPath: '/reviews'
+      preLoaderRoute: typeof AuthenticatedReviewsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/reports': {
@@ -1082,6 +1115,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicActionsStartTaskRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/actions/push-start-task': {
+      id: '/api/public/actions/push-start-task'
+      path: '/api/public/actions/push-start-task'
+      fullPath: '/api/public/actions/push-start-task'
+      preLoaderRoute: typeof ApiPublicActionsPushStartTaskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/actions/complete-task': {
       id: '/api/public/actions/complete-task'
       path: '/api/public/actions/complete-task'
@@ -1141,6 +1181,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPlanningRoute: typeof AuthenticatedPlanningRoute
   AuthenticatedPlanningSuggestionsRoute: typeof AuthenticatedPlanningSuggestionsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
+  AuthenticatedReviewsRoute: typeof AuthenticatedReviewsRoute
   AuthenticatedSyncRoute: typeof AuthenticatedSyncRoute
   AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
   AuthenticatedTeamCapacityRoute: typeof AuthenticatedTeamCapacityRoute
@@ -1177,6 +1218,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPlanningRoute: AuthenticatedPlanningRoute,
   AuthenticatedPlanningSuggestionsRoute: AuthenticatedPlanningSuggestionsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
+  AuthenticatedReviewsRoute: AuthenticatedReviewsRoute,
   AuthenticatedSyncRoute: AuthenticatedSyncRoute,
   AuthenticatedTasksRoute: AuthenticatedTasksRoute,
   AuthenticatedTeamCapacityRoute: AuthenticatedTeamCapacityRoute,
@@ -1202,6 +1244,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppStorageUploadRoute: AppStorageUploadRoute,
   ApiPublicActionsCarryForwardTaskRoute: ApiPublicActionsCarryForwardTaskRoute,
   ApiPublicActionsCompleteTaskRoute: ApiPublicActionsCompleteTaskRoute,
+  ApiPublicActionsPushStartTaskRoute: ApiPublicActionsPushStartTaskRoute,
   ApiPublicActionsStartTaskRoute: ApiPublicActionsStartTaskRoute,
   ApiPublicHooksAdoptionRollupRoute: ApiPublicHooksAdoptionRollupRoute,
   ApiPublicHooksAutomationDueEnqueueRoute:

@@ -132,6 +132,26 @@ function getSessionSync() {
   };
 }
 
+/**
+ * Refresh the access token right away (e.g. when the mobile app returns from the
+ * background, where the 60s interval timer is throttled/suspended).
+ */
+export async function refreshSessionNow(): Promise<void> {
+  if (!isBrowser || !keycloak?.authenticated) return;
+  try {
+    if (await keycloak.updateToken(70)) {
+      if (keycloak.token) window.localStorage.setItem("kc_token", keycloak.token);
+      if (keycloak.refreshToken) {
+        window.localStorage.setItem("kc_refresh_token", keycloak.refreshToken);
+      }
+      const session = getSessionSync();
+      listeners.forEach((cb) => cb("TOKEN_REFRESHED", session));
+    }
+  } catch {
+    console.error("Failed to refresh Keycloak token on resume");
+  }
+}
+
 export const auth = {
   signInWithPassword: async (args: { email?: string; password?: string }) => {
     if (!isBrowser) return { error: new Error("Not in browser") };

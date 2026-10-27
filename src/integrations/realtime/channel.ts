@@ -14,7 +14,7 @@
  *  - on a socket reconnect, every callback fires once (catch up on what was missed);
  *  - when a tab becomes visible again after being hidden, every callback fires once;
  *  - a slow fallback poll runs ONLY while the socket is down and the tab is visible.
- * Subscriptions to tables that are not push tables keep the legacy 4s poll.
+ * Subscriptions to tables that are not push tables get a console warning and no poll.
  */
 import { isRealtimeConnected, onRealtime, onRealtimeConnect } from "./socket";
 
@@ -38,7 +38,6 @@ export const POLL_DISABLED_TABLES = new Set<string>(PUSH_TABLES);
 /** A tab hidden at least this long refetches when it becomes visible again. */
 const VISIBILITY_REFETCH_AFTER_MS = 5000;
 
-const LEGACY_POLL_MS = 4000;
 const DISCONNECTED_FALLBACK_MS = 30_000;
 /**
  * Socket events for these tables are coalesced (leading + trailing) so a burst
@@ -179,10 +178,11 @@ export function createRealtimeChannel(_name: string) {
         );
       }
 
-      // Legacy 4s poll: everything that has not been poll-disabled yet.
-      const polled = subs.filter((s) => !isPollDisabled(s));
-      if (polled.length) {
-        timers.push(setInterval(() => polled.forEach((s) => s.cb()), LEGACY_POLL_MS));
+      // No automatic poll for unsupported tables: warn so the gap is visible.
+      for (const s of subs.filter((x) => !isPollDisabled(x))) {
+        console.warn(
+          `[realtime] "${s.table ?? "(no table)"}" is not a push table, so this subscription will never fire. Add it to PUSH_TABLES and the server routing.`,
+        );
       }
       return channel;
     },

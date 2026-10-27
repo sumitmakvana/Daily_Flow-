@@ -25,17 +25,23 @@ function AnalyticsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [snaps, setSnaps] = useState<WorkloadSnapshot[]>([]);
   const [carries, setCarries] = useState<CarryForwardEvent[]>([]);
+  // One entry per (task, reviewer) whose own review is still pending (pending_review_assignments)
+  const [pendingReviewerIds, setPendingReviewerIds] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
       const since = new Date();
       since.setDate(since.getDate() - 30);
       const sinceISO = since.toISOString().slice(0, 10);
-      const [{ data: t }, { data: s }, { data: cf }] = await Promise.all([
+      const [{ data: t }, { data: s }, { data: cf }, { data: pr }] = await Promise.all([
         supabase.from("tasks").select("*"),
         supabase.from("daily_workload_snapshot").select("*").gte("snapshot_date", sinceISO),
         supabase.from("carry_forward_events").select("*").gte("created_at", since.toISOString()),
+        supabase.from("pending_review_assignments" as never).select("reviewer_id"),
       ]);
+      setPendingReviewerIds(
+        ((pr ?? []) as unknown as Array<{ reviewer_id: string }>).map((r) => r.reviewer_id),
+      );
       setTasks((t ?? []) as Task[]);
       setSnaps((s ?? []) as WorkloadSnapshot[]);
       setCarries((cf ?? []) as CarryForwardEvent[]);
@@ -84,12 +90,11 @@ function AnalyticsPage() {
   );
 
   const reviewerBottleneck = useMemo(() => {
+    // Every reviewer who still has to decide counts, not only the primary reviewer.
     const m = new Map<string, number>();
-    for (const t of tasks) {
-      if (t.status === "In Review" && t.reviewer) m.set(t.reviewer, (m.get(t.reviewer) ?? 0) + 1);
-    }
+    for (const rid of pendingReviewerIds) m.set(rid, (m.get(rid) ?? 0) + 1);
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
-  }, [tasks]);
+  }, [pendingReviewerIds]);
 
   const plannedVsActual = useMemo(() => {
     const planned = snaps.reduce((s, r) => s + Number(r.planned_hours), 0);

@@ -794,13 +794,16 @@ function ExportsPage() {
 
                     const isTotal = row.isTotalRow;
                     const isLeave = row.projectName === "Leave";
-                    const isUnassigned = row.projectName === "Unassigned";
+                    const isUnassigned = row.rowType ? row.rowType === "unassigned" : row.projectName === "Unassigned";
+                    const isUnused = row.rowType === "unused";
+                    const isOver = row.rowType === "over";
+                    const isCapacityRow = isUnused || isOver;
 
                     return (
                       <tr
                         key={idx}
                         onClick={() => {
-                          if (!isTotal && row.teamMember) {
+                          if (!isTotal && !isCapacityRow && row.teamMember) {
                             setSelectedMemberModal({
                               memberName: row.teamMember,
                               projectName: row.projectName !== "Total" && row.projectName !== "Leave" && row.projectName !== "Unassigned" ? row.projectName : null,
@@ -813,9 +816,11 @@ function ExportsPage() {
                             ? "bg-primary/5 font-semibold text-foreground border-t border-border/80 cursor-default"
                             : "hover:bg-accent/40 text-foreground cursor-pointer group",
                           isLeave && "bg-amber-500/5 text-amber-300/90",
-                          isUnassigned && "text-muted-foreground/80"
+                          isUnassigned && "text-muted-foreground/80",
+                          isUnused && "text-muted-foreground/80 cursor-default",
+                          isOver && "bg-red-500/5 text-red-400 cursor-default"
                         )}
-                        title={!isTotal && row.teamMember ? `Click to view work items for ${row.teamMember}` : undefined}
+                        title={!isTotal && !isCapacityRow && row.teamMember ? `Click to view work items for ${row.teamMember}` : undefined}
                       >
                         <td className="py-2 px-3 font-semibold">
                           {!isTotal && (
@@ -834,8 +839,24 @@ function ExportsPage() {
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground border border-border/40">
                               Unassigned
                             </span>
+                          ) : isUnused ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground border border-border/40">
+                              Unused Capacity
+                            </span>
+                          ) : isOver ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+                              Over Capacity
+                            </span>
                           ) : isTotal ? (
-                            <span className="font-bold text-foreground">Total</span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-bold text-foreground">Total</span>
+                              {row.availableCapacity !== undefined && (
+                                <span className="text-[10px] font-normal text-muted-foreground font-mono">
+                                  Capacity {row.totalWorkingHours}h − Leave {row.leaveHours ?? 0}h = Available{" "}
+                                  <strong className="text-foreground">{row.availableCapacity}h</strong>
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <button
                               type="button"
@@ -850,11 +871,11 @@ function ExportsPage() {
                             </button>
                           )}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono font-medium text-emerald-400">
+                        <td className={cn("py-2 px-3 text-right font-mono font-medium text-emerald-400", isUnused && "text-muted-foreground", isOver && "text-red-400")}>
                           {row.hours}h
                         </td>
                         <td className="py-2 px-3 text-right font-mono font-medium text-amber-400">
-                          {row.autoHours ?? 0}h
+                          {isCapacityRow ? "—" : `${row.autoHours ?? 0}h`}
                         </td>
                         <td className="py-2 px-3 text-right font-mono text-muted-foreground">
                           {row.totalWorkingHours}
@@ -864,8 +885,10 @@ function ExportsPage() {
                             className={cn(
                               "inline-block px-1.5 py-0.5 rounded text-[11px]",
                               isTotal && "bg-primary/10 text-primary font-bold",
+                              isTotal && parseFloat(row.pctProject) > 100 && "bg-red-500/10 text-red-400",
+                              isOver && "text-red-400",
                               isLeave && "text-amber-400",
-                              !isTotal && !isLeave && !isUnassigned && "text-emerald-400"
+                              !isTotal && !isLeave && !isUnassigned && !isCapacityRow && "text-emerald-400"
                             )}
                           >
                             {row.pctProject}
