@@ -10,13 +10,17 @@
  * socket reconnect their callbacks fire once (no payload) so consumers refetch
  * what they missed.
  *
- * There is no recurring client poll for any push table. Recovery instead:
- *  - on a socket reconnect, every callback fires once (catch up on what was missed);
- *  - when a tab becomes visible again after being hidden, every callback fires once;
- *  - a slow fallback poll runs ONLY while the socket is down and the tab is visible.
- * Subscriptions to tables that are not push tables get a console warning and no poll.
+ * There is no per-channel timer and no recurring client poll. Recovery instead:
+ *  - after a reconnect (or a tab coming back after a while) the server says which
+ *    tables changed for this user (`onRealtimeResync`); only the subscribers of
+ *    those tables fire, or all of them when the server says `full`
+ *    (e.g. it restarted) or cannot tell;
+ *  - while the socket stays down, ONE shared, exponentially backed-off safety
+ *    refresh (`onRealtimeSafetyRefresh`, owned by socket.ts) fires every
+ *    subscriber; it stops the moment the socket reconnects.
+ * Subscriptions to tables that are not push tables get a console warning.
  */
-import { isRealtimeConnected, onRealtime, onRealtimeConnect } from "./socket";
+import { onRealtime, onRealtimeResync, onRealtimeSafetyRefresh } from "./socket";
 
 /** Tables whose changes the server pushes over the socket. */
 export const PUSH_TABLES = new Set<string>([
@@ -27,6 +31,9 @@ export const PUSH_TABLES = new Set<string>([
   "planning_suggestions",
   "approval_requests",
   "task_review_decisions",
+  "task_worklogs",
+  "leaves",
+  "eod_checkins",
 ]);
 
 /**
@@ -36,10 +43,6 @@ export const PUSH_TABLES = new Set<string>([
  */
 export const POLL_DISABLED_TABLES = new Set<string>(PUSH_TABLES);
 
-/** A tab hidden at least this long refetches when it becomes visible again. */
-const VISIBILITY_REFETCH_AFTER_MS = 5000;
-
-const DISCONNECTED_FALLBACK_MS = 30_000;
 /**
  * Socket events for these tables are coalesced (leading + trailing) so a burst
  * of changes causes a handful of REST refetches, not hundreds. Notifications are
@@ -90,7 +93,6 @@ export function matchesFilter(filter: string | undefined, payload: ChangePayload
 export function createRealtimeChannel(_name: string) {
   const subs: Sub[] = [];
   const teardown: Array<() => void> = [];
-  let timers: Array<ReturnType<typeof setInterval>> = [];
 
   const deliver = (s: Sub, payload: ChangePayload) => {
     if (!s.table || NO_THROTTLE_TABLES.has(s.table)) {
@@ -127,7 +129,7 @@ export function createRealtimeChannel(_name: string) {
       return channel;
     },
     subscribe() {
-      if (teardown.length || timers.length) return channel;
+      if (teardown.length) return channel;
       const pushed = subs.filter(isPush);
 
       if (pushed.length) {
@@ -144,38 +146,14 @@ export function createRealtimeChannel(_name: string) {
               old: {},
             }),
           ),
-          // Catch up on anything missed while the socket was down.
-          onRealtimeConnect((isReconnect) => {
-            if (isReconnect) pushed.forEach((s) => s.cb());
+          // Catch up on exactly what was missed (targeted), or everything when the server cannot tell.
+          onRealtimeResync((info) => {
+            for (const s of pushed) {
+              if (info.full || (s.table && info.tables.includes(s.table))) s.cb();
+            }
           }),
-        );
-
-        // Tab visibility: browsers throttle hidden tabs, so recover on return.
-        if (typeof document !== "undefined") {
-          let hiddenAt = 0;
-          const onVisibility = () => {
-            if (document.visibilityState === "hidden") {
-              hiddenAt = Date.now();
-              return;
-            }
-            if (hiddenAt && Date.now() - hiddenAt >= VISIBILITY_REFETCH_AFTER_MS) {
-              pushed.forEach((s) => s.cb());
-            }
-            hiddenAt = 0;
-          };
-          document.addEventListener("visibilitychange", onVisibility);
-          teardown.push(() => document.removeEventListener("visibilitychange", onVisibility));
-        }
-      }
-
-      // Slow safety net, only while the socket is down AND the tab is visible.
-      const fallback = subs.filter((s) => isPush(s) && isPollDisabled(s));
-      if (fallback.length) {
-        timers.push(
-          setInterval(() => {
-            const visible = typeof document === "undefined" || document.visibilityState !== "hidden";
-            if (!isRealtimeConnected() && visible) fallback.forEach((s) => s.cb());
-          }, DISCONNECTED_FALLBACK_MS),
+          // Socket stayed down: the single shared, backed-off safety refresh.
+          onRealtimeSafetyRefresh(() => pushed.forEach((s) => s.cb())),
         );
       }
 
@@ -189,8 +167,6 @@ export function createRealtimeChannel(_name: string) {
     },
     unsubscribe() {
       teardown.splice(0).forEach((fn) => fn());
-      timers.forEach(clearInterval);
-      timers = [];
       for (const s of subs) {
         if (s.timer) clearTimeout(s.timer);
         s.timer = undefined;

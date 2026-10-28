@@ -53,6 +53,8 @@ import {
 } from "@/components/ui/tooltip";
 import type { Profile, Task } from "@/lib/types";
 import { isToday, isOverdue, toLocalISO } from "@/lib/format";
+import { fetchMyTasksWithWorklogs } from "@/lib/task-window";
+import { loadMyProfile } from "@/lib/my-profile";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { getTodayDateStr, isTaskCompletedToday } from "@/lib/task-date-utils";
@@ -203,13 +205,9 @@ function MyDayPage() {
     if (!user) return;
     const loadProfile = async () => {
       try {
-        const { data } = await supabase
-          .from("profiles")
-          .select("display_name")
-          .eq("id", user.id)
-          .maybeSingle();
+        const data = await loadMyProfile(user.id);
         if (data) {
-          setProfile(data);
+          setProfile({ display_name: data.display_name });
         } else {
           setProfile({
             display_name:
@@ -226,37 +224,18 @@ function MyDayPage() {
   // Load raw tasks for the task sections
   const loadTasks = useCallback(async () => {
     if (!user) return;
-    const [{ data: t }, { data: p }, { data: w }] = await Promise.all([
-      supabase
-        .from("tasks")
-        .select("*")
-        .eq("assigned_to", user.id)
-        .order("due_date", { ascending: true, nullsFirst: false }),
-      supabase.from("profiles").select("id,display_name,avatar_url"),
-      supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
-    ]);
-
-    const worklogsByTask = new Map<string, any[]>();
-    const todayStr = toLocalISO(new Date());
-    for (const item of w || []) {
-      const list = worklogsByTask.get(item.task_id) || [];
-      list.push(item);
-      worklogsByTask.set(item.task_id, list);
+    try {
+      // My tasks with only THEIR worklogs embedded (was: all my tasks + the whole worklogs table).
+      const [mine, { data: p }] = await Promise.all([
+        fetchMyTasksWithWorklogs(user.id, toLocalISO(new Date())),
+        supabase.from("profiles").select("id,display_name,avatar_url"),
+      ]);
+      setTasks(mine as Task[]);
+      setProfiles((p ?? []) as Profile[]);
+    } catch (err) {
+      // Keep what is on screen rather than blanking it; the next event or safety refresh retries.
+      console.warn("Failed to load My Day tasks:", err);
     }
-
-    const enrichedTasks = ((t ?? []) as Task[]).map((task) => {
-      const logs = worklogsByTask.get(task.id) || [];
-      const todayLogs = logs.filter((x) => x.work_date === todayStr);
-      const todaySys = todayLogs.reduce((sum, x) => sum + Number(x.system_hours || 0), 0);
-      return {
-        ...task,
-        today_system_hours: todaySys,
-        worklogs: logs,
-      };
-    });
-
-    setTasks(enrichedTasks);
-    setProfiles((p ?? []) as Profile[]);
   }, [user?.id]);
 
   useEffect(() => {
@@ -276,14 +255,16 @@ function MyDayPage() {
   // Realtime subscription handles both TaskCard raw tasks and priority query
   const handleRealtimeChange = useCallback(() => {
     loadTasks();
-    q.refetch();
+    // cancelRefetch:false joins an in-flight fetch instead of cancelling and restarting it, so two
+    // callbacks in the same moment (tasks + risks/approvals) cost one request.
+    void q.refetch({ cancelRefetch: false });
   }, [loadTasks, q]);
 
   // The My Day query also depends on risks and pending approvals, not only my tasks.
   useRealtimeRefresh(
     ["risk_events", "approval_requests"],
     () => {
-      void q.refetch();
+      void q.refetch({ cancelRefetch: false });
     },
     `my-day-extras-${user?.id ?? "x"}`,
   );
@@ -673,6 +654,7 @@ function MyDayPage() {
           )}
           <MyTodayWorkSummaryCard
             tasks={d?.priorities || []}
+            allTasks={tasks}
             userName={profile?.display_name || undefined}
           />
         </TabsContent>

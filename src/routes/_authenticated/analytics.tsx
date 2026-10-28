@@ -34,7 +34,8 @@ function AnalyticsPage() {
       since.setDate(since.getDate() - 30);
       const sinceISO = since.toISOString().slice(0, 10);
       const [{ data: t }, { data: s }, { data: cf }, { data: pr }] = await Promise.all([
-        supabase.from("tasks").select("*"),
+        // Only the completion trend uses tasks, and only completed_at within the 14 displayed days.
+        supabase.from("tasks").select("completed_at").gte("completed_at", `${daysAgo(14)[0]}T00:00:00Z`),
         supabase.from("daily_workload_snapshot").select("*").gte("snapshot_date", sinceISO),
         supabase.from("carry_forward_events").select("*").gte("created_at", since.toISOString()),
         supabase.from("pending_review_assignments" as never).select("reviewer_id"),

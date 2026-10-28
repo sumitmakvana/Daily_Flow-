@@ -28,11 +28,13 @@ import {
 } from "lucide-react";
 import type { Profile, EodCheckin, Task, Project } from "@/lib/types";
 import { todayISO, formatHoursMins } from "@/lib/format";
+import { TASK_EOD_COLS } from "@/lib/task-columns";
 import { eodService } from "@/services/eod";
 import { workloadService, utilTone } from "@/services/workload";
 import { carryForwardService } from "@/services/carry-forward";
 import { toast } from "sonner";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
+import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { ExecutiveMemberInspectionDrawer } from "./executive";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { cn } from "@/lib/utils";
@@ -60,8 +62,10 @@ function EodBoardPage() {
       const [{ data: p }, c, { data: t }, { data: proj }] = await Promise.all([
         supabase.from("profiles").select("id,display_name,email,avatar_url,team_id,manager_id"),
         eodService.listForDate(todayISO()),
-        supabase.from("tasks").select("*"),
-        supabase.from("projects").select("*"),
+        // Board numbers need every row but only a few columns; the member drawer loads that
+        // member's full task history on demand (see below).
+        supabase.from("tasks").select(TASK_EOD_COLS),
+        supabase.from("projects").select("id,name"),
       ]);
       setProfiles((p ?? []) as Profile[]);
       setCheckins(c ?? []);
@@ -76,6 +80,33 @@ function EodBoardPage() {
     load();
   }, []);
   useRealtimeTasks(load, "eod-board-rt");
+  // A member submitting their EOD only changes check-ins: refetch just those, not every task.
+  useRealtimeRefresh(
+    ["eod_checkins"],
+    () => void eodService.listForDate(todayISO()).then((c) => setCheckins(c ?? [])).catch(() => undefined),
+    "eod-checkins-rt",
+  );
+
+  // Full rows (every column, all history) for ONLY the member whose drawer is open.
+  const [drawerTasks, setDrawerTasks] = useState<{ memberId: string; rows: Task[] } | null>(null);
+  useEffect(() => {
+    if (!selectedMemberId) {
+      setDrawerTasks(null);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("assigned_to", selectedMemberId)
+      .then(({ data }) => {
+        if (!cancelled) setDrawerTasks({ memberId: selectedMemberId, rows: (data ?? []) as Task[] });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `tasks` changes after every realtime refresh, which also refreshes the open drawer.
+  }, [selectedMemberId, tasks]);
 
   const todayStr = todayISO();
   const utils = workloadService.computeToday(tasks);
@@ -671,12 +702,12 @@ function EodBoardPage() {
       )}
 
       {/* Full Member Inspection Drawer */}
-      {selectedMemberId && (
+      {selectedMemberId && drawerTasks?.memberId === selectedMemberId && (
         <ExecutiveMemberInspectionDrawer
           memberId={selectedMemberId}
           onClose={() => setSelectedMemberId(null)}
           profiles={profiles}
-          tasks={tasks}
+          tasks={drawerTasks.rows}
           projects={projects}
           checkins={checkins}
         />

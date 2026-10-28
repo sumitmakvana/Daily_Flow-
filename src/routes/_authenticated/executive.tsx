@@ -177,11 +177,14 @@ function ExecutivePage() {
       const { data } = await supabase
         .from("tasks")
         .select(
-          "id, task_code, task_name, assigned_to, project_name, project_id, type_id, team_id, status, priority, due_date, completed_at, blocker_reason, remarks, planned_hours, actual_hours, carry_forward_count, created_at",
+          "id, task_code, task_name, assigned_to, project_name, project_id, type_id, team_id, status, priority, due_date, completed_at, blocker_reason, remarks, planned_hours, actual_hours, created_at",
         );
       return (data ?? []) as Task[];
     },
-    staleTime: 5000,
+    // Kept fresh by Socket.IO task events (invalidated below) and by the reconnect/tab-return resync,
+    // so it no longer refetches the whole table on every focus or remount.
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: eodProfiles = [] } = useQuery({
@@ -271,8 +274,20 @@ function ExecutivePage() {
     ["tasks"],
     () => {
       void queryClient.invalidateQueries({ queryKey: ["exec-summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["eod-widget-tasks"] });
     },
     "exec-summary-rt",
+  );
+  // EOD check-ins and leaves change independently of tasks; refresh only those two queries.
+  useRealtimeRefresh(
+    ["eod_checkins"],
+    () => void queryClient.invalidateQueries({ queryKey: ["exec-checkins"] }),
+    "exec-checkins-rt",
+  );
+  useRealtimeRefresh(
+    ["leaves"],
+    () => void queryClient.invalidateQueries({ queryKey: ["exec-active-leaves"] }),
+    "exec-leaves-rt",
   );
 
   // Dynamic Teams and Managers list for Scope select

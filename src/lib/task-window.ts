@@ -107,6 +107,20 @@ export async function countOlderCompleted(cutoff: string): Promise<number> {
   return count ?? 0;
 }
 
+/**
+ * Every task assigned to `userId` (any status), with only THOSE tasks' worklogs embedded.
+ * Replaces "all my tasks" + "the whole task_worklogs table" on My Day.
+ */
+export async function fetchMyTasksWithWorklogs(userId: string, todayStr: string): Promise<TaskWithWorklogs[]> {
+  const { data, error } = await (tasksTable() as any)
+    .select(WITH_WORKLOGS)
+    .eq("assigned_to", userId)
+    .order("due_date", { ascending: true, nullsFirst: false })
+    .order("work_date", WORKLOG_ORDER);
+  if (error) throw error;
+  return withTodayHours(data ?? [], todayStr);
+}
+
 export async function fetchTaskWithWorklogs(id: string, todayStr: string): Promise<TaskWithWorklogs | null> {
   const { data, error } = await (tasksTable() as any)
     .select(WITH_WORKLOGS)

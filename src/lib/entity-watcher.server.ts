@@ -92,6 +92,34 @@ export const DEFAULT_SPECS: WatchSpec[] = [
     row: () => ({}),
   },
   {
+    // Time logged against tasks (Team Capacity, My Day, Executive hours). Readable by every signed-in
+    // user (worklogs select policy USING true), like tasks. The event carries only the owner's id;
+    // clients refetch over HTTP, which enforces auth/RLS.
+    table: "task_worklogs",
+    sql: `SELECT user_id::text AS k, ${fp(mx("updated_at"), "coalesce(sum(logged_hours), 0)", "coalesce(sum(system_hours), 0)", mx("ended_at"))} AS fp
+          FROM public.task_worklogs GROUP BY user_id`,
+    rooms: () => [ALL_USERS_ROOM],
+    row: (k) => ({ user_id: k }),
+  },
+  {
+    // Leave / WFH requests (calendar, Team Capacity availability) are shown to the whole team.
+    // Events carry only the owner's id; the data is refetched over HTTP.
+    table: "leaves",
+    sql: `SELECT user_id::text AS k, ${fp(mx("updated_at"), mx("reviewed_at"), "count(*) FILTER (WHERE status = 'pending')")} AS fp
+          FROM public.leaves GROUP BY user_id`,
+    rooms: () => [ALL_USERS_ROOM],
+    row: (k) => ({ user_id: k }),
+  },
+  {
+    // EOD check-ins are readable by their owner and managers/admins only (eod_read_self_or_mgr),
+    // so only those rooms are told. Events carry only the owner's id.
+    table: "eod_checkins",
+    sql: `SELECT user_id::text AS k, ${fp(mx("submitted_at"), mx("checkin_date"), "coalesce(sum(pending_count + blocker_count + completed_count), 0)")} AS fp
+          FROM public.eod_checkins GROUP BY user_id`,
+    rooms: (k) => (k ? [`user:${k}`, "role:manager"] : ["role:manager"]),
+    row: (k) => ({ user_id: k }),
+  },
+  {
     // Automation health panel (admins): queue depth, 24h run counts, rule counts.
     // The payload carries no data; the panel refetches over HTTP, which enforces auth.
     table: "automation_health",
@@ -311,6 +339,6 @@ export async function startEntityWatcher(): Promise<EntityChangeWatcher | null> 
   g.__operonEntityWatcher = w;
   setPokeHandler(() => w.poke());
   w.start();
-  console.log(`[EntityWatcher] watching tasks, nudges, risk_events, planning_suggestions, approval_requests, task_review_decisions, automation_health every ${intervalMs}ms (read-only SELECTs)`);
+  console.log(`[EntityWatcher] watching tasks, nudges, risk_events, planning_suggestions, approval_requests, task_review_decisions, task_worklogs, leaves, eod_checkins, automation_health every ${intervalMs}ms (read-only SELECTs)`);
   return w;
 }

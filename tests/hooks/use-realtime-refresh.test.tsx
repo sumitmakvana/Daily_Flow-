@@ -2,7 +2,9 @@ import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const handlers = new Map<string, Set<(p: unknown) => void>>();
-const connectHandlers = new Set<(isReconnect: boolean) => void>();
+type ResyncInfo = { full: boolean; tables: string[]; reason: string };
+const resyncHandlers = new Set<(info: ResyncInfo) => void>();
+const safetyHandlers = new Set<() => void>();
 
 vi.mock("@/integrations/realtime/socket", () => ({
   onRealtime: (ev: string, h: (p: unknown) => void) => {
@@ -10,11 +12,14 @@ vi.mock("@/integrations/realtime/socket", () => ({
     handlers.get(ev)!.add(h);
     return () => handlers.get(ev)!.delete(h);
   },
-  onRealtimeConnect: (h: (r: boolean) => void) => {
-    connectHandlers.add(h);
-    return () => connectHandlers.delete(h);
+  onRealtimeResync: (h: (i: ResyncInfo) => void) => {
+    resyncHandlers.add(h);
+    return () => resyncHandlers.delete(h);
   },
-  isRealtimeConnected: () => true,
+  onRealtimeSafetyRefresh: (h: () => void) => {
+    safetyHandlers.add(h);
+    return () => safetyHandlers.delete(h);
+  },
 }));
 vi.mock("@/integrations/supabase/client", async () => {
   const { createRealtimeChannel } = await import("@/integrations/realtime/channel");
@@ -31,11 +36,13 @@ import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 const emit = (table: string) =>
   handlers.get("entity:changed")?.forEach((h) => h({ schema: "public", table, eventType: "UPDATE", new: {}, old: {} }));
 const live = () => handlers.get("entity:changed")?.size ?? 0;
+const resync = (tables: string[], full = false) => resyncHandlers.forEach((h) => h({ full, tables, reason: "connect" }));
 
 beforeEach(() => {
   vi.useFakeTimers();
   handlers.clear();
-  connectHandlers.clear();
+  resyncHandlers.clear();
+  safetyHandlers.clear();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -74,12 +81,27 @@ describe("useRealtimeRefresh", () => {
     expect(cb.mock.calls.length).toBeLessThanOrEqual(2);
   });
 
-  it("refetches once on a socket reconnect (catches what was missed) but not on the first connect", () => {
+  it("after a reconnect, refetches only if one of ITS tables changed while away (targeted)", () => {
+    const cb = vi.fn();
+    renderHook(() => useRealtimeRefresh(["tasks", "risk_events"], cb, "page"));
+    resync([]); // reconnected, nothing missed
+    resync(["nudges"]); // an unrelated table changed
+    expect(cb).not.toHaveBeenCalled();
+    resync(["risk_events"]);
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it("a full resync (server restarted / cannot tell) refetches", () => {
     const cb = vi.fn();
     renderHook(() => useRealtimeRefresh(["tasks"], cb, "page"));
-    connectHandlers.forEach((h) => h(false));
-    expect(cb).not.toHaveBeenCalled();
-    connectHandlers.forEach((h) => h(true));
+    resync([], true);
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it("the shared safety refresh (socket down) refetches too", () => {
+    const cb = vi.fn();
+    renderHook(() => useRealtimeRefresh(["tasks"], cb, "page"));
+    safetyHandlers.forEach((h) => h());
     expect(cb).toHaveBeenCalledTimes(1);
   });
 
@@ -100,7 +122,8 @@ describe("useRealtimeRefresh", () => {
     expect(cb).toHaveBeenCalledTimes(1);
     unmount();
     expect(live()).toBe(0);
-    expect(connectHandlers.size).toBe(0);
+    expect(resyncHandlers.size).toBe(0);
+    expect(safetyHandlers.size).toBe(0);
     emit("tasks");
     expect(cb).toHaveBeenCalledTimes(1);
   });

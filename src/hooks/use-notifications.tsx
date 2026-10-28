@@ -27,9 +27,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { showDesktopNotification } from "@/hooks/use-browser-notifications";
 import {
-  isRealtimeConnected,
   onRealtime,
-  onRealtimeConnect,
+  onRealtimeResync,
+  onRealtimeSafetyRefresh,
   startRealtime,
   stopRealtime,
 } from "@/integrations/realtime/socket";
@@ -43,8 +43,6 @@ const NOTIFICATION_COLUMNS = "id,user_id,type,title,body,task_id,read_at,created
 const REFOCUS_REFETCH_AFTER_MS = 30_000;
 // If the client was offline long enough to miss many, don't flood the screen.
 const MAX_ALERTS_PER_SYNC = 5;
-// Safety net only while the socket is down (e.g. a proxy without WebSockets).
-const DISCONNECTED_POLL_MS = 60_000;
 
 type NotificationsValue = {
   items: AppNotification[];
@@ -158,15 +156,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       announce(row);
     });
 
-    // Reconnect: refetch to recover events missed while disconnected. The very
-    // first connect is skipped because the initial load above already covers it.
-    const offConnect = onRealtimeConnect((isReconnect) => {
-      if (isReconnect) void load(true);
+    // After a reconnect the server tells us whether notifications changed while we were away
+    // (or that it cannot tell): refetch only then. A clean first connect does not trigger this,
+    // because the initial load above already covers it.
+    const offResync = onRealtimeResync((info) => {
+      if (info.full || info.tables.includes("notifications")) void load(true);
     });
 
-    const poll = setInterval(() => {
-      if (!isRealtimeConnected() && document.visibilityState === "visible") void load(true);
-    }, DISCONNECTED_POLL_MS);
+    // Socket stayed down: the one shared, backed-off safety refresh (see socket.ts).
+    const offSafety = onRealtimeSafetyRefresh(() => void load(true));
 
     // Read state changes made in another tab/device have no push event, so
     // resync when this tab becomes visible again.
@@ -184,8 +182,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     return () => {
       offEvent();
-      offConnect();
-      clearInterval(poll);
+      offResync();
+      offSafety();
       document.removeEventListener("visibilitychange", onVisible);
       stopRealtime();
     };

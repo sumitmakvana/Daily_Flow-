@@ -7,7 +7,7 @@ type Rows = Array<{ k: string | null; fp: string }>;
 
 /** A fake database: per-table fingerprint rows that a test can change, plus which triggers "exist". */
 function fakeDb() {
-  const tables: Record<string, Rows> = { tasks: [], nudges: [], risk_events: [], planning_suggestions: [], approval_requests: [], task_review_decisions: [], automation_queue_stats: [] };
+  const tables: Record<string, Rows> = { tasks: [], nudges: [], risk_events: [], planning_suggestions: [], approval_requests: [], task_review_decisions: [], task_worklogs: [], leaves: [], eod_checkins: [], automation_queue_stats: [] };
   const triggers = new Set<string>();
   const sqlSeen: string[] = [];
   let failTable: string | null = null;
@@ -113,6 +113,34 @@ describe("fingerprint diffing", () => {
     const e = events(emit).filter((x) => x.table === "task_review_decisions");
     expect(e).toHaveLength(1);
     expect(e[0].rooms).toEqual([ALL_USERS_ROOM]);
+  });
+
+  it("worklogs and leaves tell everyone (id-free: only the owner's user_id); EOD only the owner and managers", async () => {
+    const { db, emit, w } = setup();
+    db.tables.task_worklogs = [{ k: "u1", fp: "1|a|0|1|-" }];
+    db.tables.leaves = [{ k: "u2", fp: "1|a|-|0" }];
+    db.tables.eod_checkins = [{ k: "u3", fp: "1|a|2026-01-01|3" }];
+    await w.tick();
+    db.tables.task_worklogs = [{ k: "u1", fp: "1|b|0|2|-" }];
+    db.tables.leaves = [{ k: "u2", fp: "1|b|-|1" }];
+    db.tables.eod_checkins = [{ k: "u3", fp: "2|b|2026-01-02|5" }];
+    await w.tick();
+    const by = Object.fromEntries(events(emit).map((e) => [e.table, e]));
+    expect(by.task_worklogs).toMatchObject({ rooms: [ALL_USERS_ROOM], new: { user_id: "u1" }, old: {} });
+    expect(by.leaves).toMatchObject({ rooms: [ALL_USERS_ROOM], new: { user_id: "u2" }, old: {} });
+    // eod_read_self_or_mgr: never broadcast to everyone
+    expect(by.eod_checkins.rooms).toEqual(["user:u3", "role:manager"]);
+    expect(by.eod_checkins.rooms).not.toContain(ALL_USERS_ROOM);
+    expect(by.eod_checkins.new).toEqual({ user_id: "u3" });
+  });
+
+  it("a deleted worklog / leave / EOD row (count drops) is still detected", async () => {
+    const { db, emit, w } = setup();
+    db.tables.task_worklogs = [{ k: "u1", fp: "2|a|0|3|-" }];
+    await w.tick();
+    db.tables.task_worklogs = [{ k: "u1", fp: "1|a|0|1|-" }];
+    await w.tick();
+    expect(events(emit).map((e) => e.table)).toEqual(["task_worklogs"]);
   });
 
   it("a flood of changed groups collapses to ONE bulk 'refetch' signal per table", async () => {

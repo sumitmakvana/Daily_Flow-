@@ -24,7 +24,15 @@ vi.mock("@/integrations/postgres/client.server", () => ({
 }));
 
 import { ALL_USERS_ROOM } from "@/lib/entity-events.server";
-import { attachRealtime, emitToRole, emitToRooms, emitToUser, setPokeHandler } from "@/lib/realtime.server";
+import {
+  EVENT_LOG_MAX,
+  __resetEventLogForTests,
+  attachRealtime,
+  emitToRole,
+  emitToRooms,
+  emitToUser,
+  setPokeHandler,
+} from "@/lib/realtime.server";
 
 const inSeconds = (n: number) => Math.floor(Date.now() / 1000) + n;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -336,5 +344,107 @@ describe("token refresh and expiry", () => {
     const ack = await s.emitWithAck("auth:refresh", `mallory:${inSeconds(60)}`);
     expect(ack).toEqual({ ok: false });
     await gone;
+  });
+});
+
+describe("resync (missed-update recovery)", () => {
+  type Resync = { bootId: string; seq: number; tables: string[]; full: boolean };
+  const ask = (s: Socket, req: unknown) => new Promise<Resync>((res) => s.emit("resync", req, res));
+  const ent = (table: string, id = "1") => ({ schema: "public", table, eventType: "UPDATE", new: { id }, old: {} });
+
+  it("stamps every event with { seq, boot } as a second argument; the payload is unchanged", async () => {
+    const a = client(`alice:${inSeconds(60)}`);
+    await connected(a);
+    const got = new Promise<unknown[]>((res) => a.once("notification:new", (...args) => res(args)));
+    emitToUser("alice", "notification:new", { id: "n1" });
+    const [payload, meta] = (await got) as [unknown, { seq: number; boot: string }];
+    expect(payload).toEqual({ id: "n1" });
+    expect(typeof meta.seq).toBe("number");
+    expect(typeof meta.boot).toBe("string");
+    a.close();
+  });
+
+  it("an unknown baseline gets a full resync plus the current position to start from", async () => {
+    const a = client(`alice:${inSeconds(60)}`);
+    await connected(a);
+    const r = await ask(a, { bootId: null, seq: null });
+    expect(r.full).toBe(true);
+    expect(typeof r.bootId).toBe("string");
+    expect(r.seq).toBeGreaterThanOrEqual(0);
+    a.close();
+  });
+
+  it("reports only the tables that changed for THIS socket since its last position", async () => {
+    const a = client(`alice:${inSeconds(60)}`);
+    const m = client(`mgr:${inSeconds(60)}`);
+    await Promise.all([connected(a), connected(m)]);
+    const base = await ask(a, { bootId: null, seq: null });
+
+    emitToRooms([ALL_USERS_ROOM], "entity:changed", ent("tasks"));
+    emitToUser("alice", "notification:new", { id: "n1", user_id: "alice" });
+    emitToUser("bob", "notification:new", { id: "n2", user_id: "bob" }); // not alice's
+    emitToRooms(["role:manager"], "entity:changed", ent("risk_events")); // managers only
+
+    const forAlice = await ask(a, { bootId: base.bootId, seq: base.seq });
+    expect(forAlice.full).toBe(false);
+    expect(forAlice.tables.sort()).toEqual(["notifications", "tasks"]); // no risk_events, nothing of bob's
+
+    const forMgr = await ask(m, { bootId: base.bootId, seq: base.seq });
+    expect(forMgr.tables).toEqual(expect.arrayContaining(["tasks", "risk_events"]));
+    expect(forMgr.tables).not.toContain("notifications"); // alice's and bob's notifications are not the manager's
+    a.close();
+    m.close();
+  });
+
+  it("nothing changed since the given position = empty list, not a full refetch", async () => {
+    const a = client(`alice:${inSeconds(60)}`);
+    await connected(a);
+    emitToRooms([ALL_USERS_ROOM], "entity:changed", ent("tasks"));
+    const first = await ask(a, { bootId: null, seq: null });
+    const again = await ask(a, { bootId: first.bootId, seq: first.seq });
+    expect(again).toMatchObject({ full: false, tables: [] });
+    a.close();
+  });
+
+  it("a restarted server (new boot id) answers full, so nothing is silently missed", async () => {
+    const a = client(`alice:${inSeconds(60)}`);
+    await connected(a);
+    const before = await ask(a, { bootId: null, seq: null });
+    __resetEventLogForTests(); // what a process restart does to the in-memory log
+    const after = await ask(a, { bootId: before.bootId, seq: before.seq });
+    expect(after.full).toBe(true);
+    expect(after.bootId).not.toBe(before.bootId);
+    a.close();
+  });
+
+  it("a position older than the retained log answers full (it cannot prove what was missed)", async () => {
+    const a = client(`alice:${inSeconds(60)}`);
+    await connected(a);
+    const base = await ask(a, { bootId: null, seq: null });
+    for (let i = 0; i < EVENT_LOG_MAX + 25; i++) emitToRooms([ALL_USERS_ROOM], "entity:changed", ent("tasks", String(i)));
+    const r = await ask(a, { bootId: base.bootId, seq: base.seq });
+    expect(r.full).toBe(true);
+    // ...while a recent position is still answered precisely.
+    const recent = await ask(a, { bootId: r.bootId, seq: r.seq });
+    expect(recent).toMatchObject({ full: false, tables: [] });
+    a.close();
+  });
+
+  it("a position from the future (or garbage) is treated as unknown: full, never a crash", async () => {
+    const a = client(`alice:${inSeconds(60)}`);
+    await connected(a);
+    const base = await ask(a, { bootId: null, seq: null });
+    expect((await ask(a, { bootId: base.bootId, seq: base.seq + 1_000_000 })).full).toBe(true);
+    expect((await ask(a, "nonsense")).full).toBe(true);
+    expect((await ask(a, { bootId: 5, seq: "x" })).full).toBe(true);
+    a.emit("resync", { bootId: base.bootId, seq: base.seq }); // no ack: ignored, socket stays up
+    await wait(100);
+    expect(a.connected).toBe(true);
+    a.close();
+  });
+
+  it("a rejected (unauthenticated) socket cannot ask", async () => {
+    const e = await once<Error>(client(null), "connect_error");
+    expect(e.message).toBe("unauthorized");
   });
 });

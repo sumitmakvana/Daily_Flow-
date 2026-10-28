@@ -6,6 +6,9 @@ import { createElement } from "react";
 type Listener = (event: string, session: unknown) => void;
 const listeners = new Set<Listener>();
 let currentSession: unknown = null;
+// The real Keycloak wrapper calls every NEW subscriber right away with the current session
+// ("initial session"). Tests flip this on to reproduce that.
+let immediateSignedIn = false;
 const sessionFor = (id: string | null) =>
   id ? { user: { id, email: `${id}@x`, created_at: new Date().toISOString() } } : null; // new object every call
 
@@ -13,6 +16,7 @@ vi.mock("@/integrations/backend/auth", () => ({
   auth: {
     onAuthStateChange: (cb: Listener) => {
       listeners.add(cb);
+      if (immediateSignedIn) queueMicrotask(() => cb("SIGNED_IN", currentSession));
       return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } };
     },
     getSession: async () => ({ data: { session: currentSession } }),
@@ -24,7 +28,7 @@ vi.mock("@/integrations/realtime/socket", () => ({ stopRealtime: vi.fn() }));
 const getMyRoles = vi.fn<() => Promise<string[]>>();
 vi.mock("@/services/auth.functions", () => ({ getMyRoles: () => getMyRoles() }));
 
-import { ROLES_TTL_MS, invalidateRoles, signOut, useAuth } from "@/hooks/use-auth";
+import { ROLES_TTL_MS, getRolesShared, invalidateRoles, signOut, useAuth } from "@/hooks/use-auth";
 
 const seen: Array<ReturnType<typeof useAuth>> = [];
 function Probe() {
@@ -42,6 +46,7 @@ const emit = (event: string, id: string | null) =>
   });
 
 beforeEach(() => {
+  immediateSignedIn = false;
   invalidateRoles();
   listeners.clear();
   seen.length = 0;
@@ -157,5 +162,95 @@ describe("useAuth role loading is shared", () => {
     await flush();
     expect(getMyRoles).toHaveBeenCalledTimes(1);
     expect(seen.at(-1)!.isManager).toBe(true);
+  });
+});
+
+describe("the wrapper's immediate SIGNED_IN for every new subscriber (K1 root cause)", () => {
+  it("does not wipe the shared roles: components mounting later reuse the cached result", async () => {
+    immediateSignedIn = true;
+    const first = mountMany(5);
+    await flush();
+    await flush();
+    expect(getMyRoles).toHaveBeenCalledTimes(1);
+    // More components mount over time (route change, lazily rendered cards). Each one is told
+    // "SIGNED_IN" immediately; none of them may trigger a refetch.
+    for (let i = 0; i < 4; i++) {
+      mountMany(10);
+      await flush();
+      await flush();
+    }
+    first.unmount();
+    expect(getMyRoles).toHaveBeenCalledTimes(1);
+    expect(seen.at(-1)!.isManager).toBe(true);
+  });
+
+  it("still refetches when the signed-in user really changes", async () => {
+    immediateSignedIn = true;
+    mountMany(3);
+    await flush();
+    await flush();
+    getMyRoles.mockResolvedValue(["member"]);
+    await emit("SIGNED_IN", "u2");
+    await flush();
+    expect(getMyRoles).toHaveBeenCalledTimes(2);
+    expect(seen.at(-1)!.isManager).toBe(false);
+  });
+
+  it("a SIGNED_IN for the same, already-cached user is not a change", async () => {
+    mountMany(3);
+    await flush();
+    await flush();
+    getMyRoles.mockClear();
+    await emit("SIGNED_IN", "u1");
+    await emit("SIGNED_IN", "u1");
+    await flush();
+    expect(getMyRoles).not.toHaveBeenCalled();
+  });
+
+  it("sign-out and token refresh still drop the cache (authorization is not weakened)", async () => {
+    mountMany(3);
+    await flush();
+    await flush();
+    getMyRoles.mockClear();
+    await emit("TOKEN_REFRESHED", "u1");
+    await flush();
+    expect(getMyRoles.mock.calls.length).toBe(1); // one shared refetch for all instances
+    await emit("SIGNED_OUT", null);
+    expect(seen.at(-1)!.roles).toEqual([]);
+  });
+});
+
+describe("getRolesShared (used by the route layout gate)", () => {
+  it("joins a request that is already in flight instead of starting another", async () => {
+    let release!: (v: string[]) => void;
+    getMyRoles.mockImplementationOnce(() => new Promise<string[]>((r) => (release = r)));
+    const a = getRolesShared("u1", 0);
+    const b = getRolesShared("u1", 0);
+    release(["manager"]);
+    expect(await a).toEqual(["manager"]);
+    expect(await b).toEqual(["manager"]);
+    expect(getMyRoles).toHaveBeenCalledTimes(1);
+  });
+
+  it("maxAge 0 always reads fresh once the previous read has finished (a gate re-checks every navigation)", async () => {
+    await getRolesShared("u1", 0);
+    getMyRoles.mockResolvedValue(["member"]);
+    expect(await getRolesShared("u1", 0)).toEqual(["member"]); // demoted: the gate sees it immediately
+    expect(getMyRoles).toHaveBeenCalledTimes(2);
+  });
+
+  it("components that mount right after the gate reuse its result (default window)", async () => {
+    await getRolesShared("u1", 0); // the layout's read
+    mountMany(20); // AppShell, task cards, ...
+    await flush();
+    await flush();
+    expect(getMyRoles).toHaveBeenCalledTimes(1);
+  });
+
+  it("is per user: a different user never gets someone else's roles", async () => {
+    await getRolesShared("u1", 0);
+    getMyRoles.mockResolvedValue(["admin"]);
+    expect(await getRolesShared("u2")).toEqual(["admin"]);
+    expect(getMyRoles).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
+import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { LeaveDialog } from "@/components/LeaveDialog";
@@ -96,26 +97,55 @@ function CalendarPage() {
   const [myTasksOnly, setMyTasksOnly] = useState(true);
 
 
-  const load = useCallback(async () => {
-    const [{ data: t }, { data: p }, l, h] = await Promise.all([
-      supabase.from("tasks").select("*"),
+  // The calendar only places tasks by due_date, so it fetches the tasks due inside the visible grid
+  // (the whole weeks that cover the month, which also holds the week/day/list views) plus today's
+  // (Today panel). Navigating to another month fetches that month's range.
+  const taskRangeKey = useMemo(() => {
+    const first = new Date(year, month, 1 - new Date(year, month, 1).getDay());
+    const weeks = Math.ceil((new Date(year, month, 1).getDay() + new Date(year, month + 1, 0).getDate()) / 7);
+    const last = new Date(first.getFullYear(), first.getMonth(), first.getDate() + weeks * 7 - 1);
+    return `${toLocalISO(first)}|${toLocalISO(last)}`;
+  }, [year, month]);
+  const taskReq = useRef(0);
+  const loadTasks = useCallback(async () => {
+    const [from, to] = taskRangeKey.split("|");
+    const today = toLocalISO(new Date());
+    const req = ++taskReq.current;
+    const { data: t } = await supabase
+      .from("tasks")
+      .select("*")
+      .or(`and(due_date.gte.${from},due_date.lte.${to}),due_date.eq.${today}`);
+    if (req === taskReq.current) setTasks((t ?? []) as Task[]);
+  }, [taskRangeKey]);
+
+  const loadOthers = useCallback(async () => {
+    const [{ data: p }, l, h] = await Promise.all([
       supabase.from("profiles").select("id,display_name,avatar_url"),
       leavesService.getLeaves().catch(() => [] as Leave[]),
       holidaysService.list().catch(() => [] as HolidayCalendar[]),
     ]);
-    setTasks((t ?? []) as Task[]);
     setProfiles((p ?? []) as Profile[]);
     setLeaves(l || []);
     setCustomHolidays(h || []);
   }, []);
 
-
+  const load = useCallback(() => Promise.all([loadTasks(), loadOthers()]), [loadTasks, loadOthers]);
 
   useEffect(() => {
-    load();
-  }, [load]);
-  
-  useRealtimeTasks(load, "calendar-rt");
+    loadOthers();
+  }, [loadOthers]);
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  // Task events only change tasks, so only tasks are re-read.
+  useRealtimeTasks(loadTasks, "calendar-rt");
+  // Leave / WFH changes (e.g. a manager approves a request) refresh only the leaves.
+  useRealtimeRefresh(
+    ["leaves"],
+    () => void leavesService.getLeaves().then((l) => setLeaves(l || [])).catch(() => undefined),
+    "calendar-leaves-rt",
+  );
 
   useEffect(() => {
     fetchIndianHolidays(year).then(setApiHolidays).catch(() => {});

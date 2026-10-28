@@ -45,7 +45,7 @@ import { UX4GAccessibilityToolbar } from "@/components/UX4GAccessibilityToolbar"
 import { GlobalFeedbackWidget, OPEN_FEEDBACK_EVENT } from "@/components/GlobalFeedbackWidget";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth, signOut } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/supabase/client";
+import { loadMyProfile } from "@/lib/my-profile";
 import { cn } from "@/lib/utils";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { NotificationsModal } from "@/components/NotificationsModal";
@@ -201,13 +201,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     const loadProfile = async () => {
       try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("display_name, email, avatar_url")
-          .eq("id", user.id)
-          .maybeSingle();
+        // One shared read of my profile row (see my-profile.ts) instead of one per component.
+        const data = await loadMyProfile(user.id);
 
-        if (!error && data) {
+        if (data) {
           setProfile(data);
         } else {
           setProfile({

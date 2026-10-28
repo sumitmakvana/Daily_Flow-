@@ -229,8 +229,26 @@ export function parseHoursOrMins(inputStr: string): number {
 }
 
 let cachedHolidays: Record<string, Record<string, Holiday>> = {};
-let activeFetches = new Set<number>();
+const holidayFetches = new Map<number, Promise<Record<string, Holiday>>>();
+const holidayMissUntil = new Map<number, number>();
 
+/** An unusable answer (empty body / 204 / error) is not asked again for this long. */
+export const HOLIDAY_MISS_TTL_MS = 6 * 60 * 60 * 1000;
+
+export function __resetHolidayCacheForTests() {
+  cachedHolidays = {};
+  holidayFetches.clear();
+  holidayMissUntil.clear();
+}
+
+/**
+ * Public holidays from date.nager.at, fetched at most once per year:
+ *  - a good answer is kept in memory and localStorage (as before);
+ *  - callers asking while a request is in flight share it (they used to get `{}`);
+ *  - an unusable answer (empty body, 204, non-200, network error) is remembered for
+ *    HOLIDAY_MISS_TTL_MS in memory and localStorage, so a year the API does not serve is not re-requested
+ *    on every calendar visit / dialog open.
+ */
 export async function fetchIndianHolidays(year: number): Promise<Record<string, Holiday>> {
   if (cachedHolidays[year]) {
     return cachedHolidays[year];
@@ -245,17 +263,41 @@ export async function fetchIndianHolidays(year: number): Promise<Record<string, 
     }
   } catch (e) {}
 
-  if (activeFetches.has(year)) {
-    return cachedHolidays[year] || {};
+  const missKey = `${cacheKey}_miss`;
+  let missUntil = holidayMissUntil.get(year) ?? 0;
+  if (!missUntil) {
+    try {
+      missUntil = Number(localStorage.getItem(missKey)) || 0;
+    } catch (e) {}
   }
+  if (missUntil > Date.now()) return {};
 
-  activeFetches.add(year);
-  try {
-    const res = await fetch(`https://date.nager.at/api/v3/publicholidays/${year}/IN`);
-    if (res.ok) {
-      const data = await res.json();
+  const inflight = holidayFetches.get(year);
+  if (inflight) return inflight;
+
+  const run = (async () => {
+    const rememberMiss = () => {
+      const until = Date.now() + HOLIDAY_MISS_TTL_MS;
+      holidayMissUntil.set(year, until);
+      try {
+        localStorage.setItem(missKey, String(until));
+      } catch (e) {}
+    };
+    try {
+      const res = await fetch(`https://date.nager.at/api/v3/publicholidays/${year}/IN`);
+      // 204 / empty body is "no data", not JSON: do not try to parse it.
+      const text = res.ok && res.status !== 204 ? await res.text() : "";
+      if (!text.trim()) {
+        rememberMiss();
+        return {};
+      }
+      const data = JSON.parse(text);
+      if (!Array.isArray(data) || data.length === 0) {
+        rememberMiss();
+        return {};
+      }
       const apiHolidays: Record<string, Holiday> = {};
-      
+
       data.forEach((item: any) => {
         const dateStr = item.date; // YYYY-MM-DD
         let emoji = "🗓️";
@@ -286,14 +328,17 @@ export async function fetchIndianHolidays(year: number): Promise<Record<string, 
       try {
         localStorage.setItem(cacheKey, JSON.stringify(apiHolidays));
       } catch (e) {}
+      return apiHolidays;
+    } catch (err) {
+      console.warn("Failed to fetch holidays from public API:", err);
+      rememberMiss();
+      return {};
+    } finally {
+      holidayFetches.delete(year);
     }
-  } catch (err) {
-    console.warn("Failed to fetch holidays from public API:", err);
-  } finally {
-    activeFetches.delete(year);
-  }
-
-  return cachedHolidays[year] || {};
+  })();
+  holidayFetches.set(year, run);
+  return run;
 }
 
 export function getLocalHoliday(

@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect, useLocation } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { auth } from "@/integrations/backend/auth";
-import { getMyRoles } from "@/services/auth.functions";
+import { getRolesShared } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { UnstartedTaskLeaveModal } from "@/components/UnstartedTaskLeaveModal";
 import { MorningResumePromptModal } from "@/components/MorningResumePromptModal";
@@ -49,6 +49,9 @@ function AuthenticatedLayout() {
   const location = useLocation();
   const [ready, setReady] = useState(false);
   const [roles, setRoles] = useState<string[]>([]);
+  // Pathname the current `roles` were read for. The gate below depends on the pathname and the
+  // roles only, so a search-only change (e.g. `?tab=`) needs no new read.
+  const rolesPathRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,13 +62,18 @@ function AuthenticatedLayout() {
         window.location.replace(url);
         return;
       }
-      try {
-        const rs = await getMyRoles();
-        if (cancelled) return;
-        setRoles(rs as string[]);
-      } catch {
-        if (cancelled) return;
-        setRoles([]);
+      if (rolesPathRef.current !== location.pathname) {
+        try {
+          // Always a fresh read for a new path (maxAge 0), but it joins a request that is already
+          // in flight and its result is shared with every `useAuth()` below, so a page load is one request.
+          const rs = await getRolesShared(sess.session.user.id, 0);
+          if (cancelled) return;
+          rolesPathRef.current = location.pathname;
+          setRoles(rs as string[]);
+        } catch {
+          if (cancelled) return;
+          setRoles([]);
+        }
       }
       if (!cancelled) setReady(true);
     })();

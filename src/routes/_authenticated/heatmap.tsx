@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { Profile, Task, WorkloadSnapshot } from "@/lib/types";
 import { workloadService, utilTone } from "@/services/workload";
 import { useAuth } from "@/hooks/use-auth";
+import { TASK_WORKLOAD_COLS } from "@/lib/task-columns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/heatmap")({
@@ -21,7 +22,7 @@ function HeatmapPage() {
   const load = async () => {
     const [{ data: p }, { data: t }, s] = await Promise.all([
       supabase.from("profiles").select("id,display_name,avatar_url"),
-      supabase.from("tasks").select("*"),
+      supabase.from("tasks").select(TASK_WORKLOAD_COLS),
       workloadService.last7Days(),
     ]);
     setProfiles((p ?? []) as Profile[]);

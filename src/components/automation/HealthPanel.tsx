@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
-import { onRealtime, onRealtimeConnect } from "@/integrations/realtime/socket";
+import { onRealtime, onRealtimeResync, onRealtimeSafetyRefresh } from "@/integrations/realtime/socket";
 import { automationsService, type AutomationHealth } from "@/services/automations";
 
 const SOFT_CAP = 5000;
@@ -15,10 +15,16 @@ export function HealthPanel() {
     let alive = true;
     const load = () => automationsService.health().then((d) => alive && setH(d)).catch(() => {});
     load();
-    // Pushed by the server (`automation:health`); the shared socket is owned by the app shell. Refetch on reconnect to catch up.
+    // Pushed by the server (`automation:health`); the shared socket is owned by the app shell.
+    // After a reconnect / long tab absence the server says which tables changed, so refetch only if
+    // automation_health did (or when it asks for everything). While the socket stays down, the one
+    // shared backed-off safety refresh covers us.
     const offEvent = onRealtime("automation:health", load);
-    const offConnect = onRealtimeConnect((isReconnect) => { if (isReconnect) load(); });
-    return () => { alive = false; offEvent(); offConnect(); };
+    const offResync = onRealtimeResync((info) => {
+      if (info.full || info.tables.includes("automation_health")) load();
+    });
+    const offSafety = onRealtimeSafetyRefresh(load);
+    return () => { alive = false; offEvent(); offResync(); offSafety(); };
   }, []);
 
   if (!h) return <Card className="p-4 text-xs text-muted-foreground">Loading…</Card>;

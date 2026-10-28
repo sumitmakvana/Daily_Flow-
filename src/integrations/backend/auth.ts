@@ -26,6 +26,32 @@ if (isBrowser) {
   });
 }
 
+/**
+ * Create the user's profile/role rows if they are missing (`ensure_user_profile`). It is idempotent
+ * and only matters for a first login, so it runs once per user per browser session instead of on
+ * every page load / reload. A failed call is not remembered, so the next load retries it.
+ */
+export async function ensureProfileOnce(userId: string, email: string, name: string): Promise<void> {
+  const key = `ensured_profile:${userId}`;
+  try {
+    if (window.sessionStorage.getItem(key)) return;
+  } catch {
+    // storage unavailable: fall through and just call it
+  }
+  const { supabase } = await import("@/integrations/supabase/client");
+  const { error } = await supabase.rpc("ensure_user_profile", {
+    user_id: userId,
+    user_email: email,
+    user_name: name || email.split("@")[0],
+  });
+  if (error) return;
+  try {
+    window.sessionStorage.setItem(key, "1");
+  } catch {
+    // ignore
+  }
+}
+
 // Keep track of auth listeners
 const listeners = new Set<(event: string, session: any) => void | Promise<void>>();
 
@@ -62,12 +88,7 @@ export function initKeycloak(): Promise<boolean> {
             (keycloak.tokenParsed as any)?.name || keycloak.tokenParsed?.preferred_username;
           // Read-only builds never write a profile/role row at login.
           if (userId && email && !isClientReadOnly()) {
-            const { supabase } = await import("@/integrations/supabase/client");
-            await supabase.rpc("ensure_user_profile", {
-              user_id: userId,
-              user_email: email,
-              user_name: name || email.split("@")[0],
-            });
+            await ensureProfileOnce(userId, email, name);
           }
         } catch (err) {
           console.error("Failed to auto-provision user profile:", err);
@@ -216,12 +237,7 @@ export const auth = {
         const name =
           (keycloak!.tokenParsed as any)?.name || keycloak!.tokenParsed?.preferred_username;
         if (userId && email && !isClientReadOnly()) {
-          const { supabase } = await import("@/integrations/supabase/client");
-          await supabase.rpc("ensure_user_profile", {
-            user_id: userId,
-            user_email: email,
-            user_name: name || email.split("@")[0],
-          });
+          await ensureProfileOnce(userId, email, name);
         }
 
         const session = getSessionSync();
@@ -252,6 +268,12 @@ export const auth = {
     if (!isBrowser) return { error: null, redirected: false };
     window.localStorage.removeItem("kc_token");
     window.localStorage.removeItem("kc_refresh_token");
+    try {
+      const sub = keycloak?.tokenParsed?.sub;
+      if (sub) window.sessionStorage.removeItem(`ensured_profile:${sub}`);
+    } catch {
+      // ignore
+    }
     if (keycloak?.authenticated) {
       await keycloak.logout({
         redirectUri: window.location.origin + "/login",

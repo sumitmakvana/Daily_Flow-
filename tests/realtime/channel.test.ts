@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const handlers = new Map<string, Set<(p: unknown) => void>>();
-const connectHandlers = new Set<(isReconnect: boolean) => void>();
-let connected = true;
+type ResyncInfo = { full: boolean; tables: string[]; reason: string };
+const resyncHandlers = new Set<(info: ResyncInfo) => void>();
+const safetyHandlers = new Set<() => void>();
 
 vi.mock("@/integrations/realtime/socket", () => ({
   onRealtime: (ev: string, h: (p: unknown) => void) => {
@@ -10,23 +11,29 @@ vi.mock("@/integrations/realtime/socket", () => ({
     handlers.get(ev)!.add(h);
     return () => handlers.get(ev)!.delete(h);
   },
-  onRealtimeConnect: (h: (r: boolean) => void) => {
-    connectHandlers.add(h);
-    return () => connectHandlers.delete(h);
+  onRealtimeResync: (h: (i: ResyncInfo) => void) => {
+    resyncHandlers.add(h);
+    return () => resyncHandlers.delete(h);
   },
-  isRealtimeConnected: () => connected,
+  onRealtimeSafetyRefresh: (h: () => void) => {
+    safetyHandlers.add(h);
+    return () => safetyHandlers.delete(h);
+  },
 }));
 
 import { createRealtimeChannel, matchesFilter, POLL_DISABLED_TABLES, PUSH_TABLES } from "@/integrations/realtime/channel";
 
 const emit = (ev: string, p: unknown) => handlers.get(ev)?.forEach((h) => h(p));
 const live = (ev: string) => handlers.get(ev)?.size ?? 0;
+/** What socket.ts does after a reconnect: tell subscribers which tables changed (or that everything may have). */
+const resync = (tables: string[], full = false) => resyncHandlers.forEach((h) => h({ full, tables, reason: "connect" }));
+const safetyRefresh = () => safetyHandlers.forEach((h) => h());
 
 beforeEach(() => {
   vi.useFakeTimers();
   handlers.clear();
-  connectHandlers.clear();
-  connected = true;
+  resyncHandlers.clear();
+  safetyHandlers.clear();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -62,28 +69,24 @@ describe("realtime channel — push tables (notifications)", () => {
     });
   });
 
-  it("does not poll while connected", () => {
+  it("a channel starts no timers of its own, so nothing polls however long it sits", () => {
     const cb = vi.fn();
     createRealtimeChannel("x").on("postgres_changes", { event: "INSERT", table: "notifications" }, cb).subscribe();
-    vi.advanceTimersByTime(120_000);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(10 * 60_000);
     expect(cb).not.toHaveBeenCalled();
   });
 
-  it("falls back to a slow poll only while disconnected", () => {
+  it("after a reconnect, refetches only if the server says notifications changed (or cannot tell)", () => {
     const cb = vi.fn();
     createRealtimeChannel("x").on("postgres_changes", { event: "INSERT", table: "notifications" }, cb).subscribe();
-    connected = false;
-    vi.advanceTimersByTime(30_000);
-    expect(cb).toHaveBeenCalledTimes(1);
-  });
-
-  it("fires a catch-up callback on reconnect, not on first connect", () => {
-    const cb = vi.fn();
-    createRealtimeChannel("x").on("postgres_changes", { event: "INSERT", table: "notifications" }, cb).subscribe();
-    connectHandlers.forEach((h) => h(false));
+    resync([]); // reconnected, nothing missed
+    resync(["tasks"]); // something else changed
     expect(cb).not.toHaveBeenCalled();
-    connectHandlers.forEach((h) => h(true));
+    resync(["notifications"]);
     expect(cb).toHaveBeenCalledTimes(1);
+    resync([], true); // server restarted / cannot tell: refetch everything
+    expect(cb).toHaveBeenCalledTimes(2);
   });
 
   it("supports several .on() per channel (the old mock kept only the last)", () => {
@@ -104,18 +107,16 @@ describe("realtime channel — push tables (notifications)", () => {
     expect(live("notification:new")).toBe(1);
     ch.unsubscribe();
     expect(live("notification:new")).toBe(0);
-    expect(connectHandlers.size).toBe(0);
-    connected = false;
+    expect(resyncHandlers.size).toBe(0);
+    expect(safetyHandlers.size).toBe(0);
+    resync([], true);
+    safetyRefresh();
     vi.advanceTimersByTime(120_000);
     expect(cb).not.toHaveBeenCalled();
   });
 });
 
-const PUSHED_TABLES = ["tasks", "nudges", "risk_events", "planning_suggestions", "approval_requests", "task_review_decisions"];
-const setVisibility = (v: "visible" | "hidden") => {
-  Object.defineProperty(document, "visibilityState", { value: v, configurable: true });
-  document.dispatchEvent(new Event("visibilitychange"));
-};
+const PUSHED_TABLES = ["tasks", "nudges", "risk_events", "planning_suggestions", "approval_requests", "task_review_decisions", "task_worklogs", "leaves", "eod_checkins"];
 const evt = (table: string, o: Record<string, unknown> = {}, old: Record<string, unknown> = {}, eventType = "UPDATE") => ({
   schema: "public", table, eventType, new: o, old,
 });
@@ -143,48 +144,65 @@ describe("realtime channel — task/nudge/risk/suggestion events", () => {
     expect(cb).not.toHaveBeenCalled();
   });
 
-  it("while the socket is DOWN and the tab is visible, a slow 30s fallback refetches", () => {
+  it("NO per-channel timer exists at all: zero timers while the socket is up OR down", () => {
+    createRealtimeChannel("x").on("postgres_changes", { event: "*", table: "tasks" }, vi.fn()).subscribe();
+    createRealtimeChannel("y").on("postgres_changes", { event: "*", table: "approval_requests" }, vi.fn()).subscribe();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(10 * 60_000);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("the shared safety refresh (socket down) refetches every subscriber of the channel, once per firing", () => {
     const cb = vi.fn();
-    createRealtimeChannel("x").on("postgres_changes", { event: "*", table: "tasks" }, cb).subscribe();
-    connected = false;
-    vi.advanceTimersByTime(30_000);
+    const other = vi.fn();
+    createRealtimeChannel("x")
+      .on("postgres_changes", { event: "*", table: "tasks" }, cb)
+      .on("postgres_changes", { event: "*", table: "nudges" }, other)
+      .subscribe();
+    safetyRefresh();
     expect(cb).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(30_000);
+    expect(other).toHaveBeenCalledTimes(1);
+    safetyRefresh();
     expect(cb).toHaveBeenCalledTimes(2);
   });
 
-  it("the fallback does NOT run while the tab is hidden", () => {
-    const cb = vi.fn();
-    createRealtimeChannel("x").on("postgres_changes", { event: "*", table: "tasks" }, cb).subscribe();
-    connected = false;
-    setVisibility("hidden");
-    vi.advanceTimersByTime(120_000);
-    expect(cb).not.toHaveBeenCalled();
-    setVisibility("visible");
+  it("targeted resync: only subscribers of the tables that changed refetch", () => {
+    const tasks = vi.fn();
+    const nudges = vi.fn();
+    const approvals = vi.fn();
+    createRealtimeChannel("x")
+      .on("postgres_changes", { event: "*", table: "tasks" }, tasks)
+      .on("postgres_changes", { event: "*", table: "nudges" }, nudges)
+      .on("postgres_changes", { event: "*", table: "approval_requests" }, approvals)
+      .subscribe();
+    resync(["tasks", "approval_requests"]);
+    expect(tasks).toHaveBeenCalledTimes(1);
+    expect(approvals).toHaveBeenCalledTimes(1);
+    expect(nudges).not.toHaveBeenCalled(); // nothing missed for nudges: no request
   });
 
-  it("tab visibility: returning after >=5s hidden refetches once; a quick tab flip does not", () => {
+  it("a resync with nothing changed refetches nothing (the old code refetched everything)", () => {
+    const cbs = PUSHED_TABLES.map(() => vi.fn());
+    const ch = createRealtimeChannel("x");
+    PUSHED_TABLES.forEach((t, i) => ch.on("postgres_changes", { event: "*", table: t }, cbs[i]));
+    ch.subscribe();
+    resync([]);
+    cbs.forEach((cb) => expect(cb).not.toHaveBeenCalled());
+  });
+
+  it("a review-decision change missed while disconnected is recovered by a targeted resync", () => {
     const cb = vi.fn();
-    createRealtimeChannel("x").on("postgres_changes", { event: "*", table: "tasks" }, cb).subscribe();
-    setVisibility("hidden");
-    vi.advanceTimersByTime(2000);
-    setVisibility("visible");
-    expect(cb).not.toHaveBeenCalled(); // flipped tabs briefly
-    setVisibility("hidden");
-    vi.advanceTimersByTime(6000);
-    setVisibility("visible");
-    expect(cb).toHaveBeenCalledTimes(1);
-    setVisibility("visible"); // a second 'visible' without a hide in between
+    createRealtimeChannel("x").on("postgres_changes", { event: "*", table: "task_review_decisions" }, cb).subscribe();
+    resync(["task_review_decisions"]);
     expect(cb).toHaveBeenCalledTimes(1);
   });
 
-  it("unsubscribe removes the visibility listener (no refetch after the page is gone)", () => {
+  it("unsubscribe removes the resync and safety listeners (nothing fires after the page is gone)", () => {
     const cb = vi.fn();
     const ch = createRealtimeChannel("x").on("postgres_changes", { event: "*", table: "tasks" }, cb).subscribe();
     ch.unsubscribe();
-    setVisibility("hidden");
-    vi.advanceTimersByTime(10_000);
-    setVisibility("visible");
+    resync(["tasks"], true);
+    safetyRefresh();
     expect(cb).not.toHaveBeenCalled();
   });
 
@@ -320,23 +338,23 @@ describe("realtime channel — task/nudge/risk/suggestion events", () => {
     expect(cb).toHaveBeenCalledTimes(5);
   });
 
-  it("reconnect fires a catch-up refetch for every pushed table", () => {
+  it("a FULL resync (server restarted / cannot tell) refetches every pushed table", () => {
     const cbs = PUSHED_TABLES.map(() => vi.fn());
     const ch = createRealtimeChannel("x");
     PUSHED_TABLES.forEach((t, i) => ch.on("postgres_changes", { event: "*", table: t }, cbs[i]));
     ch.subscribe();
-    connectHandlers.forEach((h) => h(true));
+    resync([], true);
     cbs.forEach((cb) => expect(cb).toHaveBeenCalledTimes(1));
   });
 
-  it("unsubscribe stops socket listeners, the poll, and pending throttle timers", () => {
+  it("unsubscribe stops socket listeners and pending throttle timers", () => {
     const cb = vi.fn();
     const ch = createRealtimeChannel("x").on("postgres_changes", { event: "*", table: "tasks" }, cb).subscribe();
     emit("entity:changed", evt("tasks", { id: "1" })); // leading call, trailing now pending
     emit("entity:changed", evt("tasks", { id: "2" }));
     ch.unsubscribe();
     expect(live("entity:changed")).toBe(0);
-    expect(connectHandlers.size).toBe(0);
+    expect(resyncHandlers.size).toBe(0);
     vi.advanceTimersByTime(60_000);
     expect(cb).toHaveBeenCalledTimes(1); // only the leading call; nothing after unsubscribe
   });

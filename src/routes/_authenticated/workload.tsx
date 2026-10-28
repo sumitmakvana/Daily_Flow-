@@ -6,6 +6,7 @@ import { CapacityBar } from "@/components/CapacityBar";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import type { Profile, Task } from "@/lib/types";
 import { isOverdue } from "@/lib/format";
+import { TASK_WORKLOAD_COLS } from "@/lib/task-columns";
 
 export const Route = createFileRoute("/_authenticated/workload")({
   component: WorkloadPage,
@@ -16,7 +17,7 @@ function WorkloadPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const load = useCallback(async () => {
     const [{ data: t }, { data: p }] = await Promise.all([
-      supabase.from("tasks").select("*"),
+      supabase.from("tasks").select(TASK_WORKLOAD_COLS),
       supabase.from("profiles").select("id,display_name,avatar_url"),
     ]);
     setTasks((t ?? []) as Task[]);

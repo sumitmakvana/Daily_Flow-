@@ -60,7 +60,7 @@ export const last7DaysWorkloadFn = createServerFn({ method: "GET" })
     const rows = await withUser(context.userId, async (client) => {
       const res = await client.query<WorkloadSnapshot>(
         `SELECT id, user_id, snapshot_date, planned_hours, actual_hours,
-                active_count, delayed_count, blocked_count, completed_count, captured_at
+                active_count, delayed_count, blocked_count, completed_count, created_at
            FROM public.daily_workload_snapshot
            WHERE snapshot_date >= (CURRENT_DATE - INTERVAL '7 days')
            ORDER BY snapshot_date ASC`,

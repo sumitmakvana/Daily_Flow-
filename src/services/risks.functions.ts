@@ -3,8 +3,12 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser } from "@/integrations/postgres/query.server";
 
-const SELECT_COLS = `id, kind, severity, work_item_id, user_id, team_id,
-                     reason, evidence, detected_at, resolved_at, resolved_by`;
+// Must match public.risk_events (and the RiskEvent type). The previous list named work_item_id /
+// user_id / team_id / reason / evidence, which do not exist on this table, so the query failed
+// with `column "work_item_id" does not exist` and the Command page showed no risks.
+export const RISK_SELECT_COLS = `id, kind, severity, entity_type, entity_id, summary, payload,
+                     detected_at, resolved_at, resolved_by, detection_date`;
+const SELECT_COLS = RISK_SELECT_COLS;
 
 export const listOpenRisksFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])

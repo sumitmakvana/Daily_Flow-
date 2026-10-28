@@ -73,6 +73,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import { useAuth } from "@/hooks/use-auth";
+import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { TeamReviewQueue } from "@/components/review/TeamReviewQueue";
 import { isReviewAging, reviewSubmittedAt } from "@/lib/review";
 import { tasksService } from "@/services/tasks";
@@ -290,6 +291,19 @@ function TeamCapacityPage() {
     },
     staleTime: 10000,
   });
+
+  // Realtime (Socket.IO; no polling): task and worklog changes refresh the task data, leave changes
+  // refresh availability. The channel layer also refetches after a reconnect / long tab absence.
+  useRealtimeRefresh(
+    ["tasks", "task_worklogs"],
+    () => queryClient.invalidateQueries({ queryKey: ["capacity-tasks"] }),
+    "capacity-tasks-rt",
+  );
+  useRealtimeRefresh(
+    ["leaves"],
+    () => queryClient.invalidateQueries({ queryKey: ["capacity-active-leaves"] }),
+    "capacity-leaves-rt",
+  );
 
   // Extract ALL unique project names
   const allProjectsList = useMemo(() => {

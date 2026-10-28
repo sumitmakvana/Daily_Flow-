@@ -14,6 +14,7 @@ import { workloadService } from "@/services/workload";
 import { useAuth } from "@/hooks/use-auth";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { isOverdue } from "@/lib/format";
+import { TASK_COMMAND_COLS } from "@/lib/task-columns";
 import type { Profile, Task, RiskEvent, WorkSettings } from "@/lib/types";
 import { Activity, AlertOctagon, CheckCircle2, RefreshCw, ShieldAlert, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -32,7 +33,7 @@ function CommandPage() {
 
   const load = async () => {
     const [{ data: t }, { data: p }, r, s] = await Promise.all([
-      supabase.from("tasks").select("*"),
+      supabase.from("tasks").select(TASK_COMMAND_COLS),
       supabase.from("profiles").select("id,display_name,avatar_url"),
       risksService.listOpen(),
       workSettingsService.get(),
@@ -189,8 +190,8 @@ function CommandPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <TomorrowRiskPanel tasks={tasks} />
-        <SuggestionsPanel profiles={profiles} tasks={tasks} />
+        <TomorrowRiskPanel />
+        <SuggestionsPanel profiles={profiles} />
       </div>
     </div>
   );

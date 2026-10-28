@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { CapacityBar } from "@/components/CapacityBar";
 import { formatDate, isOverdue, daysSince } from "@/lib/format";
+import { TASK_DASHBOARD_COLS, TASK_DASHBOARD_DETAIL_COLS } from "@/lib/task-columns";
 import type { Profile, Task } from "@/lib/types";
 import { AlertOctagon, CheckCircle2, Clock, ListChecks, TrendingUp } from "lucide-react";
 import { TaskEodReviewCard } from "@/components/TaskEodReviewCard";
@@ -21,10 +22,21 @@ function DashboardPage() {
   useEffect(() => {
     const load = async () => {
       const [{ data: t }, { data: p }] = await Promise.all([
-        supabase.from("tasks").select("*"),
+        supabase.from("tasks").select(TASK_DASHBOARD_COLS),
         supabase.from("profiles").select("id,display_name,avatar_url"),
       ]);
-      setTasks((t ?? []) as Task[]);
+      const rows = (t ?? []) as Task[];
+      // The two lists below need code / name / reason, but only for the few rows they show. Pick those
+      // rows with the same rules the lists use, then read just their details.
+      const listIds = rows
+        .filter((x) => x.status === "Blocked" || (x.priority === "High" && isOverdue(x.due_date, x.status)))
+        .map((x) => x.id);
+      const detail = new Map<string, Partial<Task>>();
+      for (let i = 0; i < listIds.length; i += 100) {
+        const { data: d } = await supabase.from("tasks").select(TASK_DASHBOARD_DETAIL_COLS).in("id", listIds.slice(i, i + 100));
+        for (const r of (d ?? []) as Array<Partial<Task> & { id: string }>) detail.set(r.id, r);
+      }
+      setTasks(rows.map((r) => (detail.has(r.id) ? ({ ...r, ...detail.get(r.id) } as Task) : r)));
       setProfiles((p ?? []) as Profile[]);
     };
     load();

@@ -65,20 +65,27 @@ vi.mock("@/hooks/use-browser-notifications", () => ({
 }));
 
 const ev = new Map<string, (p: unknown) => void>();
-let connectCb: ((re: boolean) => void) | null = null;
+type ResyncInfo = { full: boolean; tables: string[]; reason: string };
+let resyncCb: ((info: ResyncInfo) => void) | null = null;
+let safetyCb: (() => void) | null = null;
+/** What socket.ts reports after a reconnect: which tables changed (or that it cannot tell). */
+const resync = (tables: string[], full = false) => resyncCb?.({ full, tables, reason: "connect" });
 const startRealtime = vi.fn();
 const stopRealtime = vi.fn();
 vi.mock("@/integrations/realtime/socket", () => ({
   startRealtime: () => startRealtime(),
   stopRealtime: () => stopRealtime(),
-  isRealtimeConnected: () => true,
   onRealtime: (name: string, h: (p: unknown) => void) => {
     ev.set(name, h);
     return () => ev.delete(name);
   },
-  onRealtimeConnect: (h: (re: boolean) => void) => {
-    connectCb = h;
-    return () => (connectCb = null);
+  onRealtimeResync: (h: (info: ResyncInfo) => void) => {
+    resyncCb = h;
+    return () => (resyncCb = null);
+  },
+  onRealtimeSafetyRefresh: (h: () => void) => {
+    safetyCb = h;
+    return () => (safetyCb = null);
   },
 }));
 
@@ -96,7 +103,8 @@ beforeEach(() => {
   startRealtime.mockClear();
   stopRealtime.mockClear();
   ev.clear();
-  connectCb = null;
+  resyncCb = null;
+  safetyCb = null;
 });
 
 async function ready() {
@@ -175,28 +183,59 @@ describe("NotificationsProvider", () => {
     expect(toastFn).not.toHaveBeenCalled();
   });
 
-  it("first connect does not refetch; a reconnect refetches and alerts only for missed rows", async () => {
-    const { result } = await ready();
-    act(() => connectCb!(false));
+  it("a reconnect that missed nothing for notifications does not refetch (targeted resync)", async () => {
+    await ready();
     expect(fetchCount.n).toBe(1);
+    act(() => resync([])); // reconnected, nothing changed
+    act(() => resync(["tasks", "nudges"])); // other tables changed, not notifications
+    expect(fetchCount.n).toBe(1);
+  });
 
+  it("when the server says notifications changed, it refetches and alerts only for missed rows", async () => {
+    const { result } = await ready();
     serverRows = [row("missed"), ...serverRows];
-    await act(async () => connectCb!(true));
+    await act(async () => resync(["notifications"]));
     await waitFor(() => expect(result.current.items.length).toBe(3));
     expect(fetchCount.n).toBe(2);
     expect(toastFn).toHaveBeenCalledTimes(1);
     expect(desktop.mock.calls[0][0]).toMatchObject({ id: "missed" });
 
-    // A second reconnect with nothing new must not re-alert.
-    await act(async () => connectCb!(true));
+    // A second resync with nothing new must not re-alert.
+    await act(async () => resync(["notifications"]));
     expect(toastFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("a FULL resync (server restarted / cannot tell) refetches, so nothing is silently lost", async () => {
+    const { result } = await ready();
+    serverRows = [row("while-restarting"), ...serverRows];
+    await act(async () => resync([], true));
+    await waitFor(() => expect(result.current.items.length).toBe(3));
+    expect(fetchCount.n).toBe(2);
+  });
+
+  it("the shared safety refresh (socket down) refetches and alerts for missed rows", async () => {
+    const { result } = await ready();
+    serverRows = [row("missed-while-down"), ...serverRows];
+    await act(async () => safetyCb!());
+    await waitFor(() => expect(result.current.items.length).toBe(3));
+    expect(toastFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts no polling interval of its own", async () => {
+    // (Testing Library's waitFor polls every 50ms; the provider must add nothing of 1s or more.)
+    const spy = vi.spyOn(globalThis, "setInterval");
+    const { unmount } = await ready();
+    const slow = spy.mock.calls.filter(([, ms]) => Number(ms ?? 0) >= 1000);
+    expect(slow).toHaveLength(0);
+    unmount();
+    spy.mockRestore();
   });
 
   it("an event followed by a refetch containing it does not alert twice", async () => {
     await ready();
     act(() => ev.get("notification:new")!(row("n1")));
     serverRows = [row("n1"), ...serverRows];
-    await act(async () => connectCb!(true));
+    await act(async () => resync(["notifications"]));
     expect(toastFn).toHaveBeenCalledTimes(1);
   });
 
@@ -206,7 +245,7 @@ describe("NotificationsProvider", () => {
     gate = new Promise<void>((r) => (release = r));
     // Reconnect starts a refetch; its snapshot is taken BEFORE the new row exists.
     act(() => {
-      connectCb!(true); // starts the refetch; it now waits on the gate
+      resync(["notifications"]); // starts the refetch; it now waits on the gate
     });
     await waitFor(() => expect(fetchCount.n).toBe(2));
     act(() => ev.get("notification:new")!(row("live1", { title: "Live" }))); // arrives mid-flight
@@ -239,7 +278,8 @@ describe("NotificationsProvider", () => {
     const { unmount } = await ready();
     unmount();
     expect(ev.size).toBe(0);
-    expect(connectCb).toBeNull();
+    expect(resyncCb).toBeNull();
+    expect(safetyCb).toBeNull();
     expect(stopRealtime).toHaveBeenCalled();
   });
 });

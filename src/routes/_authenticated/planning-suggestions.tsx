@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 import { TomorrowRiskPanel } from "@/components/TomorrowRiskPanel";
-import type { Profile, Task } from "@/lib/types";
+import type { Profile } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/planning-suggestions")({
   component: PlanningSuggestionsPage,
@@ -12,17 +12,15 @@ export const Route = createFileRoute("/_authenticated/planning-suggestions")({
 
 function PlanningSuggestionsPage() {
   const { isManager } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
+  // No task list is needed here: TomorrowRiskPanel reads the names of its top risks itself and
+  // SuggestionsPanel reads the full task row only when a suggestion is accepted.
   useEffect(() => {
-    Promise.all([
-      supabase.from("tasks").select("*"),
-      supabase.from("profiles").select("id,display_name,avatar_url"),
-    ]).then(([t, p]) => {
-      setTasks(((t.data ?? []) as Task[]));
-      setProfiles(((p.data ?? []) as Profile[]));
-    });
+    supabase
+      .from("profiles")
+      .select("id,display_name,avatar_url")
+      .then(({ data }) => setProfiles((data ?? []) as Profile[]));
   }, []);
 
   if (!isManager) {
@@ -33,8 +31,8 @@ function PlanningSuggestionsPage() {
     <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 space-y-4">
       <h1 className="text-xl font-semibold">Smart planning</h1>
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-3">
-        <SuggestionsPanel profiles={profiles} tasks={tasks} />
-        <TomorrowRiskPanel tasks={tasks} />
+        <SuggestionsPanel profiles={profiles} />
+        <TomorrowRiskPanel />
       </div>
     </div>
   );

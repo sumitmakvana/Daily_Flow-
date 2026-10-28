@@ -21,6 +21,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: (t: string)
 
 import {
   countOlderCompleted,
+  fetchMyTasksWithWorklogs,
   fetchOlderCompleted,
   fetchOlderCompletedSummary,
   fetchRecentTasks,
@@ -106,5 +107,33 @@ describe("queries", () => {
   it("errors are thrown, not swallowed into an empty list", async () => {
     result = { data: null, error: new Error("boom") };
     await expect(fetchRecentTasks("2026-10-13", "2026-10-27")).rejects.toThrow("boom");
+  });
+});
+
+describe("My Day: my tasks with only THEIR worklogs", () => {
+  it("is one tasks query for the user with worklogs embedded, and never touches the whole worklogs table", async () => {
+    result = {
+      data: [{ id: "t1", worklogs: [{ work_date: "2026-10-28", system_hours: 2 }, { work_date: "2026-10-01", system_hours: 9 }] }],
+      error: null,
+    };
+    const rows = await fetchMyTasksWithWorklogs("u1", "2026-10-28");
+    expect(calls).toContainEqual(["from", "tasks"]);
+    expect(calls).toContainEqual(["select", "*, worklogs:task_worklogs(*)"]);
+    expect(calls).toContainEqual(["eq", "assigned_to", "u1"]);
+    expect(calls.some((c) => c[0] === "from" && c[1] === "task_worklogs")).toBe(false);
+    // Same enrichment the page used to compute from the full worklogs table.
+    expect(rows[0].today_system_hours).toBe(2);
+    expect(rows[0].worklogs).toHaveLength(2);
+  });
+
+  it("keeps the old ordering (due date ascending, nulls last) and newest worklog first", async () => {
+    await fetchMyTasksWithWorklogs("u1", "2026-10-28");
+    expect(calls).toContainEqual(["order", "due_date", { ascending: true, nullsFirst: false }]);
+    expect(calls).toContainEqual(["order", "work_date", { ascending: false, referencedTable: "worklogs" }]);
+  });
+
+  it("throws on a query error instead of returning an empty list", async () => {
+    result = { data: null, error: new Error("boom") };
+    await expect(fetchMyTasksWithWorklogs("u1", "2026-10-28")).rejects.toThrow("boom");
   });
 });

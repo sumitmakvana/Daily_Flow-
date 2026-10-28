@@ -36,10 +36,14 @@ vi.mock("@/integrations/backend/auth", () => ({
 }));
 const fireAuth = (e: string) => authListeners.forEach((cb) => cb(e, {}));
 
-import { attachRealtime, emitToUser, setPokeHandler } from "@/lib/realtime.server";
+import type { Server as IoServer } from "socket.io";
+import { __resetEventLogForTests, attachRealtime, emitToRooms, emitToUser, setPokeHandler } from "@/lib/realtime.server";
 
 let http: HttpServer;
+let ioServer: IoServer;
 let store: Record<string, string> = {};
+const winHandlers: Record<string, Array<() => void>> = {};
+const fireWindow = (type: string) => (winHandlers[type] ?? []).forEach((f) => f());
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn: () => boolean, ms = 6000) => {
   const t = Date.now();
@@ -53,7 +57,7 @@ let rt: typeof import("@/integrations/realtime/socket");
 
 beforeAll(async () => {
   http = createServer((_q, r) => r.end("app"));
-  attachRealtime(http);
+  ioServer = attachRealtime(http);
   await new Promise<void>((r) => http.listen(0, "127.0.0.1", r));
   const port = (http.address() as AddressInfo).port;
   // Minimal browser globals for socket.io-client + our module.
@@ -61,6 +65,8 @@ beforeAll(async () => {
   (globalThis as any).window = {
     localStorage: { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => (store[k] = v), removeItem: (k: string) => delete store[k] },
     location: loc,
+    addEventListener: (t: string, fn: () => void) => (winHandlers[t] ||= []).push(fn),
+    removeEventListener: (t: string, fn: () => void) => (winHandlers[t] = (winHandlers[t] ?? []).filter((f) => f !== fn)),
   };
   (globalThis as any).location = loc;
 });
@@ -213,6 +219,106 @@ describe("frontend socket client", () => {
     emitToUser("alice", "notification:new", { id: "x" });
     await wait(200);
     expect(got).toEqual([]);
+    rt.stopRealtime();
+  });
+});
+
+describe("missed-update recovery (real server <-> real client)", () => {
+  type Info = { full: boolean; tables: string[]; reason: string };
+  const connectAlice = async () => {
+    store.kc_token = `alice:${inSeconds(120)}`;
+    const infos: Info[] = [];
+    rt.onRealtimeResync((i) => infos.push(i));
+    rt.startRealtime();
+    await until(() => rt.isRealtimeConnected());
+    await wait(200); // let the baseline resync round-trip finish
+    return infos;
+  };
+  /** Server drops the transport; the client reconnects by itself. */
+  const dropAndWait = async () => {
+    ioServer.disconnectSockets(true);
+    await until(() => !rt.isRealtimeConnected());
+  };
+  const ent = (table: string) => ({ schema: "public", table, eventType: "UPDATE", new: { id: "1" }, old: {} });
+
+  it("the first clean connect is a baseline only: no refetch is requested at page load", async () => {
+    const infos = await connectAlice();
+    expect(infos).toEqual([]);
+    rt.stopRealtime();
+  });
+
+  it("after a drop, reports exactly the tables that changed while disconnected (and only those visible to this user)", async () => {
+    const infos = await connectAlice();
+    await dropAndWait();
+    // Missed while offline:
+    emitToRooms(["authenticated"], "entity:changed", ent("tasks"));
+    emitToUser("alice", "notification:new", { id: "missed", user_id: "alice" });
+    emitToUser("bob", "notification:new", { id: "bobs", user_id: "bob" }); // not alice's
+    emitToRooms(["role:manager"], "entity:changed", ent("risk_events")); // alice is not a manager
+    await until(() => rt.isRealtimeConnected(), 10_000);
+    await until(() => infos.length > 0);
+    expect(infos).toHaveLength(1);
+    expect(infos[0].full).toBe(false);
+    expect(infos[0].tables.sort()).toEqual(["notifications", "tasks"]);
+    rt.stopRealtime();
+  });
+
+  it("a reconnect where nothing was missed requests NO refetch (tables: [])", async () => {
+    const infos = await connectAlice();
+    await dropAndWait();
+    await until(() => rt.isRealtimeConnected(), 10_000);
+    await until(() => infos.length > 0);
+    expect(infos[0]).toMatchObject({ full: false, tables: [] });
+    rt.stopRealtime();
+  });
+
+  it("events that WERE delivered live are not reported as missed later", async () => {
+    const infos = await connectAlice();
+    const live: unknown[] = [];
+    rt.onRealtime("entity:changed", (p) => live.push(p));
+    emitToRooms(["authenticated"], "entity:changed", ent("tasks"));
+    await until(() => live.length > 0);
+    await dropAndWait();
+    await until(() => rt.isRealtimeConnected(), 10_000);
+    await until(() => infos.length > 0);
+    expect(infos[0].tables).toEqual([]); // the tasks event arrived while connected
+    rt.stopRealtime();
+  });
+
+  it("a server restart (event log reset) makes the client refetch everything", async () => {
+    const infos = await connectAlice();
+    __resetEventLogForTests(); // a restarted process has a new boot id and an empty log
+    await dropAndWait();
+    await until(() => rt.isRealtimeConnected(), 10_000);
+    await until(() => infos.length > 0);
+    expect(infos[0].full).toBe(true);
+    rt.stopRealtime();
+  });
+
+  it("when the socket could not connect at first, the first successful connect resyncs fully", async () => {
+    store.kc_token = `bad:${inSeconds(120)}`;
+    const infos: Info[] = [];
+    rt.onRealtimeResync((i) => infos.push(i));
+    rt.startRealtime();
+    await wait(500);
+    expect(rt.isRealtimeConnected()).toBe(false);
+    store.kc_token = `alice:${inSeconds(120)}`;
+    await until(() => rt.isRealtimeConnected(), 8000);
+    await until(() => infos.length > 0);
+    expect(infos[0].full).toBe(true);
+    rt.stopRealtime();
+  });
+
+  it("the browser's 'online' event reconnects right away, well before the 2s retry backoff", async () => {
+    store.kc_token = `bad:${inSeconds(120)}`;
+    rt.startRealtime();
+    await wait(500);
+    expect(rt.isRealtimeConnected()).toBe(false);
+    store.kc_token = `alice:${inSeconds(120)}`;
+    const t0 = Date.now();
+    fireWindow("online");
+    await until(() => rt.isRealtimeConnected(), 3000);
+    expect(Date.now() - t0).toBeLessThan(1500);
     rt.stopRealtime();
   });
 });

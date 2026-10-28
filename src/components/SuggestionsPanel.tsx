@@ -14,11 +14,11 @@ import { toast } from "sonner";
 
 export function SuggestionsPanel({
   profiles,
-  tasks,
   compact = false,
 }: {
   profiles: Profile[];
-  tasks: Task[];
+  /** @deprecated unused: the task being applied is fetched in full when Accept is clicked. */
+  tasks?: Task[];
   compact?: boolean;
 }) {
   const { user, isManager } = useAuth();
@@ -50,8 +50,15 @@ export function SuggestionsPanel({
 
   const accept = async (s: PlanningSuggestion) => {
     if (!user) return;
-    const task = s.task_id ? tasks.find((t) => t.id === s.task_id) : undefined;
     try {
+      // Pages pass a column-trimmed task list, so the row that is actually changed is read in full,
+      // fresh, at click time (also avoids acting on a stale copy).
+      let task: Task | undefined;
+      if (s.task_id) {
+        const { data, error } = await supabase.from("tasks").select("*").eq("id", s.task_id).maybeSingle();
+        if (error) throw error;
+        task = (data ?? undefined) as Task | undefined;
+      }
       if (s.kind === "reassign" && task && s.to_user_id) {
         await tasksService.transfer(task, s.to_user_id, user.id);
       } else if (s.kind === "priority" && task) {

@@ -27,6 +27,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
+import { loadMyProfile } from "@/lib/my-profile";
 
 export function MorningResumePromptModal() {
   const { user } = useAuth();
@@ -52,11 +53,7 @@ export function MorningResumePromptModal() {
 
     try {
       // Fetch dynamic user profile display name from profiles table
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", user.id)
-        .maybeSingle();
+      const profile = await loadMyProfile(user.id);
 
       const resolvedName =
         profile?.display_name ||

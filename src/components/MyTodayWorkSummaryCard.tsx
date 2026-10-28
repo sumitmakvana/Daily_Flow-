@@ -55,10 +55,15 @@ export interface SummaryTaskItem {
 
 interface MyTodayWorkSummaryCardProps {
   tasks?: SummaryTaskItem[];
+  /**
+   * All of the user's tasks (incl. completed), already loaded and kept fresh by the page.
+   * When given, the card does not fetch its own copy.
+   */
+  allTasks?: Task[];
   userName?: string;
 }
 
-export function MyTodayWorkSummaryCard({ tasks = [], userName }: MyTodayWorkSummaryCardProps) {
+export function MyTodayWorkSummaryCard({ tasks = [], allTasks, userName }: MyTodayWorkSummaryCardProps) {
   const { user } = useAuth();
   const todayStr = getTodayDateStr();
   const [dailyNote, setDailyNote] = useState("");
@@ -67,7 +72,7 @@ export function MyTodayWorkSummaryCard({ tasks = [], userName }: MyTodayWorkSumm
   const [chartType, setChartType] = useState<"Line" | "Bar" | "Area">("Line");
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || allTasks !== undefined) return; // the page already supplies them
     const loadUserTasks = async () => {
       try {
         const { data } = await supabase.from("tasks").select("*").eq("assigned_to", user.id);
@@ -82,7 +87,8 @@ export function MyTodayWorkSummaryCard({ tasks = [], userName }: MyTodayWorkSumm
   }, [user?.id]);
 
   // Use fetchedTasks if available (contains completed tasks), else fallback to passed tasks
-  const effectiveTasks = fetchedTasks.length > 0 ? fetchedTasks : tasks;
+  const ownTasks = allTasks !== undefined ? allTasks : fetchedTasks;
+  const effectiveTasks = ownTasks.length > 0 ? ownTasks : tasks;
 
   // Filter strictly for tasks completed TODAY using shared date utility
   const completedToday = effectiveTasks.filter((t) => isTaskCompletedToday(t, todayStr));
