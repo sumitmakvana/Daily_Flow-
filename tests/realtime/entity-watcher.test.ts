@@ -7,7 +7,7 @@ type Rows = Array<{ k: string | null; fp: string }>;
 
 /** A fake database: per-table fingerprint rows that a test can change, plus which triggers "exist". */
 function fakeDb() {
-  const tables: Record<string, Rows> = { tasks: [], nudges: [], risk_events: [], planning_suggestions: [], approval_requests: [], automation_queue_stats: [] };
+  const tables: Record<string, Rows> = { tasks: [], nudges: [], risk_events: [], planning_suggestions: [], approval_requests: [], task_review_decisions: [], automation_queue_stats: [] };
   const triggers = new Set<string>();
   const sqlSeen: string[] = [];
   let failTable: string | null = null;
@@ -102,6 +102,17 @@ describe("fingerprint diffing", () => {
     expect(byTable.risk_events.rooms).toEqual(["role:manager"]);
     expect(byTable.planning_suggestions.rooms).toEqual(["role:manager"]);
     expect(byTable.approval_requests.rooms).toEqual([ALL_USERS_ROOM]);
+  });
+
+  it("a reviewer's decision change (task row untouched) is announced to everyone", async () => {
+    const { db, emit, w } = setup();
+    db.tables.task_review_decisions = [{ k: null, fp: "2|c|-|0|2" }];
+    await w.tick();
+    db.tables.task_review_decisions = [{ k: null, fp: "2|c|d|1|1" }];
+    await w.tick();
+    const e = events(emit).filter((x) => x.table === "task_review_decisions");
+    expect(e).toHaveLength(1);
+    expect(e[0].rooms).toEqual([ALL_USERS_ROOM]);
   });
 
   it("a flood of changed groups collapses to ONE bulk 'refetch' signal per table", async () => {

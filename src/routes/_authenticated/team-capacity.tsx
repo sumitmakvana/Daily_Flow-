@@ -1,6 +1,6 @@
 import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState, Fragment } from "react";
+import { useEffect, useMemo, useState, Fragment } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Profile, Task, Project, TaskStatus } from "@/lib/types";
 import { formatHoursMins, toLocalISO } from "@/lib/format";
 import { getTodayDateStr, formatToDateStr, isTaskCompletedToday } from "@/lib/task-date-utils";
+import { countOlderCompleted, fetchOlderCompleted, fetchRecentTasks, mergeById, windowCutoff } from "@/lib/task-window";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { ExecutiveMemberInspectionDrawer } from "./executive";
@@ -241,39 +242,24 @@ function TeamCapacityPage() {
     staleTime: 10000,
   });
 
-  // 2. Fetch tasks & worklogs (Real DB)
+  // 2. Fetch tasks & worklogs (Real DB).
+  // Windowed: open tasks + completed in the last RECENT_COMPLETED_DAYS, worklogs embedded so only
+  // those tasks' worklogs are sent. Older completed tasks are counted (KPI total) and loaded per
+  // member when their history dialog opens.
   const { data: tasks = [] } = useQuery({
     queryKey: ["capacity-tasks"],
-    queryFn: async () => {
-      const [{ data: rawTasks }, { data: worklogsData }] = await Promise.all([
-        supabase.from("tasks").select("*").order("created_at", { ascending: false }),
-        supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
-      ]);
-
-      if (!rawTasks || rawTasks.length === 0) return [];
-
-      const worklogsByTask = new Map<string, any[]>();
-      const todayStr = toLocalISO(new Date());
-
-      for (const w of worklogsData || []) {
-        const list = worklogsByTask.get(w.task_id) || [];
-        list.push(w);
-        worklogsByTask.set(w.task_id, list);
-      }
-
-      return (rawTasks as Task[]).map((t) => {
-        const logs = worklogsByTask.get(t.id) || [];
-        const todayLogs = logs.filter((w) => w.work_date === todayStr);
-        const todaySys = todayLogs.reduce((sum, w) => sum + Number(w.system_hours || 0), 0);
-        return {
-          ...t,
-          today_system_hours: todaySys,
-          worklogs: logs,
-        };
-      });
-    },
+    queryFn: async () => (await fetchRecentTasks(windowCutoff(), toLocalISO(new Date()))) as Task[],
     staleTime: 10000,
   });
+
+  const { data: olderCompletedCount = 0 } = useQuery({
+    queryKey: ["capacity-tasks", "older-count"],
+    queryFn: () => countOlderCompleted(windowCutoff()),
+    staleTime: 10000,
+  });
+
+  // Older completed tasks per member, loaded when that member's history dialog opens.
+  const [olderByMember, setOlderByMember] = useState<Record<string, Task[]>>({});
 
   // 3. Fetch teams (Real DB)
   const { data: teams = [] } = useQuery({
@@ -333,7 +319,10 @@ function TeamCapacityPage() {
       const upcomingTasks = memberTasks.filter(
         (t) => t.status === "To Do" || (t.status as string) === "Pending",
       );
-      const completedTasks = memberTasks.filter((t) => t.status === "Completed");
+      const completedTasks = mergeById<Task>(
+        memberTasks.filter((t) => t.status === "Completed"),
+        olderByMember[p.id] ?? [],
+      );
       const blockedTasks = memberTasks.filter((t) => t.status === "Blocked");
       const inReviewTasks = memberTasks.filter((t) => t.status === "In Review");
 
@@ -546,7 +535,7 @@ function TeamCapacityPage() {
         completedYesterdayCount,
       };
     });
-  }, [profiles, tasks, teams, todayStr, yesterdayStr]);
+  }, [profiles, tasks, teams, todayStr, yesterdayStr, olderByMember]);
 
   // Filtered Members
   const filteredMembers = useMemo(() => {
@@ -791,7 +780,7 @@ function TeamCapacityPage() {
 
   // Global KPI Summary Metrics
   const kpis = useMemo(() => {
-    const totalTasksCount = tasks.length;
+    const totalTasksCount = tasks.length + olderCompletedCount;
     const completedTodayTasks = tasks.filter((t) => isTaskCompletedToday(t, todayStr));
     const completedTodayCount = completedTodayTasks.length;
     const rawCompletedTodayHoursTotal = completedTodayTasks.reduce(
@@ -836,7 +825,22 @@ function TeamCapacityPage() {
       totalMembersCount,
       lowQueueCount,
     };
-  }, [tasks, profiles, memberData, todayStr]);
+  }, [tasks, olderCompletedCount, profiles, memberData, todayStr]);
+
+  // Load the full completed history of the member whose dialog is open (always refreshed on open).
+  const historyMemberId = completedTodayModalItem?.member.id;
+  useEffect(() => {
+    if (!historyMemberId) return;
+    let cancelled = false;
+    void fetchOlderCompleted(windowCutoff(), toLocalISO(new Date()), historyMemberId)
+      .then((rows) => {
+        if (!cancelled) setOlderByMember((prev) => ({ ...prev, [historyMemberId]: rows as Task[] }));
+      })
+      .catch((err) => console.error("Failed to load completed history:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [historyMemberId]);
 
   const toggleExpandHistory = (memberId: string) => {
     setExpandedHistoryMemberIds((prev) => ({

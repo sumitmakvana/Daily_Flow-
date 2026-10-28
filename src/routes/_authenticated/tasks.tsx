@@ -18,6 +18,17 @@ import { downloadCSV, toCSV } from "@/lib/csv";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { tasksService } from "@/services/tasks";
+import {
+  fetchOlderCompleted,
+  fetchOlderCompletedSummary,
+  fetchRecentTasks,
+  fetchTasksByIds,
+  fetchTaskWithWorklogs,
+  mergeById,
+  windowCutoff,
+  RECENT_COMPLETED_DAYS,
+  type OlderCompletedStub,
+} from "@/lib/task-window";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -123,7 +134,26 @@ function TasksPage() {
   const { taskId, highlightId, create, search: searchParam, assignee: assigneeParam, tab: tabParam, status: statusParam } = Route.useSearch();
   const navigate = useNavigate({ from: "/tasks" });
 
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // The list is windowed: open tasks + completed in the last RECENT_COMPLETED_DAYS.
+  // Older completed tasks load on demand (see needsOlder) and are counted via light stubs.
+  const [recentTasks, setRecentTasks] = useState<Task[]>([]);
+  const [olderTasks, setOlderTasks] = useState<Task[] | null>(null);
+  const [olderStubs, setOlderStubs] = useState<OlderCompletedStub[]>([]);
+  const [pinnedTasks, setPinnedTasks] = useState<Task[]>([]);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const olderRef = useRef<Task[] | null>(null);
+  olderRef.current = olderTasks;
+  const pinnedRef = useRef<Task[]>([]);
+  pinnedRef.current = pinnedTasks;
+  const tasks = useMemo(
+    () => mergeById<Task>(olderTasks ?? [], pinnedTasks, recentTasks),
+    [olderTasks, pinnedTasks, recentTasks],
+  );
+  // Older completed tasks that are counted but not loaded.
+  const hiddenOlder = useMemo(() => {
+    const loaded = new Set(tasks.map((t) => t.id));
+    return olderStubs.filter((s) => !loaded.has(s.id));
+  }, [tasks, olderStubs]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [q, setQ] = useState(searchParam || "");
@@ -216,6 +246,11 @@ function TasksPage() {
   };
 
   const exportCSV = () => {
+    if (hiddenOlder.length > 0) {
+      toast.info("Loading older completed tasks first. Click Export again when they are loaded.");
+      void loadOlder();
+      return;
+    }
     const rows = sorted.map((t) => ({
       task_code: t.task_code,
       task_name: t.task_name,
@@ -235,38 +270,58 @@ function TasksPage() {
     downloadCSV(`tasks-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows, cols));
   };
 
+  const loadOlder = async () => {
+    if (olderRef.current !== null || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      setOlderTasks((await fetchOlderCompleted(windowCutoff(), todayStr)) as Task[]);
+    } catch (err) {
+      console.error("Failed to load older completed tasks:", err);
+      toast.error("Could not load older completed tasks");
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
   const load = async (silent = false) => {
     try {
       if (!silent && tasks.length === 0) {
         setInitialLoading(true);
       }
-      const [{ data: t }, { data: p }, { data: e }, { data: w }] = await Promise.all([
-        supabase.from("tasks").select("*").order("created_at", { ascending: false }),
+      const cutoff = windowCutoff();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const older = olderRef.current;
+      const pinned = pinnedRef.current;
+      // Delta for an already-loaded older set: anything updated since the newest row we hold.
+      const since = older?.reduce((m, t) => (t.updated_at && t.updated_at > m ? t.updated_at : m), "") || undefined;
+      const [recent, stubs, { data: p }, { data: e }, delta, fresh] = await Promise.all([
+        fetchRecentTasks(cutoff, todayStr),
+        fetchOlderCompletedSummary(cutoff),
         supabase.from("profiles").select("id,display_name,avatar_url"),
         supabase.from("profile_emails" as never).select("id,email") as never,
-        supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
+        older && since ? fetchOlderCompleted(cutoff, todayStr, undefined, since) : Promise.resolve(null),
+        Promise.all(pinned.map((t) => fetchTaskWithWorklogs(t.id, todayStr))),
       ]);
 
-      const worklogsByTask = new Map<string, any[]>();
-      const todayStr = new Date().toISOString().slice(0, 10);
-      for (const item of w || []) {
-        const list = worklogsByTask.get(item.task_id) || [];
-        list.push(item);
-        worklogsByTask.set(item.task_id, list);
+      const recentIds = new Set(recent.map((t) => t.id));
+      const stubIds = new Set(stubs.map((s) => s.id));
+      setRecentTasks(recent as Task[]);
+      setOlderStubs(stubs);
+
+      if (older) {
+        // Drop rows that no longer exist / are no longer older-completed, apply updates, and
+        // fetch tasks that just aged out of the window (they are in stubs but not held yet).
+        let next = mergeById<Task>(older.filter((t) => stubIds.has(t.id)), (delta ?? []) as Task[]);
+        const held = new Set(next.map((t) => t.id));
+        const missing = stubs.map((s) => s.id).filter((id) => !held.has(id) && !recentIds.has(id));
+        if (missing.length > 0) next = mergeById<Task>(next, (await fetchTasksByIds(missing, todayStr)) as Task[]);
+        setOlderTasks(next);
       }
+      setPinnedTasks(
+        fresh.filter((t): t is NonNullable<typeof t> => !!t && !recentIds.has(t.id)) as Task[],
+      );
 
-      const enrichedTasks = ((t ?? []) as Task[]).map((task) => {
-        const logs = worklogsByTask.get(task.id) || [];
-        const todayLogs = logs.filter((x) => x.work_date === todayStr);
-        const todaySys = todayLogs.reduce((sum, x) => sum + Number(x.system_hours || 0), 0);
-        return {
-          ...task,
-          today_system_hours: todaySys,
-          worklogs: logs,
-        };
-      });
-
-      setTasks(enrichedTasks);
       setProfiles((p ?? []) as Profile[]);
       const map: Record<string, string> = {};
       for (const row of ((e ?? []) as Array<{ id: string; email: string }>)) map[row.id] = row.email;
@@ -293,14 +348,22 @@ function TasksPage() {
   }, [tasks, activeTab, user?.id]);
 
   // Calculate live count metrics for sidebar filters scoped to current tab
+  // Older completed tasks that are counted but not loaded, restricted to the active tab.
+  const hiddenInTab = useMemo(() => {
+    if (activeTab === "my_tasks") return hiddenOlder.filter((s) => s.assigned_to === user?.id);
+    if (activeTab === "team_tasks") return hiddenOlder.filter((s) => s.assigned_to !== user?.id);
+    return hiddenOlder;
+  }, [hiddenOlder, activeTab, user?.id]);
+
   const statusCounts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const s of TASK_STATUSES) map[s] = 0;
     for (const t of tabBaseTasks) {
       if (t.status && map[t.status] !== undefined) map[t.status]++;
     }
+    if (map["Completed"] !== undefined) map["Completed"] += hiddenInTab.length;
     return map;
-  }, [tabBaseTasks]);
+  }, [tabBaseTasks, hiddenInTab]);
 
   const priorityCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -308,8 +371,36 @@ function TasksPage() {
     for (const t of tabBaseTasks) {
       if (t.priority && map[t.priority] !== undefined) map[t.priority]++;
     }
+    for (const s of hiddenInTab) {
+      if (s.priority && map[s.priority] !== undefined) map[s.priority]++;
+    }
     return map;
-  }, [tabBaseTasks]);
+  }, [tabBaseTasks, hiddenInTab]);
+
+  // Screens that must see every completed task (search, Completed filter, date filters,
+  // oldest-first) load the older set once; plain browsing keeps the small window.
+  const needsOlder =
+    selectedStatuses.has("Completed") ||
+    q.trim() !== "" ||
+    (dateFilter !== ALL && dateFilter !== "overdue") ||
+    sortBy === "oldest";
+  useEffect(() => {
+    if (needsOlder && olderTasks === null && olderStubs.length > 0) void loadOlder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsOlder, olderTasks, olderStubs.length]);
+
+  // Deep links (notification / My Day): the target may be an old completed task outside the window.
+  const pinTriedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const id = taskId || highlightId;
+    if (!id || initialLoading) return;
+    if (tasks.some((t) => t.id === id) || pinTriedRef.current.has(id)) return;
+    pinTriedRef.current.add(id);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    void fetchTaskWithWorklogs(id, todayStr).then((t) => {
+      if (t) setPinnedTasks((prev) => mergeById<Task>(prev, [t as Task]));
+    });
+  }, [taskId, highlightId, tasks, initialLoading]);
 
   // Auto-open TaskDetailModal when taskId or highlightId query parameter is present
   const autoOpenedTargetIdRef = useRef<string | null>(null);
@@ -864,7 +955,7 @@ function TasksPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">Tasks</h1>
             <span className="text-[11px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-[#1e2d4a] text-[#5C8EFA] border border-[#2b3e66]">
-              {tasks.length}
+              {tasks.length + hiddenOlder.length}
             </span>
           </div>
           <p className="text-[10px] sm:text-[11px] text-[#8a99ad] font-medium leading-tight">Plan, track and get things done</p>
@@ -877,7 +968,7 @@ function TasksPage() {
               <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#5C8EFA]" />
             </div>
             <div>
-              <p className="text-xs sm:text-base font-bold text-white leading-none">{tasks.length}</p>
+              <p className="text-xs sm:text-base font-bold text-white leading-none">{tasks.length + hiddenOlder.length}</p>
               <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">Total Tasks</p>
             </div>
           </div>
@@ -888,7 +979,7 @@ function TasksPage() {
             </div>
             <div>
               <p className="text-xs sm:text-base font-bold text-white leading-none">
-                {tasks.filter((t) => t.assigned_to === user.id).length}
+                {tasks.filter((t) => t.assigned_to === user.id).length + hiddenOlder.filter((s) => s.assigned_to === user.id).length}
               </p>
               <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">My Tasks</p>
             </div>
@@ -900,7 +991,7 @@ function TasksPage() {
             </div>
             <div>
               <p className="text-xs sm:text-base font-bold text-white leading-none">
-                {tasks.filter((t) => t.assigned_to !== user.id).length}
+                {tasks.filter((t) => t.assigned_to !== user.id).length + hiddenOlder.filter((s) => s.assigned_to !== user.id).length}
               </p>
               <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">Team Tasks</p>
             </div>
@@ -1010,6 +1101,21 @@ function TasksPage() {
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 shrink-0 pb-2">
               <div className="text-xs text-[#8a99ad] font-medium">
                 Showing {rangeStart}–{rangeEnd} of {totalItems} tasks
+                {hiddenInTab.length > 0 && (
+                  <>
+                    {" "}·{" "}
+                    <button
+                      type="button"
+                      onClick={() => void loadOlder()}
+                      disabled={loadingOlder}
+                      className="text-[#5C8EFA] hover:underline cursor-pointer disabled:opacity-60"
+                    >
+                      {loadingOlder
+                        ? "Loading…"
+                        : `+${hiddenInTab.length} completed older than ${RECENT_COMPLETED_DAYS} days (load)`}
+                    </button>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-2">

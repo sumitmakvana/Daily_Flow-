@@ -70,10 +70,9 @@ import { TaskDetailModal } from "./TaskDetailModal";
 import { ImagePreviewModal } from "./ImagePreviewModal";
 import { ActiveTaskConflictModal } from "./ActiveTaskConflictModal";
 import { inlineCompleteStore } from "@/services/inline-complete-store";
-import { attachmentsService } from "@/services/attachments";
 import { TaskHoursBadges } from "./TaskHoursBadges";
 import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue, getDefaultStartDate, parseLocalYYYYMMDD, toLocalISO } from "@/lib/format";
-import type { Profile, Task, TaskStatus, WorkItemType, Attachment } from "@/lib/types";
+import type { Profile, Task, TaskStatus, WorkItemType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { taskEodService } from "@/services/task-eod";
@@ -171,16 +170,9 @@ export function TaskCard({
 
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [expandedRemarks, setExpandedRemarks] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewFileName, setPreviewFileName] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (task.id) {
-      attachmentsService.list(task.id).then(setAttachments).catch(() => {});
-    }
-  }, [task.id]);
 
   const overdue = isOverdue(task.due_date, task.status);
   const isOwner = task.assigned_to === userId;

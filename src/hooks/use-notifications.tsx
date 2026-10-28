@@ -36,6 +36,11 @@ import {
 import type { AppNotification } from "@/lib/types";
 
 const LIST_LIMIT = 100;
+// Only what AppNotification and the UI use (skips dedupe_key).
+const NOTIFICATION_COLUMNS = "id,user_id,type,title,body,task_id,read_at,created_at";
+// A tab hidden for less than this does not refetch when it becomes visible again
+// (new notifications arrive over the socket; this only resyncs read state from other devices).
+const REFOCUS_REFETCH_AFTER_MS = 30_000;
 // If the client was offline long enough to miss many, don't flood the screen.
 const MAX_ALERTS_PER_SYNC = 5;
 // Safety net only while the socket is down (e.g. a proxy without WebSockets).
@@ -101,7 +106,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       if (!userId) return;
       const { data, error } = await supabase
         .from("notifications")
-        .select("*")
+        .select(NOTIFICATION_COLUMNS)
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(LIST_LIMIT);
@@ -165,8 +170,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     // Read state changes made in another tab/device have no push event, so
     // resync when this tab becomes visible again.
+    let hiddenAt = 0;
     const onVisible = () => {
-      if (document.visibilityState === "visible") void load(true);
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      const away = hiddenAt ? Date.now() - hiddenAt : Infinity;
+      hiddenAt = 0;
+      if (away >= REFOCUS_REFETCH_AFTER_MS) void load(true);
     };
     document.addEventListener("visibilitychange", onVisible);
 

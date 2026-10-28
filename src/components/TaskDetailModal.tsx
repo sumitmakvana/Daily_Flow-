@@ -129,9 +129,6 @@ export function TaskDetailModal({
         setRemarksValue(task.remarks || "");
         setEstimateValue(task.planned_hours ? String(task.planned_hours) : "");
         setTitleValue(task.task_name || "");
-        if (task.id) {
-          attachmentsService.list(task.id).then(setAttachments).catch(() => {});
-        }
       } else {
         if (!isEditingRemarks) {
           setRemarksValue(task.remarks || "");
@@ -147,6 +144,22 @@ export function TaskDetailModal({
       prevTaskIdRef.current = null;
     }
   }, [task, isEditingRemarks, isEditingEstimate, isEditingTitle]);
+
+  // Attachments are only needed while the modal is open. TaskCard mounts a closed modal per card,
+  // so fetching on mount used to cost one request per task.
+  useEffect(() => {
+    if (!open || !task?.id) return;
+    let cancelled = false;
+    attachmentsService
+      .list(task.id)
+      .then((a) => {
+        if (!cancelled) setAttachments(a);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, task?.id]);
 
   useEffect(() => {
     if (!task?.started_at || task.status !== "In Progress") {

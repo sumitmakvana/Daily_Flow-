@@ -26,6 +26,7 @@ export const PUSH_TABLES = new Set<string>([
   "risk_events",
   "planning_suggestions",
   "approval_requests",
+  "task_review_decisions",
 ]);
 
 /**

@@ -38,3 +38,8 @@ dist-ssr
 
 # Local read-only build output (see scripts/run-local-safe.mjs)
 dist-local-safe
+
+# Local development only: never commit
+infra/local/
+infra/*.dump
+*.dump

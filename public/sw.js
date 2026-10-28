@@ -1,4 +1,4 @@
-const CACHE_NAME = 'execution-os-cache-v2';
+const CACHE_NAME = 'execution-os-cache-v3';
 const ASSETS_TO_CACHE = [
   '/manifest.json',
   '/icon-192.png',
@@ -45,6 +45,32 @@ self.addEventListener('fetch', (event) => {
     url.pathname.includes('/auth/')
   ) return;
 
+  // Socket.IO long-polling / handshake requests are live, unique-per-request traffic. Never
+  // cache them or fetch them twice.
+  if (url.pathname.startsWith('/socket.io')) return;
+
+  // Server-function GETs (/_serverFn/...) are data reads. Network first so the page never
+  // gets a stale answer, with the last good response as an offline fallback. (They used to be
+  // answered from cache and then refetched in the background, i.e. every call ran twice.)
+  if (url.pathname.startsWith('/_serverFn')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          return Response.error();
+        })
+    );
+    return;
+  }
+
   const isHTMLRequest =
     event.request.mode === 'navigate' ||
     (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'));
@@ -66,7 +92,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. For static assets (images, icons, manifest): Cache / Network
+  // 2a. Build output under /assets/ is content-hashed (a changed file gets a new URL), so a
+  // cached copy is always current: cache first, no background re-download. This keeps the app
+  // available offline and avoids downloading every bundle a second time on each page load.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+        return fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+          }
+          return networkResponse;
+        });
+      })
+    );
+    return;
+  }
+
+  // 2b. Other static files (icons, manifest): serve from cache and refresh in the background.
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {

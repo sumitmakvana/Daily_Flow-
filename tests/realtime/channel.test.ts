@@ -111,7 +111,7 @@ describe("realtime channel — push tables (notifications)", () => {
   });
 });
 
-const PUSHED_TABLES = ["tasks", "nudges", "risk_events", "planning_suggestions", "approval_requests"];
+const PUSHED_TABLES = ["tasks", "nudges", "risk_events", "planning_suggestions", "approval_requests", "task_review_decisions"];
 const setVisibility = (v: "visible" | "hidden") => {
   Object.defineProperty(document, "visibilityState", { value: v, configurable: true });
   document.dispatchEvent(new Event("visibilitychange"));

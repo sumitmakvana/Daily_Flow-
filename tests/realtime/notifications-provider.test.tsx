@@ -18,12 +18,15 @@ const row = (id: string, o: Record<string, unknown> = {}) => ({
 let serverRows: ReturnType<typeof row>[] = [];
 const updates: Array<{ patch: unknown; col: string; val: unknown }> = [];
 const fetchCount = { n: 0 };
+const selectedColumns: Array<string | undefined> = [];
 let gate: Promise<void> | null = null; // lets a test hold a REST fetch in flight
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: () => ({
-      select: () => ({
+      select: (cols?: string) => {
+        selectedColumns.push(cols);
+        return {
         eq: () => ({
           order: () => ({
             limit: async () => {
@@ -34,7 +37,8 @@ vi.mock("@/integrations/supabase/client", () => ({
             },
           }),
         }),
-      }),
+        };
+      },
       update: (patch: unknown) => {
         const rec = { patch, col: "", val: undefined as unknown };
         const chain: any = {
@@ -86,6 +90,7 @@ beforeEach(() => {
   serverRows = [row("old1"), row("old2", { read_at: "2026-01-01T00:00:00Z" })];
   updates.length = 0;
   fetchCount.n = 0;
+  selectedColumns.length = 0;
   toastFn.mockClear();
   desktop.mockClear();
   startRealtime.mockClear();
@@ -99,6 +104,39 @@ async function ready() {
   await waitFor(() => expect(hook.result.current.items.length).toBe(2));
   return hook;
 }
+
+const setVisibility = (v: "visible" | "hidden") => {
+  Object.defineProperty(document, "visibilityState", { value: v, configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+};
+
+describe("NotificationsProvider request volume", () => {
+  it("selects only the columns the UI uses, never select(*)", async () => {
+    await ready();
+    expect(selectedColumns).toHaveLength(1);
+    expect(selectedColumns[0]).not.toBe("*");
+    expect(selectedColumns[0]).toBe("id,user_id,type,title,body,task_id,read_at,created_at");
+  });
+
+  it("a brief tab blur/focus does not refetch; coming back after a long absence does", async () => {
+    await ready();
+    expect(fetchCount.n).toBe(1);
+
+    const realNow = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(realNow);
+    setVisibility("hidden");
+    now.mockReturnValue(realNow + 5_000);
+    setVisibility("visible");
+    await act(async () => {});
+    expect(fetchCount.n).toBe(1); // 5 s away: no refetch
+
+    setVisibility("hidden");
+    now.mockReturnValue(realNow + 5_000 + 31_000);
+    await act(async () => setVisibility("visible"));
+    await waitFor(() => expect(fetchCount.n).toBe(2)); // 31 s away: resync once
+    now.mockRestore();
+  });
+});
 
 describe("NotificationsProvider", () => {
   it("loads once, sets the unread badge, and does NOT alert for existing rows", async () => {

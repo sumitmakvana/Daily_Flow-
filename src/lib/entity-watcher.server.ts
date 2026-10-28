@@ -82,6 +82,16 @@ export const DEFAULT_SPECS: WatchSpec[] = [
     row: () => ({}),
   },
   {
+    // A reviewer's partial approval changes only this table, not the task row, so the
+    // tasks fingerprint would miss it. Rows are readable by every signed-in user
+    // (task_review_decisions_read USING true), like tasks, so everyone is told.
+    table: "task_review_decisions",
+    sql: `SELECT NULL::text AS k, ${fp(mx("created_at"), mx("decided_at"), "count(decided_at)", "count(*) FILTER (WHERE decision = 'pending')")} AS fp
+          FROM public.task_review_decisions`,
+    rooms: () => [ALL_USERS_ROOM],
+    row: () => ({}),
+  },
+  {
     // Automation health panel (admins): queue depth, 24h run counts, rule counts.
     // The payload carries no data; the panel refetches over HTTP, which enforces auth.
     table: "automation_health",
@@ -301,6 +311,6 @@ export async function startEntityWatcher(): Promise<EntityChangeWatcher | null> 
   g.__operonEntityWatcher = w;
   setPokeHandler(() => w.poke());
   w.start();
-  console.log(`[EntityWatcher] watching tasks, nudges, risk_events, planning_suggestions, approval_requests, automation_health every ${intervalMs}ms (read-only SELECTs)`);
+  console.log(`[EntityWatcher] watching tasks, nudges, risk_events, planning_suggestions, approval_requests, task_review_decisions, automation_health every ${intervalMs}ms (read-only SELECTs)`);
   return w;
 }
