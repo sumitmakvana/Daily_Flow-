@@ -511,6 +511,7 @@ export function TaskFormDialog({
       .select("*")
       .eq("task_id", form.id)
       .order("created_at", { ascending: false })
+      .limit(50) // newest 50; the full timeline is in the History sheet
       .then(({ data }) => {
         setTaskHistoryItems((data ?? []) as TaskHistory[]);
       });

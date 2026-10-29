@@ -18,6 +18,8 @@ type TimelineItem =
   | { kind: "attachment"; id: string; at: string; data: Attachment }
   | { kind: "comment"; id: string; at: string; data: Comment };
 
+const HISTORY_PAGE = 50;
+
 export function TaskHistorySheet({
   open,
   onOpenChange,
@@ -41,17 +43,26 @@ export function TaskHistorySheet({
   const [items, setItems] = useState<TimelineItem[]>([]);
   const [types, setTypes] = useState<WorkItemType[]>([]);
   const [loading, setLoading] = useState(false);
+  const [limit, setLimit] = useState(HISTORY_PAGE);
+  const [hasMore, setHasMore] = useState(false);
+
+  // A different task starts from the first page again.
+  useEffect(() => {
+    setLimit(HISTORY_PAGE);
+  }, [taskId]);
 
   const load = useCallback(async () => {
     if (!taskId) return;
     setLoading(true);
     try {
+      // Newest `limit` rows of each source (was: every row ever written for the task); older ones on demand.
       const [{ data: h }, { data: cf }, { data: at }, { data: cm }] = await Promise.all([
-        supabase.from("task_history").select("*").eq("task_id", taskId),
-        supabase.from("carry_forward_events").select("*").eq("task_id", taskId),
-        supabase.from("attachments").select("*").eq("work_item_id", taskId),
-        supabase.from("comments").select("*").eq("work_item_id", taskId),
+        supabase.from("task_history").select("*").eq("task_id", taskId).order("created_at", { ascending: false }).limit(limit),
+        supabase.from("carry_forward_events").select("*").eq("task_id", taskId).order("created_at", { ascending: false }).limit(limit),
+        supabase.from("attachments").select("*").eq("work_item_id", taskId).order("uploaded_at", { ascending: false }).limit(limit),
+        supabase.from("comments").select("*").eq("work_item_id", taskId).order("created_at", { ascending: false }).limit(limit),
       ]);
+      setHasMore([h, cf, at, cm].some((r) => (r?.length ?? 0) >= limit));
       const merged: TimelineItem[] = [
         ...((h ?? []) as TaskHistory[]).map((d) => ({ kind: "history" as const, id: d.id, at: d.created_at, data: d })),
         ...((cf ?? []) as CarryForwardEvent[]).map((d) => ({ kind: "carry" as const, id: d.id, at: d.created_at, data: d })),
@@ -75,7 +86,7 @@ export function TaskHistorySheet({
     } finally {
       setLoading(false);
     }
-  }, [taskId, taskCreatedAt, taskCreatedBy]);
+  }, [taskId, taskCreatedAt, taskCreatedBy, limit]);
 
   useEffect(() => {
     if (open) void load();
@@ -202,6 +213,15 @@ export function TaskHistorySheet({
                     </div>
                   );
                 })
+              )}
+              {!loading && hasMore && (
+                <button
+                  type="button"
+                  className="w-full text-center text-[11px] text-primary hover:underline py-1"
+                  onClick={() => setLimit((n) => n * 4)}
+                >
+                  Show older activity
+                </button>
               )}
             </TabsContent>
 
