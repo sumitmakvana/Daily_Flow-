@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Upload, Download, Calendar, ArrowUpDown, Copy, Filter, RotateCcw, List, ChevronLeft, ChevronRight, CheckCircle2, Clock, Layers, User, Users } from "lucide-react";
+import { Plus, Search, Upload, Download, Calendar, ArrowUpDown, Copy, Filter, RotateCcw, List, ChevronLeft, ChevronRight, CheckCircle2, Clock, User, Users } from "lucide-react";
 import { TASK_PRIORITIES, TASK_STATUSES, type Profile, type Task } from "@/lib/types";
 import { getDefaultStartDate } from "@/lib/format";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
@@ -19,16 +19,23 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { tasksService } from "@/services/tasks";
 import {
-  fetchOlderCompleted,
-  fetchOlderCompletedSummary,
-  fetchRecentTasks,
   fetchTasksByIds,
   fetchTaskWithWorklogs,
-  mergeById,
-  windowCutoff,
-  RECENT_COMPLETED_DAYS,
-  type OlderCompletedStub,
 } from "@/lib/task-window";
+import {
+  fetchAllTaskRows,
+  fetchHeaderCounts,
+  fetchSidebarCounts,
+  fetchTabCounts,
+  fetchTaskListPage,
+  fetchTaskListSignature,
+  type HeaderCounts,
+  type Person,
+  type SidebarCounts,
+  type TabCounts,
+  type TaskListParams,
+  type TaskTab,
+} from "@/lib/task-list-query";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -130,30 +137,26 @@ function getPageNumbers(current: number, total: number): Array<number | "..."> {
 }
 
 function TasksPage() {
-  const { user, isManager } = useAuth();
+  const { user, isManager, rolesReady } = useAuth();
   const { taskId, highlightId, create, search: searchParam, assignee: assigneeParam, tab: tabParam, status: statusParam } = Route.useSearch();
   const navigate = useNavigate({ from: "/tasks" });
 
-  // The list is windowed: open tasks + completed in the last RECENT_COMPLETED_DAYS.
-  // Older completed tasks load on demand (see needsOlder) and are counted via light stubs.
-  const [recentTasks, setRecentTasks] = useState<Task[]>([]);
-  const [olderTasks, setOlderTasks] = useState<Task[] | null>(null);
-  const [olderStubs, setOlderStubs] = useState<OlderCompletedStub[]>([]);
-  const [pinnedTasks, setPinnedTasks] = useState<Task[]>([]);
-  const [loadingOlder, setLoadingOlder] = useState(false);
-  const olderRef = useRef<Task[] | null>(null);
-  olderRef.current = olderTasks;
-  const pinnedRef = useRef<Task[]>([]);
-  pinnedRef.current = pinnedTasks;
-  const tasks = useMemo(
-    () => mergeById<Task>(olderTasks ?? [], pinnedTasks, recentTasks),
-    [olderTasks, pinnedTasks, recentTasks],
-  );
-  // Older completed tasks that are counted but not loaded.
-  const hiddenOlder = useMemo(() => {
-    const loaded = new Set(tasks.map((t) => t.id));
-    return olderStubs.filter((s) => !loaded.has(s.id));
-  }, [tasks, olderStubs]);
+  // The list is read PAGE BY PAGE from the API: the tab scope, filters, search, sorting, the page itself and
+  // every counter are applied by the server (see task-list-query.ts). Only the page on screen is in memory.
+  // A member is always limited to their own assigned tasks in these queries.
+  const canSeeAll = isManager;
+  const ready = !!user?.id && rolesReady;
+  const [pageRows, setPageRows] = useState<Task[]>([]);
+  const [total, setTotal] = useState(0);
+  const pageRowsRef = useRef<Task[]>([]);
+  pageRowsRef.current = pageRows;
+  const totalRef = useRef(0);
+  totalRef.current = total;
+  const [sidebar, setSidebar] = useState<SidebarCounts | null>(null);
+  const [tabCounts, setTabCounts] = useState<TabCounts | null>(null);
+  const [header, setHeader] = useState<HeaderCounts | null>(null);
+  const [countsTick, setCountsTick] = useState(0);
+  const [peopleReady, setPeopleReady] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [q, setQ] = useState(searchParam || "");
@@ -170,7 +173,6 @@ function TasksPage() {
 
   // Pagination states
   const [pageSize, setPageSize] = useState<number>(25);
-  const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageInput, setPageInput] = useState<string>("1");
 
   // Date Filter state
@@ -221,6 +223,13 @@ function TasksPage() {
     }
   }, [tabParam]);
 
+  // The page number belongs to the query it was chosen for: change the tab / a filter / the sort / the page
+  // size and it is page 1 again, without a second request for a page that no longer exists.
+  const shapeKey = JSON.stringify([q, [...selectedStatuses].sort(), [...selectedPriorities].sort(), assignee, dateFilter, activeTab, pageSize, sortBy]);
+  const [pageState, setPageState] = useState<{ key: string; page: number }>({ key: shapeKey, page: 1 });
+  const currentPage = pageState.key === shapeKey ? pageState.page : 1;
+  const setCurrentPage = (page: number) => setPageState({ key: shapeKey, page });
+
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [activeHighlight, setActiveHighlight] = useState<string | null>(null);
 
@@ -245,178 +254,192 @@ function TasksPage() {
     toast.info("All filters reset");
   };
 
-  const exportCSV = () => {
-    if (hiddenOlder.length > 0) {
-      toast.info("Loading older completed tasks first. Click Export again when they are loaded.");
-      void loadOlder();
-      return;
-    }
-    const rows = sorted.map((t) => ({
-      task_code: t.task_code,
-      task_name: t.task_name,
-      client: t.client ?? "",
-      project_name: t.project_name ?? "",
-      priority: t.priority,
-      status: t.status,
-      assigned_to: nameOf(t.assigned_to),
-      reviewer: nameOf(t.reviewer),
-      start_date: t.start_date ?? "",
-      due_date: t.due_date ?? "",
-      planned_hours: t.planned_hours ?? "",
-      actual_hours: t.actual_hours ?? "",
-      remarks: t.remarks ?? "",
-    }));
-    const cols = ["task_code","task_name","client","project_name","priority","status","assigned_to","reviewer","start_date","due_date","planned_hours","actual_hours","remarks"];
-    downloadCSV(`tasks-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows, cols));
-  };
+  const todayStr = () => new Date().toISOString().slice(0, 10);
 
-  const loadOlder = async () => {
-    if (olderRef.current !== null || loadingOlder) return;
-    setLoadingOlder(true);
+  // Every task that matches the current filters (all tabs, the viewer's scope applies), read in chunks.
+  const exportCSV = async () => {
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      setOlderTasks((await fetchOlderCompleted(windowCutoff(), todayStr)) as Task[]);
+      toast.info("Preparing export…");
+      const all = await fetchAllTaskRows({ ...paramsRef.current, tab: "all_tasks" });
+      const rows = all.map((t) => ({
+        task_code: t.task_code,
+        task_name: t.task_name,
+        client: t.client ?? "",
+        project_name: t.project_name ?? "",
+        priority: t.priority,
+        status: t.status,
+        assigned_to: nameOf(t.assigned_to),
+        reviewer: nameOf(t.reviewer),
+        start_date: t.start_date ?? "",
+        due_date: t.due_date ?? "",
+        planned_hours: t.planned_hours ?? "",
+        actual_hours: t.actual_hours ?? "",
+        remarks: t.remarks ?? "",
+      }));
+      const cols = ["task_code","task_name","client","project_name","priority","status","assigned_to","reviewer","start_date","due_date","planned_hours","actual_hours","remarks"];
+      downloadCSV(`tasks-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows, cols));
     } catch (err) {
-      console.error("Failed to load older completed tasks:", err);
-      toast.error("Could not load older completed tasks");
-    } finally {
-      setLoadingOlder(false);
+      console.error("Export failed:", err);
+      toast.error("Could not export tasks");
     }
   };
 
-  const load = async (silent = false) => {
+  // People (names for search and display, emails for search): loaded once.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [{ data: p }, { data: e }] = await Promise.all([
+          supabase.from("profiles").select("id,display_name,avatar_url"),
+          supabase.from("profile_emails" as never).select("id,email") as never,
+        ]);
+        setProfiles((p ?? []) as Profile[]);
+        const map: Record<string, string> = {};
+        for (const row of ((e ?? []) as Array<{ id: string; email: string }>)) map[row.id] = row.email;
+        setEmails(map);
+      } catch (err) {
+        console.error("Failed to load people:", err);
+      } finally {
+        setPeopleReady(true);
+      }
+    })();
+  }, []);
+
+  const people = useMemo<Person[]>(
+    () => profiles.map((p) => ({ id: p.id, name: p.display_name ?? "", email: emails[p.id] ?? "" })),
+    [profiles, emails],
+  );
+  const scope = useMemo(() => ({ userId: user?.id ?? "", canSeeAll }), [user?.id, canSeeAll]);
+  // A member only ever has the "my tasks" tab, whatever the URL asked for.
+  const tab: TaskTab = canSeeAll ? (activeTab as TaskTab) : "my_tasks";
+  const filters = useMemo(
+    () => ({ statuses: [...selectedStatuses].sort(), priorities: [...selectedPriorities].sort(), assignee, q, dateFilter }),
+    [selectedStatuses, selectedPriorities, assignee, q, dateFilter],
+  );
+  const params: TaskListParams = { scope, tab, filters, sortBy, page: currentPage, pageSize, people };
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+  // The search needs the people list; without a search the people are irrelevant to the query (no re-run when they arrive).
+  const peopleOk = !q.trim() || peopleReady;
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
+  const filterKey = JSON.stringify(filters) + (q.trim() ? people.length : "");
+  const pageKey = JSON.stringify([scope, tab, filterKey, sortBy, currentPage, pageSize]);
+
+  // The page itself: ONE request returning pageSize rows (with their worklogs) and the exact total.
+  const pageReq = useRef(0);
+  useEffect(() => {
+    if (!ready || !peopleOk) return;
+    const id = ++pageReq.current;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchTaskListPage(paramsRef.current, todayStr());
+        if (id !== pageReq.current) return;
+        setPageRows(res.rows as Task[]);
+        setTotal(res.total);
+        const pages = Math.max(1, Math.ceil(res.total / pageSize));
+        if (currentPage > pages) setCurrentPage(pages); // e.g. the last row of the last page was deleted
+      } catch (err) {
+        console.error("Failed to load tasks:", err);
+      } finally {
+        if (id === pageReq.current) setInitialLoading(false);
+      }
+    }, q.trim() ? 250 : 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageKey, ready, peopleOk]);
+
+  // Counters: sidebar (status / priority of the active tab), tab labels (current filters), KPI strip.
+  useEffect(() => {
+    if (!ready) return;
+    let stale = false;
+    fetchSidebarCounts(tab, scope).then((r) => !stale && setSidebar(r)).catch((e) => console.error("Sidebar counts failed:", e));
+    return () => { stale = true; };
+  }, [tab, scope, countsTick, ready]);
+  useEffect(() => {
+    if (!ready || !peopleOk) return;
+    let stale = false;
+    const timer = setTimeout(() => {
+      fetchTabCounts(paramsRef.current).then((r) => !stale && setTabCounts(r)).catch((e) => console.error("Tab counts failed:", e));
+    }, q.trim() ? 250 : 0);
+    return () => { stale = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, scope, countsTick, peopleOk, ready]);
+  useEffect(() => {
+    if (!ready) return;
+    let stale = false;
+    fetchHeaderCounts(scope).then((r) => !stale && setHeader(r)).catch((e) => console.error("Header counts failed:", e));
+    return () => { stale = true; };
+  }, [scope, countsTick, ready]);
+
+  // A change elsewhere (realtime) or after one of our own actions: ask for the SAME page's ids + updated_at
+  // (~70 bytes a row), read full rows only for what changed, and refresh the counters once things settle.
+  const countsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshPage = async () => {
+    const p = paramsRef.current;
+    if (!readyRef.current) return;
     try {
-      if (!silent && tasks.length === 0) {
-        setInitialLoading(true);
+      const sig = await fetchTaskListSignature(p);
+      const cur = pageRowsRef.current;
+      const byId = new Map<string, Task>(cur.map((r) => [r.id, r]));
+      const changed = sig.ids.filter((rid) => byId.get(rid)?.updated_at !== sig.updatedAt[rid]);
+      const same = sig.ids.length === cur.length && sig.ids.every((rid, i) => cur[i].id === rid);
+      if (!(same && changed.length === 0 && sig.total === totalRef.current)) {
+        if (changed.length > 0) {
+          for (const r of await fetchTasksByIds(changed, todayStr())) byId.set(r.id, r as Task);
+        }
+        const next = sig.ids.map((rid) => byId.get(rid));
+        if (next.some((r) => !r)) throw new Error("page rows missing");
+        setPageRows(next as Task[]);
+        setTotal(sig.total);
+        const pages = Math.max(1, Math.ceil(sig.total / p.pageSize));
+        if (p.page > pages) setCurrentPage(pages);
       }
-      const cutoff = windowCutoff();
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const older = olderRef.current;
-      const pinned = pinnedRef.current;
-      // Delta for an already-loaded older set: anything updated since the newest row we hold.
-      const since = older?.reduce((m, t) => (t.updated_at && t.updated_at > m ? t.updated_at : m), "") || undefined;
-      const [recent, stubs, { data: p }, { data: e }, delta, fresh] = await Promise.all([
-        fetchRecentTasks(cutoff, todayStr),
-        fetchOlderCompletedSummary(cutoff),
-        supabase.from("profiles").select("id,display_name,avatar_url"),
-        supabase.from("profile_emails" as never).select("id,email") as never,
-        older && since ? fetchOlderCompleted(cutoff, todayStr, undefined, since) : Promise.resolve(null),
-        Promise.all(pinned.map((t) => fetchTaskWithWorklogs(t.id, todayStr))),
-      ]);
-
-      const recentIds = new Set(recent.map((t) => t.id));
-      const stubIds = new Set(stubs.map((s) => s.id));
-      setRecentTasks(recent as Task[]);
-      setOlderStubs(stubs);
-
-      if (older) {
-        // Drop rows that no longer exist / are no longer older-completed, apply updates, and
-        // fetch tasks that just aged out of the window (they are in stubs but not held yet).
-        let next = mergeById<Task>(older.filter((t) => stubIds.has(t.id)), (delta ?? []) as Task[]);
-        const held = new Set(next.map((t) => t.id));
-        const missing = stubs.map((s) => s.id).filter((id) => !held.has(id) && !recentIds.has(id));
-        if (missing.length > 0) next = mergeById<Task>(next, (await fetchTasksByIds(missing, todayStr)) as Task[]);
-        setOlderTasks(next);
-      }
-      setPinnedTasks(
-        fresh.filter((t): t is NonNullable<typeof t> => !!t && !recentIds.has(t.id)) as Task[],
-      );
-
-      setProfiles((p ?? []) as Profile[]);
-      const map: Record<string, string> = {};
-      for (const row of ((e ?? []) as Array<{ id: string; email: string }>)) map[row.id] = row.email;
-      setEmails(map);
     } catch (err) {
-      console.error("Failed to load tasks:", err);
-    } finally {
-      setInitialLoading(false);
+      console.warn("Page refresh failed; reading the page again:", err);
+      try {
+        const res = await fetchTaskListPage(paramsRef.current, todayStr());
+        setPageRows(res.rows as Task[]);
+        setTotal(res.total);
+      } catch (e2) {
+        console.error("Failed to load tasks:", e2);
+      }
     }
+    if (countsTimer.current) clearTimeout(countsTimer.current);
+    countsTimer.current = setTimeout(() => setCountsTick((n) => n + 1), 1200);
   };
+  // Existing call sites (cards, bulk actions) call load(true) after a change.
+  const load = async (_silent = false) => {
+    await refreshPage();
+  };
+  useRealtimeTasks(() => void refreshPage(), "tasks-page-rt");
 
-  useEffect(() => { load(false); }, []);
-  useRealtimeTasks(() => load(true), "tasks-page-rt");
-
-  // Active tab base tasks before status/priority filters are applied
-  const tabBaseTasks = useMemo(() => {
-    if (activeTab === "my_tasks") {
-      return tasks.filter((t) => t.assigned_to === user?.id);
-    }
-    if (activeTab === "team_tasks") {
-      return tasks.filter((t) => t.assigned_to !== user?.id);
-    }
-    return tasks;
-  }, [tasks, activeTab, user?.id]);
-
-  // Calculate live count metrics for sidebar filters scoped to current tab
-  // Older completed tasks that are counted but not loaded, restricted to the active tab.
-  const hiddenInTab = useMemo(() => {
-    if (activeTab === "my_tasks") return hiddenOlder.filter((s) => s.assigned_to === user?.id);
-    if (activeTab === "team_tasks") return hiddenOlder.filter((s) => s.assigned_to !== user?.id);
-    return hiddenOlder;
-  }, [hiddenOlder, activeTab, user?.id]);
-
+  // Sidebar counters come straight from the server (active tab, not narrowed by the other filters).
   const statusCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const s of TASK_STATUSES) map[s] = 0;
-    for (const t of tabBaseTasks) {
-      if (t.status && map[t.status] !== undefined) map[t.status]++;
-    }
-    if (map["Completed"] !== undefined) map["Completed"] += hiddenInTab.length;
+    for (const s of TASK_STATUSES) map[s] = sidebar?.status[s] ?? 0;
     return map;
-  }, [tabBaseTasks, hiddenInTab]);
-
+  }, [sidebar]);
   const priorityCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const p of TASK_PRIORITIES) map[p] = 0;
-    for (const t of tabBaseTasks) {
-      if (t.priority && map[t.priority] !== undefined) map[t.priority]++;
-    }
-    for (const s of hiddenInTab) {
-      if (s.priority && map[s.priority] !== undefined) map[s.priority]++;
-    }
+    for (const p of TASK_PRIORITIES) map[p] = sidebar?.priority[p] ?? 0;
     return map;
-  }, [tabBaseTasks, hiddenInTab]);
+  }, [sidebar]);
 
-  // Screens that must see every completed task (search, Completed filter, date filters,
-  // oldest-first) load the older set once; plain browsing keeps the small window.
-  const needsOlder =
-    selectedStatuses.has("Completed") ||
-    q.trim() !== "" ||
-    (dateFilter !== ALL && dateFilter !== "overdue") ||
-    sortBy === "oldest";
-  useEffect(() => {
-    if (needsOlder && olderTasks === null && olderStubs.length > 0) void loadOlder();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsOlder, olderTasks, olderStubs.length]);
-
-  // Deep links (notification / My Day): the target may be an old completed task outside the window.
-  const pinTriedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const id = taskId || highlightId;
-    if (!id || initialLoading) return;
-    if (tasks.some((t) => t.id === id) || pinTriedRef.current.has(id)) return;
-    pinTriedRef.current.add(id);
-    const todayStr = new Date().toISOString().slice(0, 10);
-    void fetchTaskWithWorklogs(id, todayStr).then((t) => {
-      if (t) setPinnedTasks((prev) => mergeById<Task>(prev, [t as Task]));
-    });
-  }, [taskId, highlightId, tasks, initialLoading]);
-
-  // Auto-open TaskDetailModal when taskId or highlightId query parameter is present
+  // Deep links (notification / My Day / Calendar): the task may be on any page, so read it directly,
+  // open its details, and show the tab it belongs to.
   const autoOpenedTargetIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     const targetId = taskId || highlightId;
-    if (!targetId || tasks.length === 0) return;
+    if (!targetId || !ready || !user?.id || autoOpenedTargetIdRef.current === targetId) return;
+    autoOpenedTargetIdRef.current = targetId;
+    void fetchTaskWithWorklogs(targetId, todayStr()).then((t) => {
+      if (!t) return;
+      setSelectedDetailTask(t as Task);
+      if (highlightId && canSeeAll) setActiveTab(t.assigned_to === user.id ? "my_tasks" : "team_tasks");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId, highlightId, user?.id, ready]);
 
-    if (autoOpenedTargetIdRef.current !== targetId) {
-      const matchedTask = tasks.find((t) => t.id === targetId);
-      if (matchedTask) {
-        autoOpenedTargetIdRef.current = targetId;
-        setSelectedDetailTask(matchedTask);
-      }
-    }
-  }, [taskId, highlightId, tasks]);
 
   // Selection handlers
   const handleToggleSelect = (id: string) => {
@@ -435,6 +458,10 @@ function TasksPage() {
     setSelectedTaskIds(new Set());
   };
 
+  // Bulk actions work on whole rows (they are written back / copied), but the list only holds light ones.
+  const selectedFull = async (): Promise<Task[]> =>
+    (await fetchTasksByIds([...selectedTaskIds], new Date().toISOString().slice(0, 10))) as Task[];
+
   const handleBulkDelete = async () => {
     if (!confirm(`Are you sure you want to delete the ${selectedTaskIds.size} selected tasks?`)) return;
     try {
@@ -450,7 +477,7 @@ function TasksPage() {
 
   const handleBulkComplete = async () => {
     try {
-      const selected = tasks.filter((t) => selectedTaskIds.has(t.id));
+      const selected = await selectedFull();
       // Tasks in review are completed by their reviewer's approval, not in bulk.
       const tasksToUpdate = selected.filter((t) => t.status !== "In Review");
       await Promise.all(tasksToUpdate.map((t) => tasksService.setStatus(t, "Completed", user?.id || "")));
@@ -468,7 +495,7 @@ function TasksPage() {
   const handleBulkReassign = async (newAssigneeId: string) => {
     if (!newAssigneeId) return;
     try {
-      const tasksToUpdate = tasks.filter((t) => selectedTaskIds.has(t.id));
+      const tasksToUpdate = await selectedFull();
       await Promise.all(
         tasksToUpdate.map((t) =>
           tasksService.update(t, { assigned_to: newAssigneeId === "unassigned" ? null : newAssigneeId }, user?.id || "")
@@ -483,12 +510,12 @@ function TasksPage() {
   };
 
   const handleBulkUpdateProject = async () => {
-    const defaultVal = tasks.find(t => selectedTaskIds.has(t.id))?.project_name ?? "";
+    const defaultVal = pageRows.find(t => selectedTaskIds.has(t.id))?.project_name ?? "";
     const newProject = prompt("Enter new project name for selected tasks:", defaultVal);
     if (newProject === null) return;
     
     try {
-      const tasksToUpdate = tasks.filter((t) => selectedTaskIds.has(t.id));
+      const tasksToUpdate = await selectedFull();
       await Promise.all(
         tasksToUpdate.map((t) =>
           tasksService.update(t, { project_name: newProject.trim() || null }, user?.id || "")
@@ -504,7 +531,7 @@ function TasksPage() {
 
   const handleBulkDuplicate = async () => {
     try {
-      const tasksToDuplicate = tasks.filter((t) => selectedTaskIds.has(t.id));
+      const tasksToDuplicate = await selectedFull();
       if (tasksToDuplicate.length === 0) return;
       const defaultStartDate = getDefaultStartDate();
       await Promise.all(
@@ -540,143 +567,21 @@ function TasksPage() {
     }
   };
 
-  // Base filtered list with multi-select status/priority & date filters
-  const filtered = useMemo(() => {
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    
-    const tomorrow = new Date();
-    tomorrow.setDate(now.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-    
-    const startOfWeek = new Date();
-    startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
-    const startOfWeekStr = startOfWeek.toISOString().slice(0, 10);
-    const endOfWeek = new Date();
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-    const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
-
-    return tasks.filter((t) => {
-      if (selectedStatuses.size > 0 && !selectedStatuses.has(t.status)) return false;
-      if (selectedPriorities.size > 0 && !selectedPriorities.has(t.priority)) return false;
-      if (assignee !== ALL && t.assigned_to !== assignee) return false;
-      if (q) {
-        const assigneeName = nameOf(t.assigned_to);
-        const assigneeEmail = t.assigned_to ? emails[t.assigned_to] ?? "" : "";
-        const reviewerName = nameOf(t.reviewer);
-        const combinedText = `${t.task_code || ""} ${t.task_name || ""} ${t.client || ""} ${t.project_name || ""} ${t.remarks || ""} ${t.status || ""} ${t.priority || ""} ${assigneeName} ${assigneeEmail} ${reviewerName}`.toLowerCase();
-        const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-        if (!tokens.every((token) => combinedText.includes(token))) return false;
-      }
-      
-      const targetDt = t.due_date || t.start_date;
-      if (dateFilter === "today" && targetDt !== todayStr) return false;
-      if (dateFilter === "tomorrow" && targetDt !== tomorrowStr) return false;
-      if (dateFilter === "this_week") {
-        if (!targetDt || targetDt < startOfWeekStr || targetDt > endOfWeekStr) return false;
-      }
-      if (dateFilter === "overdue") {
-        if (!targetDt || targetDt >= todayStr || t.status === "Completed") return false;
-      }
-      if (dateFilter === "no_due_date" && targetDt) return false;
-
-      return true;
-    });
-  }, [tasks, q, selectedStatuses, selectedPriorities, assignee, dateFilter]);
-
-  // Sort tasks
-  const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => {
-      if (sortBy === "newest") {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
-      if (sortBy === "oldest") {
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      }
-      if (sortBy === "due_soon") {
-        const dtA = a.due_date || a.start_date;
-        const dtB = b.due_date || b.start_date;
-        if (!dtA) return 1;
-        if (!dtB) return -1;
-        return new Date(dtA).getTime() - new Date(dtB).getTime();
-      }
-      if (sortBy === "due_late") {
-        const dtA = a.due_date || a.start_date;
-        const dtB = b.due_date || b.start_date;
-        if (!dtA) return 1;
-        if (!dtB) return -1;
-        return new Date(dtB).getTime() - new Date(dtA).getTime();
-      }
-      return 0;
-    });
-  }, [filtered, sortBy]);
-
-  // Split into two sections: my tasks vs team tasks
-  const myTasks = useMemo(
-    () => sorted.filter((t) => t.assigned_to === user?.id),
-    [sorted, user?.id]
-  );
-  const teamTasks = useMemo(
-    () => sorted.filter((t) => t.assigned_to !== user?.id),
-    [sorted, user?.id]
-  );
-
-  const currentTabTasks = useMemo(() => {
-    if (activeTab === "my_tasks") return myTasks;
-    if (activeTab === "team_tasks") return teamTasks;
-    return sorted;
-  }, [activeTab, myTasks, teamTasks, sorted]);
-
-  // Reset pagination page to 1 when filters or tabs change
-  useEffect(() => {
-    setCurrentPage(1);
-    setPageInput("1");
-  }, [q, selectedStatuses, selectedPriorities, assignee, dateFilter, activeTab, pageSize, sortBy]);
-
-  // Compute pagination parameters
-  // Date-aware pagination: whole date groups are packed into pages so a date is never split.
-  // A page holds as many complete groups as fit in pageSize; an oversized group gets its own page.
-  const totalItems = currentTabTasks.length;
-  const pages = useMemo(() => {
-    const result: { tasks: Task[]; start: number }[] = [];
-    let current: Task[] = [];
-    let offset = 0;
-    let pageStart = 0;
-    for (const group of groupTasksByWhatsAppDay(currentTabTasks, sortBy)) {
-      if (current.length > 0 && current.length + group.tasks.length > pageSize) {
-        result.push({ tasks: current, start: pageStart });
-        pageStart = offset;
-        current = [];
-      }
-      current = current.concat(group.tasks);
-      offset += group.tasks.length;
-    }
-    if (current.length > 0) result.push({ tasks: current, start: pageStart });
-    return result;
-  }, [currentTabTasks, sortBy, pageSize]);
-
-  const totalPages = Math.max(1, pages.length);
+  // Page number box follows the page actually shown.
+  const totalItems = total;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const validatedPage = Math.min(Math.max(1, currentPage), totalPages);
-  const paginatedTasks = pages[validatedPage - 1]?.tasks ?? [];
-  const rangeStart = paginatedTasks.length === 0 ? 0 : pages[validatedPage - 1].start + 1;
-  const rangeEnd = paginatedTasks.length === 0 ? 0 : pages[validatedPage - 1].start + paginatedTasks.length;
-
-  // Switch tab automatically if we have a highlightId from My Day/Notification
   useEffect(() => {
-    if (!highlightId || tasks.length === 0) return;
-    const targetTask = tasks.find((t) => t.id === highlightId);
-    if (targetTask) {
-      if (targetTask.assigned_to === user?.id) {
-        setActiveTab("my_tasks");
-      } else {
-        setActiveTab("team_tasks");
-      }
-    }
-  }, [highlightId, tasks, user?.id]);
+    setPageInput(String(validatedPage));
+  }, [validatedPage]);
+  const paginatedTasks = pageRows;
+  const rangeStart = pageRows.length === 0 ? 0 : (validatedPage - 1) * pageSize + 1;
+  const rangeEnd = pageRows.length === 0 ? 0 : (validatedPage - 1) * pageSize + pageRows.length;
+
 
   // Scroll + highlight task when coming from a notification click
   useEffect(() => {
-    if (!highlightId || filtered.length === 0) return;
+    if (!highlightId || pageRows.length === 0) return;
     const el = document.getElementById(`task-card-${highlightId}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -687,7 +592,7 @@ function TasksPage() {
       }, 2500);
       return () => clearTimeout(t);
     }
-  }, [highlightId, filtered, navigate, activeTab]);
+  }, [highlightId, pageRows, navigate, activeTab]);
 
   // Open the create dialog if query parameter `create` is true
   useEffect(() => {
@@ -784,11 +689,7 @@ function TasksPage() {
     </div>
   );
 
-  const overdueCount = tasks.filter((t) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const dt = t.due_date || t.start_date;
-    return dt && dt < today && t.status !== "Completed";
-  }).length;
+  const overdueCount = header?.overdue ?? 0;
 
   const renderFilterControls = () => (
     <div className="space-y-4 text-xs">
@@ -955,43 +856,33 @@ function TasksPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white leading-tight">Tasks</h1>
             <span className="text-[11px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-[#1e2d4a] text-[#5C8EFA] border border-[#2b3e66]">
-              {tasks.length + hiddenOlder.length}
+              {header?.total ?? 0}
             </span>
           </div>
           <p className="text-[10px] sm:text-[11px] text-[#8a99ad] font-medium leading-tight">Plan, track and get things done</p>
         </div>
 
         {/* KPI Summary Cards - compact micro-cards on mobile */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 shrink-0">
-          <div className="bg-[#181a20] border border-[#262936] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 flex items-center gap-2">
-            <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-md bg-blue-500/15 flex items-center justify-center shrink-0">
-              <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#5C8EFA]" />
-            </div>
-            <div>
-              <p className="text-xs sm:text-base font-bold text-white leading-none">{tasks.length + hiddenOlder.length}</p>
-              <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">Total Tasks</p>
-            </div>
-          </div>
-
+        <div className={cn("grid grid-cols-2 gap-1.5 shrink-0", canSeeAll ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
           <div className="bg-[#181a20] border border-[#262936] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 flex items-center gap-2">
             <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-md bg-[#5C8EFA]/15 flex items-center justify-center shrink-0">
               <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#5C8EFA]" />
             </div>
             <div>
               <p className="text-xs sm:text-base font-bold text-white leading-none">
-                {tasks.filter((t) => t.assigned_to === user.id).length + hiddenOlder.filter((s) => s.assigned_to === user.id).length}
+                {header?.mine ?? 0}
               </p>
               <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">My Tasks</p>
             </div>
           </div>
 
-          <div className="bg-[#181a20] border border-[#262936] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 flex items-center gap-2">
+          <div className={cn("bg-[#181a20] border border-[#262936] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 flex items-center gap-2", !canSeeAll && "hidden")}>
             <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-md bg-emerald-500/15 flex items-center justify-center shrink-0">
               <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400" />
             </div>
             <div>
               <p className="text-xs sm:text-base font-bold text-white leading-none">
-                {tasks.filter((t) => t.assigned_to !== user.id).length + hiddenOlder.filter((s) => s.assigned_to !== user.id).length}
+                {canSeeAll ? Math.max(0, (header?.total ?? 0) - (header?.mine ?? 0)) : 0}
               </p>
               <p className="text-[10px] sm:text-[11px] text-[#8a99ad] mt-0.5 font-medium">Team Tasks</p>
             </div>
@@ -1021,19 +912,21 @@ function TasksPage() {
               value="my_tasks"
               className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
-              My Tasks ({myTasks.length})
+              My Tasks ({tabCounts?.my ?? 0})
             </TabsTrigger>
             <TabsTrigger
+              hidden={!canSeeAll}
               value="team_tasks"
               className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
-              Team Tasks ({teamTasks.length})
+              Team Tasks ({tabCounts?.team ?? 0})
             </TabsTrigger>
             <TabsTrigger
+              hidden={!canSeeAll}
               value="all_tasks"
               className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
-              All Tasks ({sorted.length})
+              All Tasks ({tabCounts?.all ?? 0})
             </TabsTrigger>
           </TabsList>
 
@@ -1101,21 +994,6 @@ function TasksPage() {
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 shrink-0 pb-2">
               <div className="text-xs text-[#8a99ad] font-medium">
                 Showing {rangeStart}–{rangeEnd} of {totalItems} tasks
-                {hiddenInTab.length > 0 && (
-                  <>
-                    {" "}·{" "}
-                    <button
-                      type="button"
-                      onClick={() => void loadOlder()}
-                      disabled={loadingOlder}
-                      className="text-[#5C8EFA] hover:underline cursor-pointer disabled:opacity-60"
-                    >
-                      {loadingOlder
-                        ? "Loading…"
-                        : `+${hiddenInTab.length} completed older than ${RECENT_COMPLETED_DAYS} days (load)`}
-                    </button>
-                  </>
-                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -1134,7 +1012,6 @@ function TasksPage() {
                   <SelectContent className="bg-[#181a20] border-[#262936] text-slate-200">
                     <SelectItem value="25">25 per page</SelectItem>
                     <SelectItem value="50">50 per page</SelectItem>
-                    <SelectItem value="100">100 per page</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
