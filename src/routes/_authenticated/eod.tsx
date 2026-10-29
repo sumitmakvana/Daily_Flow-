@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import {
 import type { Profile, EodCheckin, Task, Project } from "@/lib/types";
 import { todayISO, formatHoursMins } from "@/lib/format";
 import { TASK_EOD_COLS } from "@/lib/task-columns";
+import { eodWindowFilter, fetchCompletedOutsideWindow, loadAllTasksSlim } from "@/lib/task-window";
 import { eodService } from "@/services/eod";
 import { workloadService, utilTone } from "@/services/workload";
 import { carryForwardService } from "@/services/carry-forward";
@@ -54,22 +55,44 @@ function EodBoardPage() {
   // View & Filter State
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"split" | "table">("split");
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
+  // Completed tasks outside the board window, per member: only the table view's "Completed" fallback shows them.
+  const [olderCompleted, setOlderCompleted] = useState<Record<string, number> | null>(null);
+  const loadOlderCompleted = async () => {
+    try {
+      setOlderCompleted(await fetchCompletedOutsideWindow(todayISO()));
+    } catch (err) {
+      console.error("Failed to load older completed counts:", err);
+    }
+  };
+  useEffect(() => {
+    if (viewMode === "table") void loadOlderCompleted();
+  }, [viewMode]);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [inspectedTask, setInspectedTask] = useState<Task | null>(null);
 
+  const tasksRef = useRef<Task[]>([]);
+  const fullAt = useRef(0);
+  // Evaluated per request, so the window follows the date if the page stays open past midnight (the head-count
+  // check in loadAllTasksSlim then notices the difference and re-reads in full).
+  const windowApply = (q: any) => q.or(eodWindowFilter(todayISO()));
   const load = async () => {
     try {
-      const [{ data: p }, c, { data: t }, { data: proj }] = await Promise.all([
+      const [{ data: p }, c, rows, { data: proj }] = await Promise.all([
         supabase.from("profiles").select("id,display_name,email,avatar_url,team_id,manager_id"),
         eodService.listForDate(todayISO()),
         // Board numbers need every row but only a few columns; the member drawer loads that
         // member's full task history on demand (see below).
-        supabase.from("tasks").select(TASK_EOD_COLS),
+        // Open tasks + the ones completed today only (the board never reads older completed rows; their
+        // per-member total loads on demand in table view). Changed rows only after the first load.
+        loadAllTasksSlim<Task>(TASK_EOD_COLS, tasksRef.current, fullAt, windowApply),
         supabase.from("projects").select("id,name"),
       ]);
       setProfiles((p ?? []) as Profile[]);
       setCheckins(c ?? []);
-      setTasks((t ?? []) as Task[]);
+      tasksRef.current = rows;
+      setTasks(rows);
       setProjects((proj ?? []) as Project[]);
     } catch (err) {
       console.error("Failed to load EOD board data:", err);
@@ -79,7 +102,33 @@ function EodBoardPage() {
   useEffect(() => {
     load();
   }, []);
-  useRealtimeTasks(load, "eod-board-rt");
+  // A task event only changes tasks: refresh just those (changed rows), not the people/projects/check-ins.
+  // Events that arrive while a refresh is running collapse into ONE follow-up refresh.
+  const taskRefresh = useRef<{ running: boolean; again: boolean }>({ running: false, again: false });
+  const refreshTasks = async () => {
+    const st = taskRefresh.current;
+    if (st.running) {
+      st.again = true;
+      return;
+    }
+    st.running = true;
+    try {
+      do {
+        st.again = false;
+        try {
+          const rows = await loadAllTasksSlim<Task>(TASK_EOD_COLS, tasksRef.current, fullAt, windowApply);
+          tasksRef.current = rows;
+          setTasks(rows);
+          if (viewModeRef.current === "table") void loadOlderCompleted();
+        } catch (err) {
+          console.error("Failed to refresh EOD tasks:", err);
+        }
+      } while (st.again);
+    } finally {
+      st.running = false;
+    }
+  };
+  useRealtimeTasks(refreshTasks, "eod-board-rt");
   // A member submitting their EOD only changes check-ins: refetch just those, not every task.
   useRealtimeRefresh(
     ["eod_checkins"],
@@ -88,6 +137,17 @@ function EodBoardPage() {
   );
 
   // Full rows (every column, all history) for ONLY the member whose drawer is open.
+  const drawerSig = useMemo(() => {
+    if (!selectedMemberId) return "";
+    let n = 0;
+    let max = "";
+    for (const t of tasks) {
+      if (t.assigned_to !== selectedMemberId) continue;
+      n++;
+      if ((t.updated_at ?? "") > max) max = t.updated_at ?? "";
+    }
+    return `${n}|${max}`;
+  }, [tasks, selectedMemberId]);
   const [drawerTasks, setDrawerTasks] = useState<{ memberId: string; rows: Task[] } | null>(null);
   useEffect(() => {
     if (!selectedMemberId) {
@@ -105,8 +165,8 @@ function EodBoardPage() {
     return () => {
       cancelled = true;
     };
-    // `tasks` changes after every realtime refresh, which also refreshes the open drawer.
-  }, [selectedMemberId, tasks]);
+    // Re-read only when THIS member's rows changed (not after every refresh of the whole board).
+  }, [selectedMemberId, drawerSig]);
 
   const todayStr = todayISO();
   const utils = workloadService.computeToday(tasks);
@@ -198,7 +258,9 @@ function EodBoardPage() {
   const snapshot = async () => {
     setBusy(true);
     try {
-      const n = await workloadService.snapshotToday(tasks);
+      // The snapshot stores all-time hours/completed totals, so it reads every task (once, on this click).
+      const everything = await loadAllTasksSlim<Task>(TASK_EOD_COLS, undefined, { current: 0 });
+      const n = await workloadService.snapshotToday(everything);
       toast.success(`Daily snapshot saved for ${n} member${n === 1 ? "" : "s"}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -639,7 +701,7 @@ function EodBoardPage() {
                         </td>
 
                         <td className="py-3 px-3.5 text-center font-mono font-bold text-emerald-400">
-                          {c?.completed_count ?? u?.completed ?? 0}
+                          {c?.completed_count ?? (u?.completed ?? 0) + (olderCompleted?.[p.id] ?? 0)}
                         </td>
 
                         <td className="py-3 px-3.5 text-center font-mono font-bold text-amber-400">

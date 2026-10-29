@@ -48,7 +48,7 @@ describe("pages do not read the whole tasks row", () => {
   });
   it("EOD loads a member's full history only when the drawer opens", () => {
     const src = read("src/routes/_authenticated/eod.tsx");
-    expect(src).toMatch(/select\(TASK_EOD_COLS\)/);
+    expect(src).toMatch(/loadAllTasksSlim<Task>\(TASK_EOD_COLS/); // light rows, changed rows only after the first load
     expect(src).toMatch(/\.eq\("assigned_to", selectedMemberId\)/);
     expect(src).toMatch(/tasks=\{drawerTasks\.rows\}/);
   });

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { isOverdue } from "@/lib/format";
 import { TASK_COMMAND_COLS } from "@/lib/task-columns";
+import { loadAllTasksSlim } from "@/lib/task-window";
 import type { Profile, Task, RiskEvent, WorkSettings } from "@/lib/types";
 import { Activity, AlertOctagon, CheckCircle2, RefreshCw, ShieldAlert, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -31,14 +32,17 @@ function CommandPage() {
   const [settings, setSettings] = useState<WorkSettings | null>(null);
   const [detecting, setDetecting] = useState(false);
 
+  const tasksRef = useRef<Task[]>([]);
+  const fullAt = useRef(0);
   const load = async () => {
-    const [{ data: t }, { data: p }, r, s] = await Promise.all([
-      supabase.from("tasks").select(TASK_COMMAND_COLS),
+    const [rows, { data: p }, r, s] = await Promise.all([
+      loadAllTasksSlim<Task>(TASK_COMMAND_COLS, tasksRef.current, fullAt),
       supabase.from("profiles").select("id,display_name,avatar_url"),
       risksService.listOpen(),
       workSettingsService.get(),
     ]);
-    setTasks((t ?? []) as Task[]);
+    tasksRef.current = rows;
+    setTasks(rows);
     setProfiles((p ?? []) as Profile[]);
     setRisks(r);
     setSettings(s);

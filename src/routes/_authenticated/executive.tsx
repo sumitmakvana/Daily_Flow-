@@ -2,7 +2,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import {
@@ -76,6 +76,8 @@ import {
   CartesianGrid,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { getRolesShared } from "@/hooks/use-auth";
+import { execRangeFilter, execScopeQuery, loadAllTasksSlim } from "@/lib/task-window";
 import {
   getExecSummary,
   getExecScope,
@@ -94,11 +96,10 @@ export const Route = createFileRoute("/_authenticated/executive")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (!data.user) return;
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.user.id);
-    const set = new Set((roles ?? []).map((r) => r.role));
+    // Fresh read for this navigation (maxAge 0), but it joins the layout's in-flight request, so the
+    // guard and the layout cost one user_roles request instead of two.
+    const roles = await getRolesShared(data.user.id, 0);
+    const set = new Set<string>(roles);
     if (!set.has("admin") && !set.has("manager")) {
       throw redirect({ to: "/today" });
     }
@@ -119,6 +120,10 @@ const RANGE_LABEL: Record<RangeKey, string> = {
 type Scope = { kind: "org" } | { kind: "team"; id: string } | { kind: "manager"; id: string };
 
 const SCOPE_STORAGE_KEY = "exec.scope.v1";
+
+// Columns the Executive widgets read (updated_at lets realtime refreshes fetch only the changed rows).
+const EXEC_TASK_COLS =
+  "id, task_code, task_name, assigned_to, project_name, project_id, type_id, team_id, status, priority, due_date, completed_at, blocker_reason, remarks, planned_hours, actual_hours, created_at, updated_at";
 
 function readStoredScope(): Scope | null {
   if (typeof window === "undefined") return null;
@@ -164,6 +169,7 @@ function ExecutivePage() {
   // Interactive member drilldown state
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
   const fetchBootstrap = useServerFn(getExecScope);
   const { data: boot } = useQuery({
     queryKey: ["exec-scope-bootstrap"],
@@ -171,23 +177,7 @@ function ExecutivePage() {
     staleTime: Infinity,
   });
 
-  const { data: eodTasks = [] } = useQuery({
-    queryKey: ["eod-widget-tasks"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("tasks")
-        .select(
-          "id, task_code, task_name, assigned_to, project_name, project_id, type_id, team_id, status, priority, due_date, completed_at, blocker_reason, remarks, planned_hours, actual_hours, created_at",
-        );
-      return (data ?? []) as Task[];
-    },
-    // Kept fresh by Socket.IO task events (invalidated below) and by the reconnect/tab-return resync,
-    // so it no longer refetches the whole table on every focus or remount.
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
-
-  const { data: eodProfiles = [] } = useQuery({
+  const { data: eodProfiles = [], isSuccess: eodProfilesReady } = useQuery({
     queryKey: ["eod-widget-profiles"],
     queryFn: async () => {
       const { data } = await supabase
@@ -196,6 +186,60 @@ function ExecutivePage() {
       return (data ?? []) as Profile[];
     },
     staleTime: 30000,
+  });
+
+  // The dashboard reads the tasks of the selected scope and range (open tasks + the ones created, due or
+  // completed in the range), not the whole table. Changing scope/range/members is a new, small query; realtime
+  // refreshes read only the changed rows of that same window (see loadAllTasksSlim).
+  const execFullAt = useRef<Record<string, { current: number }>>({});
+  const scopeQ = useMemo(() => execScopeQuery(scope, selectedMembers, eodProfiles), [scope, selectedMembers, eodProfiles]);
+  const taskWindowKey = ["eod-widget-tasks", range, new Date().toISOString().slice(0, 10), scopeQ.key] as const;
+  const { data: eodTasks = [] } = useQuery({
+    queryKey: taskWindowKey,
+    queryFn: () => {
+      const k = taskWindowKey.join("|");
+      const fullAt = (execFullAt.current[k] ??= { current: 0 });
+      return loadAllTasksSlim<Task>(
+        EXEC_TASK_COLS,
+        queryClient.getQueryData<Task[]>(taskWindowKey),
+        fullAt,
+        (q) => scopeQ.apply(q.or(execRangeFilter(range))),
+      );
+    },
+    // Wait for the people list and the scope: the window depends on both (and loading before them would read twice).
+    enabled: eodProfilesReady && !!scope,
+    // Kept fresh by Socket.IO task events (invalidated below) and by the reconnect/tab-return resync,
+    // so it no longer refetches on every focus or remount.
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  // A member's full history (every task, every check-in) loads only while that member's drawer is open.
+  const { data: memberTasksRows } = useQuery({
+    queryKey: ["exec-member-tasks", selectedMemberId],
+    enabled: !!selectedMemberId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("tasks").select(EXEC_TASK_COLS).eq("assigned_to", selectedMemberId!);
+      if (error) throw error;
+      return (data ?? []) as Task[];
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const { data: memberCheckinRows } = useQuery({
+    queryKey: ["exec-member-checkins", selectedMemberId],
+    enabled: !!selectedMemberId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("eod_checkins")
+        .select("*")
+        .eq("user_id", selectedMemberId!)
+        .order("checkin_date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as EodCheckin[];
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: projectsList = [] } = useQuery({
@@ -227,18 +271,6 @@ function ExecutivePage() {
     staleTime: 10000,
   });
 
-  const { data: eodCheckinsList = [] } = useQuery({
-    queryKey: ["exec-checkins"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("eod_checkins")
-        .select("*")
-        .order("checkin_date", { ascending: false });
-      return (data ?? []) as EodCheckin[];
-    },
-    staleTime: 10000,
-  });
-
   // First-load default when no persisted scope.
   useEffect(() => {
     if (scope || !boot) return;
@@ -265,23 +297,26 @@ function ExecutivePage() {
         },
       }),
     enabled: !!filters,
-    staleTime: 1000,
+    // Fresh for 30s: a remount or a tab return inside that window reuses the result instead of re-running the
+    // summary function with identical arguments. Task events invalidate it explicitly (below).
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
     // No refetchInterval: the summary is invalidated by Socket.IO task events (below).
   });
 
-  const queryClient = useQueryClient();
   useRealtimeRefresh(
     ["tasks"],
     () => {
       void queryClient.invalidateQueries({ queryKey: ["exec-summary"] });
       void queryClient.invalidateQueries({ queryKey: ["eod-widget-tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["exec-member-tasks"] });
     },
     "exec-summary-rt",
   );
   // EOD check-ins and leaves change independently of tasks; refresh only those two queries.
   useRealtimeRefresh(
     ["eod_checkins"],
-    () => void queryClient.invalidateQueries({ queryKey: ["exec-checkins"] }),
+    () => void queryClient.invalidateQueries({ queryKey: ["exec-member-checkins"] }),
     "exec-checkins-rt",
   );
   useRealtimeRefresh(
@@ -358,21 +393,29 @@ function ExecutivePage() {
     return `Manager · ${m?.name ?? "Manager"}`;
   }, [scope, boot, availableTeams, availableManagers]);
 
-  const handleExportGlobalReport = () => {
-    const completedTasks = eodTasks.filter((t) => t.status === "Completed").length;
-    const inProgressTasks = eodTasks.filter((t) => t.status === "In Progress").length;
-    const inReviewTasks = eodTasks.filter((t) => t.status === "In Review").length;
-    const todoTasks = eodTasks.filter((t) => t.status === "To Do").length;
-    const blockedTasks = eodTasks.filter((t) => t.status === "Blocked" || t.status === "On Hold").length;
-    const pendingTasks = eodTasks.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold").length + todoTasks;
-    const totalTasks = eodTasks.length;
+  const handleExportGlobalReport = async () => {
+    // The report covers every task, so it reads them all once, here, instead of the page holding them all.
+    let allTasks: Task[];
+    try {
+      allTasks = await loadAllTasksSlim<Task>(EXEC_TASK_COLS, undefined, { current: 0 });
+    } catch (err) {
+      toast.error((err as Error).message || "Could not load tasks for the report");
+      return;
+    }
+    const completedTasks = allTasks.filter((t) => t.status === "Completed").length;
+    const inProgressTasks = allTasks.filter((t) => t.status === "In Progress").length;
+    const inReviewTasks = allTasks.filter((t) => t.status === "In Review").length;
+    const todoTasks = allTasks.filter((t) => t.status === "To Do").length;
+    const blockedTasks = allTasks.filter((t) => t.status === "Blocked" || t.status === "On Hold").length;
+    const pendingTasks = allTasks.filter((t) => t.status !== "Completed" && t.status !== "In Progress" && t.status !== "In Review" && t.status !== "Blocked" && t.status !== "On Hold").length + todoTasks;
+    const totalTasks = allTasks.length;
     const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
     const today = new Date().toISOString().slice(0, 10);
-    const overdueTotal = eodTasks.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today).length;
+    const overdueTotal = allTasks.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today).length;
 
     const memberSummaries = eodProfiles.map((p) => {
-      const pTasks = eodTasks.filter((t) => t.assigned_to === p.id);
+      const pTasks = allTasks.filter((t) => t.assigned_to === p.id);
       const cCount = pTasks.filter((t) => t.status === "Completed").length;
       const ipCount = pTasks.filter((t) => t.status === "In Progress").length;
       const irCount = pTasks.filter((t) => t.status === "In Review").length;
@@ -397,7 +440,7 @@ function ExecutivePage() {
       };
     });
 
-    const blockedAlerts = eodTasks
+    const blockedAlerts = allTasks
       .filter((t) => (t.status === "Blocked" || t.status === "On Hold") && t.blocker_reason)
       .map((t) => {
         const p = eodProfiles.find((x) => x.id === t.assigned_to);
@@ -535,7 +578,7 @@ function ExecutivePage() {
         profiles={eodProfiles}
         tasks={eodTasks}
         projects={projectsList}
-        checkins={eodCheckinsList}
+        checkins={memberCheckinRows ?? []}
         activeLeavesToday={activeLeavesToday}
         range={range}
         scope={scope}
@@ -550,9 +593,9 @@ function ExecutivePage() {
         memberId={selectedMemberId}
         onClose={() => setSelectedMemberId(null)}
         profiles={eodProfiles}
-        tasks={eodTasks}
+        tasks={selectedMemberId ? (memberTasksRows ?? eodTasks) : eodTasks}
         projects={projectsList}
-        checkins={eodCheckinsList}
+        checkins={memberCheckinRows ?? []}
         activeLeavesToday={activeLeavesToday}
       />
 

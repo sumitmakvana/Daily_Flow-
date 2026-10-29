@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -7,6 +7,7 @@ import { PriorityBadge } from "@/components/PriorityBadge";
 import { CapacityBar } from "@/components/CapacityBar";
 import { formatDate, isOverdue, daysSince } from "@/lib/format";
 import { TASK_DASHBOARD_COLS, TASK_DASHBOARD_DETAIL_COLS } from "@/lib/task-columns";
+import { loadAllTasksSlim } from "@/lib/task-window";
 import type { Profile, Task } from "@/lib/types";
 import { AlertOctagon, CheckCircle2, Clock, ListChecks, TrendingUp } from "lucide-react";
 import { TaskEodReviewCard } from "@/components/TaskEodReviewCard";
@@ -19,13 +20,15 @@ function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
+  const rowsRef = useRef<Task[]>([]);
+  const fullAt = useRef(0);
   useEffect(() => {
     const load = async () => {
-      const [{ data: t }, { data: p }] = await Promise.all([
-        supabase.from("tasks").select(TASK_DASHBOARD_COLS),
+      const [rows, { data: p }] = await Promise.all([
+        loadAllTasksSlim<Task>(TASK_DASHBOARD_COLS, rowsRef.current, fullAt),
         supabase.from("profiles").select("id,display_name,avatar_url"),
       ]);
-      const rows = (t ?? []) as Task[];
+      rowsRef.current = rows;
       // The two lists below need code / name / reason, but only for the few rows they show. Pick those
       // rows with the same rules the lists use, then read just their details.
       const listIds = rows

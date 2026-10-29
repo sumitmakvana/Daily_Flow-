@@ -41,6 +41,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Task, Profile, Project } from "@/lib/types";
 import { formatHoursMins } from "@/lib/format";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
+import { TASK_TIMESHEET_COLS, WORKLOG_TIMESHEET_COLS } from "@/lib/task-columns";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -91,9 +92,9 @@ function TimeTrackingPage() {
   const { data: { tasks = [], worklogs = [] } = {} } = useQuery({
     queryKey: ["time-tracking-data"],
     queryFn: async () => {
-      const [{ data: rawTasks }, { data: worklogsData }] = await Promise.all([
-        supabase.from("tasks").select("*").order("created_at", { ascending: false }),
-        supabase.from("task_worklogs").select("*").order("work_date", { ascending: false }),
+      const [{ data: rawTasks }, { data: worklogsData }]: Array<{ data: any[] | null }> = await Promise.all([
+        (supabase.from("tasks") as any).select(TASK_TIMESHEET_COLS).order("created_at", { ascending: false }),
+        (supabase.from("task_worklogs" as never) as any).select(WORKLOG_TIMESHEET_COLS).order("work_date", { ascending: false }),
       ]);
 
       const worklogsByTask = new Map<string, any[]>();

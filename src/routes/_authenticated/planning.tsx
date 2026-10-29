@@ -12,6 +12,8 @@ import type { Profile, Task, TaskPriority } from "@/lib/types";
 import { TASK_PRIORITIES } from "@/lib/types";
 import { formatDate, isOverdue, nextWorkingDay } from "@/lib/format";
 import { tasksService } from "@/services/tasks";
+import { TASK_PLANNING_COLS } from "@/lib/task-columns";
+import { fetchTasksByIds } from "@/lib/task-window";
 import { carryForwardService } from "@/services/carry-forward";
 import { workloadService, utilTone } from "@/services/workload";
 import { toast } from "sonner";
@@ -31,7 +33,7 @@ function PlanningPage() {
 
   const load = async () => {
     const [{ data: t }, { data: p }] = await Promise.all([
-      supabase.from("tasks").select("*").not("status", "in", '("Completed")').order("priority"),
+      supabase.from("tasks").select(TASK_PLANNING_COLS).not("status", "in", '("Completed")').order("priority"),
       supabase.from("profiles").select("id,display_name,avatar_url"),
     ]);
     setTasks((t ?? []) as Task[]);
@@ -66,9 +68,13 @@ function PlanningPage() {
   const selectedTasks = tasks.filter((t) => selected.has(t.id));
   const utils = workloadService.computeToday(tasks);
 
+  // The board holds light rows; actions write whole tasks back, so they read the selected full rows first.
+  const selectedFull = async (): Promise<Task[]> =>
+    (await fetchTasksByIds(selectedTasks.map((t) => t.id), new Date().toISOString().slice(0, 10))) as Task[];
+
   const bulkReassign = async (assigneeId: string) => {
     if (!user) return;
-    for (const t of selectedTasks) {
+    for (const t of await selectedFull()) {
       try { await tasksService.transfer(t, assigneeId, user.id); } catch (e) { toast.error((e as Error).message); }
     }
     toast.success(`Reassigned ${selectedTasks.length} task${selectedTasks.length === 1 ? "" : "s"}`);
@@ -76,7 +82,7 @@ function PlanningPage() {
   };
   const bulkPriority = async (p: TaskPriority) => {
     if (!user) return;
-    for (const t of selectedTasks) {
+    for (const t of await selectedFull()) {
       try { await tasksService.setPriority(t, p, user.id); } catch (e) { toast.error((e as Error).message); }
     }
     toast.success("Updated priority");
@@ -84,7 +90,7 @@ function PlanningPage() {
   };
   const bulkCarry = async () => {
     if (!user) return;
-    for (const t of selectedTasks) {
+    for (const t of await selectedFull()) {
       try { await carryForwardService.carry(t, user.id, nextWorkingDay(), "manager"); } catch (e) { toast.error((e as Error).message); }
     }
     toast.success(`Moved to tomorrow`);

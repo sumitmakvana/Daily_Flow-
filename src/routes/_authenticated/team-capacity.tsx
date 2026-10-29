@@ -1,6 +1,6 @@
 import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, Fragment } from "react";
+import { useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,14 +65,14 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Profile, Task, Project, TaskStatus } from "@/lib/types";
 import { formatHoursMins, toLocalISO } from "@/lib/format";
 import { getTodayDateStr, formatToDateStr, isTaskCompletedToday } from "@/lib/task-date-utils";
-import { countOlderCompleted, fetchOlderCompleted, fetchRecentTasks, mergeById, windowCutoff } from "@/lib/task-window";
+import { countOlderCompleted, fetchOlderCompleted, fetchRecentTasks, mergeById, refreshRecentTasks, windowCutoff, type TaskWithWorklogs } from "@/lib/task-window";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { ExecutiveMemberInspectionDrawer } from "./executive";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
-import { useAuth } from "@/hooks/use-auth";
+import { getRolesShared, useAuth } from "@/hooks/use-auth";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { TeamReviewQueue } from "@/components/review/TeamReviewQueue";
 import { isReviewAging, reviewSubmittedAt } from "@/lib/review";
@@ -85,11 +85,10 @@ export const Route = createFileRoute("/_authenticated/team-capacity")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (!data.user) return;
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.user.id);
-    const set = new Set((roles ?? []).map((r) => r.role));
+    // Fresh read for this navigation (maxAge 0), but it joins the layout's in-flight request, so the
+    // guard and the layout cost one user_roles request instead of two.
+    const roles = await getRolesShared(data.user.id, 0);
+    const set = new Set<string>(roles);
     if (!set.has("admin") && !set.has("manager")) {
       throw redirect({ to: "/today" });
     }
@@ -247,9 +246,27 @@ function TeamCapacityPage() {
   // Windowed: open tasks + completed in the last RECENT_COMPLETED_DAYS, worklogs embedded so only
   // those tasks' worklogs are sent. Older completed tasks are counted (KPI total) and loaded per
   // member when their history dialog opens.
+  // Realtime refreshes fetch only what changed (see refreshRecentTasks); a full load happens first, on a
+  // new day, when the delta fails, and every FULL_RELOAD_MS.
+  const fullLoad = useRef<{ at: number; cutoff: string } | null>(null);
   const { data: tasks = [] } = useQuery({
     queryKey: ["capacity-tasks"],
-    queryFn: async () => (await fetchRecentTasks(windowCutoff(), toLocalISO(new Date()))) as Task[],
+    queryFn: async () => {
+      const cutoff = windowCutoff();
+      const todayLocal = toLocalISO(new Date());
+      const prev = queryClient.getQueryData<Task[]>(["capacity-tasks"]);
+      const f = fullLoad.current;
+      if (prev && f && f.cutoff === cutoff && Date.now() - f.at < 5 * 60_000) {
+        try {
+          return (await refreshRecentTasks(prev as TaskWithWorklogs[], cutoff, todayLocal)) as Task[];
+        } catch (err) {
+          console.warn("Delta refresh failed; reloading everything:", err);
+        }
+      }
+      const rows = (await fetchRecentTasks(cutoff, todayLocal)) as Task[];
+      fullLoad.current = { at: Date.now(), cutoff };
+      return rows;
+    },
     staleTime: 10000,
   });
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { CapacityBar } from "@/components/CapacityBar";
@@ -7,6 +7,7 @@ import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import type { Profile, Task } from "@/lib/types";
 import { isOverdue } from "@/lib/format";
 import { TASK_WORKLOAD_COLS } from "@/lib/task-columns";
+import { loadAllTasksSlim } from "@/lib/task-window";
 
 export const Route = createFileRoute("/_authenticated/workload")({
   component: WorkloadPage,
@@ -15,12 +16,15 @@ export const Route = createFileRoute("/_authenticated/workload")({
 function WorkloadPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const tasksRef = useRef<Task[]>([]);
+  const fullAt = useRef(0);
   const load = useCallback(async () => {
-    const [{ data: t }, { data: p }] = await Promise.all([
-      supabase.from("tasks").select(TASK_WORKLOAD_COLS),
+    const [rows, { data: p }] = await Promise.all([
+      loadAllTasksSlim<Task>(TASK_WORKLOAD_COLS, tasksRef.current, fullAt),
       supabase.from("profiles").select("id,display_name,avatar_url"),
     ]);
-    setTasks((t ?? []) as Task[]);
+    tasksRef.current = rows;
+    setTasks(rows);
     setProfiles((p ?? []) as Profile[]);
   }, []);
   useEffect(() => { load(); }, [load]);
