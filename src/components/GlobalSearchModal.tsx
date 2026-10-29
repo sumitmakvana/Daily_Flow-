@@ -15,6 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -32,6 +33,9 @@ type FilterTab = "all" | "in_progress" | "pending" | "completed" | "in_review" |
 const PAGE_SIZE = 6;
 
 export function GlobalSearchModal({ open, onOpenChange, onOpenCreateTask }: GlobalSearchModalProps) {
+  const { user: authUser, isManager: authIsManager } = useAuth();
+  // A member only searches their own assigned tasks (managers and admins search every task).
+  const scopeTasks = (q: any) => (authIsManager ? q : q.eq("assigned_to", authUser?.id ?? "00000000-0000-0000-0000-000000000000")); // fail closed
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
@@ -71,9 +75,9 @@ export function GlobalSearchModal({ open, onOpenChange, onOpenCreateTask }: Glob
     setIsSearching(true);
     try {
       const [{ data: tasksData }, { data: membersData }] = await Promise.all([
-        supabase
+        scopeTasks(supabase
           .from("tasks")
-          .select("*")
+          .select("*"))
           .order("updated_at", { ascending: false })
           .limit(100),
         supabase
@@ -108,9 +112,9 @@ export function GlobalSearchModal({ open, onOpenChange, onOpenCreateTask }: Glob
         const primaryToken = tokens[0] || "";
 
         const [{ data: tasksData }, { data: membersData }] = await Promise.all([
-          supabase
+          scopeTasks(supabase
             .from("tasks")
-            .select("*")
+            .select("*"))
             .or(
               `task_name.ilike.%${primaryToken}%,task_code.ilike.%${primaryToken}%,project_name.ilike.%${primaryToken}%,client.ilike.%${primaryToken}%,remarks.ilike.%${primaryToken}%`
             )

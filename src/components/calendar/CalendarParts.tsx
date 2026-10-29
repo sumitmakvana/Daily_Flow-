@@ -45,7 +45,6 @@ export const KIND_META: Record<EventKind, { chip: string; dot: string; name: str
 
 export const LAYER_META: Array<{ key: CalLayer; label: string; dot: string }> = [
   { key: "my", label: "My Tasks", dot: "bg-blue-500" },
-  { key: "team", label: "Team Tasks", dot: "bg-purple-500" },
   { key: "leave", label: "Leave & WFH", dot: "bg-emerald-500" },
   { key: "office", label: "Office Holidays", dot: "bg-rose-500" },
   { key: "public", label: "Public Holidays", dot: "bg-amber-500" },

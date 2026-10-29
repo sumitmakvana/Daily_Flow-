@@ -17,6 +17,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { TaskCard } from "@/components/TaskCard";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Calendar as CalendarIcon, User, Filter, Palmtree, Home, Check, X, Trash2, Pencil, Building2, Search } from "lucide-react";
 import type { Profile, Task, Leave, HolidayCalendar } from "@/lib/types";
+import { TASK_CALENDAR_COLS } from "@/lib/task-columns";
+import { loadAllTasksSlim } from "@/lib/task-window";
 import { cn } from "@/lib/utils";
 import { getLocalHoliday, fetchIndianHolidays, toLocalISO, getHolidayDateStr, getDayOff, parseLocalYYYYMMDD, type Holiday } from "@/lib/format";
 import { statusColor, leaveColor, leaveDot, priorityDot } from "@/lib/colors";
@@ -55,7 +57,7 @@ const MONTHS = [
 ];
 
 function CalendarPage() {
-  const { user, isManager } = useAuth();
+  const { user, isManager, rolesReady } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]);
@@ -107,16 +109,29 @@ function CalendarPage() {
     return `${toLocalISO(first)}|${toLocalISO(last)}`;
   }, [year, month]);
   const taskReq = useRef(0);
+  const heldRef = useRef<{ key: string; rows: Task[] }>({ key: "", rows: [] });
+  const fullAt = useRef(0);
   const loadTasks = useCallback(async () => {
+    // Fail closed: nothing is requested until the user and their roles are known, so a member's first
+    // request is already limited to their own tasks.
+    if (!user?.id || !rolesReady) return;
     const [from, to] = taskRangeKey.split("|");
     const today = toLocalISO(new Date());
     const req = ++taskReq.current;
-    const { data: t } = await supabase
-      .from("tasks")
-      .select("*")
-      .or(`and(due_date.gte.${from},due_date.lte.${to}),due_date.eq.${today}`);
-    if (req === taskReq.current) setTasks((t ?? []) as Task[]);
-  }, [taskRangeKey]);
+    // The visible range, and for a member only their own tasks. After the first read of a range a realtime
+    // refresh reads just the rows updated since (see loadAllTasksSlim); another month starts from scratch.
+    const apply = (q: any) => {
+      const ranged = q.or(`and(due_date.gte.${from},due_date.lte.${to}),due_date.eq.${today}`);
+      return isManager ? ranged : ranged.eq("assigned_to", user.id);
+    };
+    const held = heldRef.current;
+    const prev = held.key === taskRangeKey ? held.rows : undefined;
+    if (!prev) fullAt.current = 0;
+    const rows = await loadAllTasksSlim<Task>(TASK_CALENDAR_COLS, prev, fullAt, apply);
+    if (req !== taskReq.current) return;
+    heldRef.current = { key: taskRangeKey, rows };
+    setTasks(rows);
+  }, [taskRangeKey, isManager, user?.id, rolesReady]);
 
   const loadOthers = useCallback(async () => {
     const [{ data: p }, l, h] = await Promise.all([
@@ -276,6 +291,26 @@ function CalendarPage() {
     return tasksByDate[selectedDateStr] || [];
   }, [selectedDateStr, tasksByDate]);
 
+  // The day panel shows full task cards, but the grid only holds light rows: read the whole rows of
+  // just that day's tasks while the panel is open (and again when the day's tasks change).
+  const [dayFull, setDayFull] = useState<Record<string, Task>>({});
+  const dayIds = useMemo(() => selectedDateTasks.map((t) => t.id).sort().join(","), [selectedDateTasks]);
+  useEffect(() => {
+    if (!sheetOpen || !dayIds) return;
+    let cancelled = false;
+    void supabase
+      .from("tasks")
+      .select("*")
+      .in("id", dayIds.split(","))
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setDayFull((prev) => ({ ...prev, ...Object.fromEntries((data as Task[]).map((r) => [r.id, r])) }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sheetOpen, dayIds, tasks]);
+
   const selectedDateLeaves = useMemo(() => {
     return leavesByDate[selectedDateStr] || [];
   }, [selectedDateStr, leavesByDate]);
@@ -383,7 +418,16 @@ function CalendarPage() {
   // Open the same details the rest of the app uses for each event type
   const handleEventClick = (e: CalEvent, d: Date) => {
     if (e.task) {
-      setDetailTask(e.task);
+      // The grid holds light rows; the detail modal needs the whole task, so read it now.
+      const id = e.task.id;
+      void supabase
+        .from("tasks")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) setDetailTask(data as Task);
+        });
     } else if (e.leave) {
       handleDayClick(d);
     } else {
@@ -894,19 +938,23 @@ function CalendarPage() {
               <span>Scheduled Tasks ({selectedDateTasks.length})</span>
             </div>
             {selectedDateTasks.length > 0 ? (
-              selectedDateTasks.map((t) => (
-                <div key={t.id} className="relative">
-                  <TaskCard
-                    task={t}
-                    assignee={profiles.find((p) => p.id === t.assigned_to)}
-                    profiles={profiles}
-                    userId={user?.id || ""}
-                    canManage={isManager}
-                    onChanged={load}
-                    compact
-                  />
-                </div>
-              ))
+              selectedDateTasks.map((t) => {
+                const full = dayFull[t.id];
+                if (!full) return <div key={t.id} className="h-16 rounded-md bg-muted/30 animate-pulse" />;
+                return (
+                  <div key={t.id} className="relative">
+                    <TaskCard
+                      task={full}
+                      assignee={profiles.find((p) => p.id === t.assigned_to)}
+                      profiles={profiles}
+                      userId={user?.id || ""}
+                      canManage={isManager}
+                      onChanged={load}
+                      compact
+                    />
+                  </div>
+                );
+              })
             ) : (
               <p className="text-xs text-muted-foreground italic text-center py-6">
                 No tasks scheduled for this day.

@@ -74,6 +74,8 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<AppRole[]>([]);
+  // The user id the roles above were last resolved for (so a page can wait for them instead of acting as a member first).
+  const [rolesFor, setRolesFor] = useState<string | null>(null);
   // Bumped on auth events so mounted instances re-read roles once (via the shared cache).
   const [authTick, setAuthTick] = useState(0);
 
@@ -102,18 +104,20 @@ export function useAuth() {
   // Keyed by id, not by the user object (its identity changes on every auth event).
   const userId = user?.id ?? null;
   useEffect(() => {
-    if (!userId) { setRoles([]); return; }
+    if (!userId) { setRoles([]); setRolesFor(null); return; }
     let cancelled = false;
     getRolesShared(userId)
-      .then((rs) => { if (!cancelled) setRoles((prev) => (sameRoles(prev, rs) ? prev : (rs as AppRole[]))); })
-      .catch(() => { if (!cancelled) setRoles([]); });
+      .then((rs) => { if (!cancelled) { setRoles((prev) => (sameRoles(prev, rs) ? prev : (rs as AppRole[]))); setRolesFor(userId); } })
+      .catch(() => { if (!cancelled) { setRoles([]); setRolesFor(userId); } });
     return () => { cancelled = true; };
   }, [userId, authTick]);
 
   const isManager = roles.includes("manager") || roles.includes("admin");
   const isAdmin = roles.includes("admin");
 
-  return { session, user, loading, roles, isManager, isAdmin };
+  const rolesReady = !!userId && rolesFor === userId;
+
+  return { session, user, loading, roles, rolesReady, isManager, isAdmin };
 }
 
 export async function signOut() {
