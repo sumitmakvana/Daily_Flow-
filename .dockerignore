@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-local-safe
+.git
+.env
+.env.*
+infra
+mobile
+desktop
+browser-extension
+*.dump
