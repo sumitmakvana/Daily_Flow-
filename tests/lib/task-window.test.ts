@@ -78,7 +78,7 @@ describe("queries", () => {
   it("fetchRecentTasks embeds worklogs, applies the window and never selects the whole worklog table", async () => {
     await fetchRecentTasks("2026-10-13", "2026-10-27");
     expect(calls).toContainEqual(["from", "tasks"]);
-    expect(calls).toContainEqual(["select", "*, worklogs:task_worklogs(*)"]);
+    expect(calls).toContainEqual(["select", "*, worklogs:task_worklogs(id,task_id,user_id,work_date,system_hours,logged_hours,updated_at)"]);
     expect(calls).toContainEqual(["or", recentFilter("2026-10-13")]);
     expect(calls.some((c) => c[0] === "from" && c[1] === "task_worklogs")).toBe(false);
   });
@@ -118,7 +118,7 @@ describe("My Day: my tasks with only THEIR worklogs", () => {
     };
     const rows = await fetchMyTasksWithWorklogs("u1", "2026-10-28");
     expect(calls).toContainEqual(["from", "tasks"]);
-    expect(calls).toContainEqual(["select", "*, worklogs:task_worklogs(*)"]);
+    expect(calls).toContainEqual(["select", "*, worklogs:task_worklogs(id,task_id,user_id,work_date,system_hours,logged_hours,updated_at)"]);
     expect(calls).toContainEqual(["eq", "assigned_to", "u1"]);
     expect(calls.some((c) => c[0] === "from" && c[1] === "task_worklogs")).toBe(false);
     // Same enrichment the page used to compute from the full worklogs table.
