@@ -96,12 +96,12 @@ export function NotificationsModalContent({
   onClose?: () => void;
   isEmbedded?: boolean;
 }) {
-  const { items, markRead, markAllRead } = useNotifications();
+  const { items, markRead, markAllRead, unreadCount, hasMore, loadMore } = useNotifications();
+  const [loadingMore, setLoadingMore] = useState(false);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const unreadCount = useMemo(() => items.filter((n) => !n.read_at).length, [items]);
 
   const filteredItems = useMemo(() => {
     if (activeTab === "unread") return items.filter((n) => !n.read_at);
@@ -333,6 +333,26 @@ export function NotificationsModalContent({
               </div>
             </div>
           ))}
+          {hasMore && (
+            <div className="flex justify-center pb-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[11px]"
+                disabled={loadingMore}
+                onClick={async () => {
+                  setLoadingMore(true);
+                  try {
+                    await loadMore();
+                  } finally {
+                    setLoadingMore(false);
+                  }
+                }}
+              >
+                {loadingMore ? "Loading…" : "Load older notifications"}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

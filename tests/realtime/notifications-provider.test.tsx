@@ -19,6 +19,7 @@ let serverRows: ReturnType<typeof row>[] = [];
 const updates: Array<{ patch: unknown; col: string; val: unknown }> = [];
 const fetchCount = { n: 0 };
 const selectedColumns: Array<string | undefined> = [];
+const idFetches: string[][] = [];
 let gate: Promise<void> | null = null; // lets a test hold a REST fetch in flight
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -27,6 +28,11 @@ vi.mock("@/integrations/supabase/client", () => ({
       select: (cols?: string) => {
         selectedColumns.push(cols);
         return {
+        // full rows for ids the light refetch found it does not hold yet
+        in: async (_col: string, ids: string[]) => {
+          idFetches.push(ids);
+          return { data: serverRows.filter((r) => ids.includes(r.id)), error: null };
+        },
         eq: () => ({
           order: () => ({
             limit: async () => {
@@ -98,6 +104,7 @@ beforeEach(() => {
   updates.length = 0;
   fetchCount.n = 0;
   selectedColumns.length = 0;
+  idFetches.length = 0;
   toastFn.mockClear();
   desktop.mockClear();
   startRealtime.mockClear();
@@ -219,6 +226,27 @@ describe("NotificationsProvider", () => {
     await act(async () => safetyCb!());
     await waitFor(() => expect(result.current.items.length).toBe(3));
     expect(toastFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("a refetch of a held list reads a light index and downloads full rows only for new ids", async () => {
+    const { result } = await ready();
+    serverRows = [row("brand-new"), ...serverRows];
+    await act(async () => safetyCb!());
+    await waitFor(() => expect(result.current.items.length).toBe(3));
+    expect(selectedColumns).toEqual([
+      "id,user_id,type,title,body,task_id,read_at,created_at", // the first, full load
+      "id,read_at", // the light index
+      "id,user_id,type,title,body,task_id,read_at,created_at", // full rows, for the new id only
+    ]);
+    expect(idFetches).toEqual([["brand-new"]]);
+  });
+
+  it("a refetch picks up read state changed elsewhere without downloading any full row", async () => {
+    const { result } = await ready();
+    serverRows = serverRows.map((r) => (r.id === "old1" ? { ...r, read_at: "2026-02-02T00:00:00Z" } : r));
+    await act(async () => safetyCb!());
+    await waitFor(() => expect(result.current.items.find((n) => n.id === "old1")?.read_at).toBe("2026-02-02T00:00:00Z"));
+    expect(idFetches).toEqual([]);
   });
 
   it("starts no polling interval of its own", async () => {

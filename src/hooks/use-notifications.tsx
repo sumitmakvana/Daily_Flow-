@@ -35,7 +35,8 @@ import {
 } from "@/integrations/realtime/socket";
 import type { AppNotification } from "@/lib/types";
 
-const LIST_LIMIT = 100;
+// One page of the list; older pages load on demand (loadMore) instead of a 100-row fetch up front.
+const LIST_LIMIT = 50;
 // Only what AppNotification and the UI use (skips dedupe_key).
 const NOTIFICATION_COLUMNS = "id,user_id,type,title,body,task_id,read_at,created_at";
 // A tab hidden for less than this does not refetch when it becomes visible again
@@ -48,6 +49,9 @@ type NotificationsValue = {
   items: AppNotification[];
   unreadCount: number;
   refresh: () => Promise<void>;
+  /** There are older notifications than the ones loaded. */
+  hasMore: boolean;
+  loadMore: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
 };
@@ -65,6 +69,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const userId = user?.id;
   const navigate = useNavigate();
   const [items, setItems] = useState<AppNotification[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  // Unread notifications older than the loaded page, so the badge stays right without loading every row.
+  const [olderUnread, setOlderUnread] = useState(0);
 
   const knownIds = useRef<Set<string>>(new Set());
   // Rows delivered by socket events. A REST fetch that was already in flight when
@@ -72,6 +79,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   // so a live notification is never erased by a slightly older refetch.
   const pushedRows = useRef<Map<string, AppNotification>>(new Map());
   const baselineReady = useRef(false);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
 
@@ -98,18 +107,62 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  /** Head-only count of unread rows older than `before` (no rows downloaded). */
+  const countOlderUnread = useCallback(
+    async (before: string) => {
+      if (!userId) return;
+      const { count, error } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .is("read_at", null)
+        .lt("created_at", before);
+      if (!error) setOlderUnread(count ?? 0);
+    },
+    [userId],
+  );
+
   /** Fetch the list. `alertNew` raises alerts for unseen unread rows (catch-up). */
   const load = useCallback(
     async (alertNew: boolean) => {
       if (!userId) return;
-      const { data, error } = await supabase
-        .from("notifications")
-        .select(NOTIFICATION_COLUMNS)
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(LIST_LIMIT);
-      if (error || !data) return;
-      const rows = data as AppNotification[];
+      const held = itemsRef.current;
+      let rows: AppNotification[];
+      if (baselineReady.current && held.length > 0) {
+        // Refetch of a list we already hold: read a light index (id + read state, ~75 bytes/row) of the
+        // same newest-LIST_LIMIT page and download full rows (title/body) only for ids we do not have.
+        const { data: idx, error: idxErr } = await supabase
+          .from("notifications")
+          .select("id,read_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(LIST_LIMIT);
+        if (idxErr || !idx) return;
+        const heldById = new Map(held.map((n) => [n.id, n]));
+        const missing = (idx as Array<{ id: string }>).filter((r) => !heldById.has(r.id)).map((r) => r.id);
+        const fetched = new Map<string, AppNotification>();
+        if (missing.length > 0) {
+          const { data: full, error: fullErr } = await supabase
+            .from("notifications")
+            .select(NOTIFICATION_COLUMNS)
+            .in("id", missing);
+          if (fullErr || !full) return;
+          for (const r of full as AppNotification[]) fetched.set(r.id, r);
+        }
+        rows = (idx as Array<{ id: string; read_at: string | null }>).flatMap((r) => {
+          const row = fetched.get(r.id) ?? heldById.get(r.id);
+          return row ? [{ ...row, read_at: r.read_at }] : [];
+        });
+      } else {
+        const { data, error } = await supabase
+          .from("notifications")
+          .select(NOTIFICATION_COLUMNS)
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(LIST_LIMIT);
+        if (error || !data) return;
+        rows = data as AppNotification[];
+      }
 
       const fresh = rows.filter((n) => !knownIds.current.has(n.id));
       rows.forEach((n) => knownIds.current.add(n.id));
@@ -124,6 +177,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           .slice(0, LIST_LIMIT),
       );
 
+      const more = rows.length >= LIST_LIMIT;
+      setHasMore(more);
+      if (more && rows.length) void countOlderUnread(rows[rows.length - 1].created_at);
+      else setOlderUnread(0);
+
       if (alertNew && baselineReady.current) {
         fresh
           .filter((n) => !n.read_at)
@@ -133,8 +191,32 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
       baselineReady.current = true;
     },
-    [userId, announce],
+    [userId, announce, countOlderUnread],
   );
+
+  /** The next page of older notifications (cursor on created_at; rows already held are skipped). */
+  const loadMore = useCallback(async () => {
+    const held = itemsRef.current;
+    if (!userId || held.length === 0) return;
+    const cursor = held[held.length - 1].created_at;
+    const { data, error } = await supabase
+      .from("notifications")
+      .select(NOTIFICATION_COLUMNS)
+      .eq("user_id", userId)
+      .lt("created_at", cursor)
+      .order("created_at", { ascending: false })
+      .limit(LIST_LIMIT);
+    if (error || !data) return;
+    const page = data as AppNotification[];
+    page.forEach((n) => knownIds.current.add(n.id));
+    setItems((prev) => {
+      const have = new Set(prev.map((x) => x.id));
+      return [...prev, ...page.filter((n) => !have.has(n.id))];
+    });
+    setHasMore(page.length >= LIST_LIMIT);
+    if (page.length >= LIST_LIMIT) void countOlderUnread(page[page.length - 1].created_at);
+    else setOlderUnread(0);
+  }, [userId, countOlderUnread]);
 
   // Connection lifecycle + initial load, per signed-in user.
   useEffect(() => {
@@ -142,6 +224,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     pushedRows.current = new Map();
     baselineReady.current = false;
     setItems([]);
+    setHasMore(false);
+    setOlderUnread(0);
     if (!userId) return;
 
     startRealtime();
@@ -152,7 +236,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       if (knownIds.current.has(row.id)) return; // duplicate event or already fetched
       knownIds.current.add(row.id);
       pushedRows.current.set(row.id, row);
-      setItems((prev) => [row, ...prev.filter((p) => p.id !== row.id)].slice(0, LIST_LIMIT));
+      setItems((prev) => [row, ...prev.filter((p) => p.id !== row.id)]);
       announce(row);
     });
 
@@ -211,6 +295,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     const readAt = new Date().toISOString();
     pushedRows.current.forEach((p, id) => pushedRows.current.set(id, { ...p, read_at: p.read_at ?? readAt }));
     setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: readAt })));
+    setOlderUnread(0);
     const { error } = await supabase
       .from("notifications")
       .update({ read_at: readAt } as never)
@@ -222,12 +307,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<NotificationsValue>(
     () => ({
       items,
-      unreadCount: items.filter((n) => !n.read_at).length,
+      unreadCount: items.filter((n) => !n.read_at).length + olderUnread,
       refresh,
+      hasMore,
+      loadMore,
       markRead,
       markAllRead,
     }),
-    [items, refresh, markRead, markAllRead],
+    [items, olderUnread, refresh, hasMore, loadMore, markRead, markAllRead],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
