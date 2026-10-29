@@ -60,10 +60,12 @@ interface MyTodayWorkSummaryCardProps {
    * When given, the card does not fetch its own copy.
    */
   allTasks?: Task[];
+  /** Every task the user ever completed, when `allTasks` holds only the recent ones. */
+  completedTotal?: number;
   userName?: string;
 }
 
-export function MyTodayWorkSummaryCard({ tasks = [], allTasks, userName }: MyTodayWorkSummaryCardProps) {
+export function MyTodayWorkSummaryCard({ tasks = [], allTasks, completedTotal, userName }: MyTodayWorkSummaryCardProps) {
   const { user } = useAuth();
   const todayStr = getTodayDateStr();
   const [dailyNote, setDailyNote] = useState("");
@@ -133,7 +135,7 @@ export function MyTodayWorkSummaryCard({ tasks = [], allTasks, userName }: MyTod
     return days;
   }, [effectiveTasks]);
 
-  const totalAllTimeCompleted = effectiveTasks.filter((t) => t.status === "Completed").length;
+  const totalAllTimeCompleted = completedTotal ?? effectiveTasks.filter((t) => t.status === "Completed").length;
 
   const handleSubmitNote = () => {
     if (!dailyNote.trim()) {

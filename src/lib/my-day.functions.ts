@@ -92,6 +92,20 @@ export const getMyDay = createServerFn({ method: "GET" })
     const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return isoDate(d); })();
     const weekEnd = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return isoDate(d); })();
 
+    // Reads that do not depend on my task list start immediately, alongside the reviewer lookup, so the
+    // whole function is two round-trips deep instead of three.
+    const settingsP = supabase.from("work_settings").select("daily_capacity_hours").eq("id", 1).maybeSingle();
+    // Only the two columns the scoring uses (kind/summary were downloaded and never read).
+    const riskP = supabase
+      .from("risk_events")
+      .select("entity_id,severity")
+      .eq("entity_type", "task")
+      .is("resolved_at", null);
+    const apprReqP = supabase
+      .from("approval_requests")
+      .select("id,work_item_id,current_step,chain_id,requested_at,status")
+      .eq("status", "pending");
+
     // Tasks where I am ANY of the reviewers (task_reviewers), not just the primary one
     const reviewerLinks = await supabase
       .from("task_reviewers" as never)
@@ -101,35 +115,22 @@ export const getMyDay = createServerFn({ method: "GET" })
       ((reviewerLinks.data ?? []) as unknown as Array<{ task_id: string }>).map((r) => r.task_id),
     );
 
-    // Parallel reads
-    const [tasksRes, settingsRes, riskRes, apprReqRes, apprStepsRes] = await Promise.all([
-      // Open tasks assigned to me OR where I am the reviewer
-      supabase
-        .from("tasks")
-        .select("id,task_code,task_name,project_name,status,priority,due_date,planned_hours,carry_forward_count,assigned_to,reviewer,last_carry_forward_at,completed_at")
-        .or(
-          [
-            `assigned_to.eq.${userId}`,
-            `reviewer.eq.${userId}`,
-            ...(myReviewTaskIds.size > 0 ? [`id.in.(${[...myReviewTaskIds].join(",")})`] : []),
-          ].join(","),
-        )
-        .order("due_date", { ascending: true, nullsFirst: false })
-        .limit(400),
-      supabase.from("work_settings").select("daily_capacity_hours").eq("id", 1).maybeSingle(),
-      supabase
-        .from("risk_events")
-        .select("entity_id,severity,kind,summary")
-        .eq("entity_type", "task")
-        .is("resolved_at", null),
-      supabase
-        .from("approval_requests")
-        .select("id,work_item_id,current_step,chain_id,requested_at,status")
-        .eq("status", "pending"),
-      supabase
-        .from("approval_steps")
-        .select("chain_id,step_order,name,approver_mode,approver_user_id,approver_role"),
-    ]);
+    // My open tasks (assigned to me or where I review), plus the ones I completed today. Completed tasks
+    // from earlier days are never used here, and used to fill the 400-row limit ahead of open work.
+    const tasksRes = await supabase
+      .from("tasks")
+      .select("id,task_code,task_name,project_name,status,priority,due_date,planned_hours,carry_forward_count,assigned_to,reviewer,last_carry_forward_at,completed_at")
+      .or(
+        [
+          `assigned_to.eq.${userId}`,
+          `reviewer.eq.${userId}`,
+          ...(myReviewTaskIds.size > 0 ? [`id.in.(${[...myReviewTaskIds].join(",")})`] : []),
+        ].join(","),
+      )
+      .or(`status.neq.Completed,completed_at.gte.${today}`)
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(400);
+    const [settingsRes, riskRes, apprReqRes] = await Promise.all([settingsP, riskP, apprReqP]);
 
     const allTasks = (tasksRes.data ?? []) as Array<{
       id: string; task_code: string; task_name: string; project_name: string | null;
@@ -151,13 +152,23 @@ export const getMyDay = createServerFn({ method: "GET" })
 
     // Determine which pending approvals require *me*
     const allReqs = (apprReqRes.data ?? []) as Array<{ id: string; work_item_id: string; current_step: number; chain_id: string; requested_at: string }>;
-    const allSteps = (apprStepsRes.data ?? []) as Array<{ chain_id: string; step_order: number; name: string; approver_mode: string; approver_user_id: string | null; approver_role: string | null }>;
+    // Steps and my roles only matter when some request is pending, and only for those requests' chains.
+    let allSteps: Array<{ chain_id: string; step_order: number; name: string; approver_mode: string; approver_user_id: string | null; approver_role: string | null }> = [];
+    let myRoles = new Set<string>();
+    if (allReqs.length > 0) {
+      const chainIds = [...new Set(allReqs.map((r) => r.chain_id))];
+      const [stepsRes, rolesRes] = await Promise.all([
+        supabase
+          .from("approval_steps")
+          .select("chain_id,step_order,name,approver_mode,approver_user_id,approver_role")
+          .in("chain_id", chainIds),
+        supabase.from("user_roles").select("role").eq("user_id", userId),
+      ]);
+      allSteps = (stepsRes.data ?? []) as typeof allSteps;
+      myRoles = new Set((rolesRes.data ?? []).map((r: { role: string }) => r.role));
+    }
     const stepByKey = new Map<string, typeof allSteps[number]>();
     for (const s of allSteps) stepByKey.set(`${s.chain_id}:${s.step_order}`, s);
-
-    // Caller's roles (for role-mode steps)
-    const { data: rolesRows } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    const myRoles = new Set((rolesRows ?? []).map((r: { role: string }) => r.role));
 
     const approvalsForMe: MyDayPayload["approvals_pending"] = [];
     const tasksWithPendingApproval = new Set<string>();

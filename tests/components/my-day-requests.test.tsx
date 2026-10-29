@@ -74,9 +74,39 @@ describe("/my-day page source guards (static)", () => {
     expect(src).toMatch(/<MyTodayWorkSummaryCard[\s\S]*?allTasks=\{tasks\}/);
   });
 
-  it("the two realtime callbacks join an in-flight My Day refetch instead of cancelling and restarting it", () => {
+  it("realtime events go through ONE debounced refetch that joins an in-flight fetch", () => {
     // (Refetches after explicit user actions keep the default, so they are not counted here.)
     const joined = src.match(/q\.refetch\(\{ cancelRefetch: false \}\)/g) ?? [];
-    expect(joined).toHaveLength(2);
+    expect(joined).toHaveLength(1);
+    // Both the task callback and the risk/approval callback schedule it, never refetch directly.
+    expect(src.match(/refetchMyDay\(\)/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("a tab return inside the stale window does not re-run the My Day server function", () => {
+    expect(src).toMatch(/staleTime:\s*30_000/);
+  });
+
+  it("the people list is not re-downloaded on every task event", () => {
+    expect(src).toMatch(/profilesLoaded\.current/);
+  });
+});
+
+describe("getMyDay server function and task history (static)", () => {
+  const read = (p: string) => fs.readFileSync(path.resolve(__dirname, "../../", p), "utf8");
+
+  it("getMyDay leaves out completed tasks of earlier days and the unused risk columns", () => {
+    const src = read("src/lib/my-day.functions.ts");
+    expect(src).toMatch(/status\.neq\.Completed,completed_at\.gte\./);
+    expect(src).toMatch(/select\("entity_id,severity"\)/);
+  });
+
+  it("getMyDay only reads approval steps/roles when a request is pending", () => {
+    const src = read("src/lib/my-day.functions.ts");
+    expect(src).toMatch(/if \(allReqs\.length > 0\)/);
+  });
+
+  it("the task history sheet bounds every source instead of reading all rows", () => {
+    const src = read("src/components/TaskHistorySheet.tsx");
+    expect((src.match(/\.limit\(limit\)/g) ?? []).length).toBe(4);
   });
 });

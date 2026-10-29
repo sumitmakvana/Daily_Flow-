@@ -53,7 +53,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { Profile, Task } from "@/lib/types";
 import { isToday, isOverdue, toLocalISO } from "@/lib/format";
-import { fetchMyTasksWithWorklogs } from "@/lib/task-window";
+import { countMyCompleted, fetchMyTasksWithWorklogs, windowCutoff } from "@/lib/task-window";
 import { loadMyProfile } from "@/lib/my-profile";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
@@ -136,7 +136,10 @@ function MyDayPage() {
 
   // Raw tasks & profiles for TaskCard list views
   const [tasks, setTasks] = useState<Task[]>([]);
+  // Every task this user ever completed; the list below holds only the recent ones (see loadTasks).
+  const [completedTotal, setCompletedTotal] = useState<number | undefined>(undefined);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const profilesLoaded = useRef(false);
 
   // Modals state
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -225,13 +228,21 @@ function MyDayPage() {
   const loadTasks = useCallback(async () => {
     if (!user) return;
     try {
-      // My tasks with only THEIR worklogs embedded (was: all my tasks + the whole worklogs table).
-      const [mine, { data: p }] = await Promise.all([
-        fetchMyTasksWithWorklogs(user.id, toLocalISO(new Date())),
-        supabase.from("profiles").select("id,display_name,avatar_url"),
+      // My open tasks plus the ones completed recently, with only THEIR worklogs embedded (was: all my
+      // tasks, including years of completed ones). The all-time completed total is a head-only count.
+      // The people list is loaded once; a task event does not need it again.
+      const needProfiles = !profilesLoaded.current;
+      const [mine, p, done] = await Promise.all([
+        fetchMyTasksWithWorklogs(user.id, toLocalISO(new Date()), windowCutoff()),
+        needProfiles ? supabase.from("profiles").select("id,display_name,avatar_url") : Promise.resolve(null),
+        countMyCompleted(user.id).catch(() => undefined),
       ]);
       setTasks(mine as Task[]);
-      setProfiles((p ?? []) as Profile[]);
+      setCompletedTotal(done);
+      if (p && !p.error) {
+        profilesLoaded.current = true;
+        setProfiles((p.data ?? []) as Profile[]);
+      }
     } catch (err) {
       // Keep what is on screen rather than blanking it; the next event or safety refresh retries.
       console.warn("Failed to load My Day tasks:", err);
@@ -246,25 +257,42 @@ function MyDayPage() {
   const q = useQuery({
     queryKey: ["my-day"],
     queryFn: () => fetchMyDay(),
-    staleTime: 1000,
+    // Fresh for 30s: returning to the tab within that window does not re-run the 6-query server function
+    // (realtime events refetch explicitly, so the data is not stale in the meantime).
+    staleTime: 30_000,
     // No refetchInterval: updates arrive over Socket.IO (see the hooks below);
     // focus/visibility and reconnect recovery cover missed events.
     refetchOnWindowFocus: true,
   });
 
   // Realtime subscription handles both TaskCard raw tasks and priority query
+  // Task, risk and approval events often arrive together (one action touches several tables); the server
+  // function is refetched once, 800ms after the last of them, instead of once per event.
+  const myDayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refetchMyDay = useCallback(() => {
+    if (myDayTimer.current) clearTimeout(myDayTimer.current);
+    myDayTimer.current = setTimeout(() => {
+      myDayTimer.current = null;
+      void q.refetch({ cancelRefetch: false });
+    }, 800);
+  }, [q]);
+  useEffect(
+    () => () => {
+      if (myDayTimer.current) clearTimeout(myDayTimer.current);
+    },
+    [],
+  );
+
   const handleRealtimeChange = useCallback(() => {
     loadTasks();
-    // cancelRefetch:false joins an in-flight fetch instead of cancelling and restarting it, so two
-    // callbacks in the same moment (tasks + risks/approvals) cost one request.
-    void q.refetch({ cancelRefetch: false });
-  }, [loadTasks, q]);
+    refetchMyDay();
+  }, [loadTasks, refetchMyDay]);
 
   // The My Day query also depends on risks and pending approvals, not only my tasks.
   useRealtimeRefresh(
     ["risk_events", "approval_requests"],
     () => {
-      void q.refetch({ cancelRefetch: false });
+      refetchMyDay();
     },
     `my-day-extras-${user?.id ?? "x"}`,
   );
@@ -655,6 +683,7 @@ function MyDayPage() {
           <MyTodayWorkSummaryCard
             tasks={d?.priorities || []}
             allTasks={tasks}
+            completedTotal={completedTotal}
             userName={profile?.display_name || undefined}
           />
         </TabsContent>
