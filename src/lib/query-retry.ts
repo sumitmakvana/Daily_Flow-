@@ -4,7 +4,7 @@
 // and at most twice.
 
 const PERMANENT_MESSAGE =
-  /unauthor|forbidden|permission denied|not allowed|not authorized|jwt|does not exist|violates|invalid input|syntax error/i;
+  /unauthor|forbidden|permission denied|not allowed|not authorized|jwt|does not exist|violates|invalid input|syntax error|(manager|admin|reviewer)\b[^.]{0,30}\brequired/i;
 
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
   const e = error as { status?: unknown; statusCode?: unknown; response?: { status?: unknown }; message?: unknown } | null;

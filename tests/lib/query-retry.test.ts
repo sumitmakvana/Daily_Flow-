@@ -12,6 +12,7 @@ describe("shouldRetryQuery", () => {
     [new Error('permission denied for table tasks')],
     [new Error('column "work_item_id" does not exist')],
     [new Error("JWT expired")],
+    [new Error("manager or admin required")],
   ])("never retries a permanent error (%j)", (err) => {
     expect(shouldRetryQuery(0, err)).toBe(false);
   });
