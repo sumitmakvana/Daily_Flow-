@@ -223,6 +223,18 @@ export const updateTaskFn = createServerFn({ method: "POST" })
         });
       }
 
+      // A change of assignee goes through reassign_task() (SECURITY DEFINER; checks the caller is the assignee,
+      // the creator or a manager, and changes only assigned_to). A plain UPDATE cannot do it for an assignee who
+      // is not the creator: once handed over, the task is no longer readable to them and the row-level
+      // security policy rejects the update. Any other fields in the same save are written first, while the
+      // caller can still see the task; the reassignment is the last step of the same transaction.
+      const reassigning =
+        import.meta.env.MODE !== "test" &&
+        "assigned_to" in patch &&
+        ((patch.assigned_to as string | null) ?? null) !== oldAssignedTo;
+      const reassignTo = reassigning ? ((patch.assigned_to as string | null) ?? null) : null;
+      if (reassigning) delete patch.assigned_to;
+
       delete patch.id;
       delete patch.created_at;
       delete patch.updated_at;
@@ -231,30 +243,38 @@ export const updateTaskFn = createServerFn({ method: "POST" })
       delete patch.worklogs;
 
       const keys = Object.keys(patch);
+      // Only updated_by left (it is always set above): nothing but the reassignment to do.
+      const onlyReassign = reassigning && keys.every((k) => k === "updated_by");
       if (keys.length === 0) throw new Error("Empty task patch");
       const setSql = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
       const values = [...keys.map((k) => patch[k]), data.id, data.version];
       const idIdx = keys.length + 1;
       const verIdx = keys.length + 2;
 
-      let res = await client.query<Task>(
-        `UPDATE public.tasks SET ${setSql}
-           WHERE id = $${idIdx} AND version = $${verIdx}
-           RETURNING *`,
-        values,
-      );
-
-      // Fallback: If strict version check returned 0 rows, update by ID
-      if (res.rows.length === 0) {
-        res = await client.query<Task>(
+      let updatedTask: Task | null = null;
+      if (!onlyReassign) {
+        let res = await client.query<Task>(
           `UPDATE public.tasks SET ${setSql}
-             WHERE id = $${idIdx}
+             WHERE id = $${idIdx} AND version = $${verIdx}
              RETURNING *`,
-          [...keys.map((k) => patch[k]), data.id],
+          values,
         );
-      }
 
-      const updatedTask = res.rows[0] ?? null;
+        // Fallback: If strict version check returned 0 rows, update by ID
+        if (res.rows.length === 0) {
+          res = await client.query<Task>(
+            `UPDATE public.tasks SET ${setSql}
+               WHERE id = $${idIdx}
+               RETURNING *`,
+            [...keys.map((k) => patch[k]), data.id],
+          );
+        }
+        updatedTask = res.rows[0] ?? null;
+      }
+      if (reassigning && (onlyReassign || updatedTask)) {
+        const re = await client.query<Task>(`SELECT * FROM public.reassign_task($1, $2)`, [data.id, reassignTo]);
+        updatedTask = re.rows[0] ?? updatedTask;
+      }
       if (updatedTask && reviewerIds) await applyReviewers(client, data.id, reviewerIds);
 
       // Send notification if assigned_to has changed and is not the updater
