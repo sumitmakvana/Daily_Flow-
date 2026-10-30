@@ -411,7 +411,12 @@ function TasksPage() {
   const load = async (_silent = false) => {
     await refreshPage();
   };
-  useRealtimeTasks(() => void refreshPage(), "tasks-page-rt");
+  // A member only has the "my tasks" tab, so only changes to their own tasks wake the page (managers see all).
+  useRealtimeTasks(
+    () => void refreshPage(),
+    "tasks-page-rt",
+    canSeeAll || !user?.id ? { kind: "all" } : { kind: "assignee", userId: user.id },
+  );
 
   // Sidebar counters come straight from the server (active tab, not narrowed by the other filters).
   const statusCounts = useMemo(() => {

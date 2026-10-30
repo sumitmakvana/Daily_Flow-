@@ -1,0 +1,128 @@
+# LOCAL stack - standalone mirror of infra/docker-compose.yml.
+# Same services/structure as production; only host paths, ports, restart policy
+# and Caddyfile differ so nothing touches /data/docker_volumes or prod services.
+# Run via infra/local/dc.sh (uses infra/.env.local-test with dummy credentials).
+name: dailyflow-local
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    restart: "no"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_cron
+      - -c
+      - cron.database_name=${POSTGRES_DB}
+    volumes:
+      - pgdata_local:/var/lib/postgresql/data
+      - ./sql:/sql:ro
+      # roles only; auth.*/keycloak/public schemas come from the restored dump
+      - ./local/00-roles.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgrest:
+    image: postgrest/postgrest:v12.2.0
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+    environment:
+      PGRST_DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: '{"keys":[{"kid":"8tesB6fZU3Dts0gx5pOhNIGLXd9_wSqidawrDeM6-uI","kty":"RSA","alg":"RSA-OAEP","use":"enc","n":"pHRMkZFuqlfKpnFaBsb7qcugHVJs_TAek0fO0Brt8zEgbCRXGQRe3adXTfWKBuIFAa3W_TrkL8eiE8uMIldQywFZhVZZx5Que-OaEK_60zpIR3KwPT21MvV56BX8uboh7cLnknJ_AK_1MWxt0QcD_yoMZRfTRnprMsxV77JlmSl_nvK6do9x8XWUwxyW7QF7umZ3xqXbABFXnx8BFSa61T3YcEzs4ugnc5llIYSkqWtEiMNWXdkhEKYy3p2KZ1KfJq78413aa_zqpHoUIz8kILPsfR2h5tAQ9-UAw2_2sVc8BqUqAAfE7sBeKHoUZf0HixJxU7rJ4OPJ0JuOD3yc1w","e":"AQAB","x5c":["MIICnTCCAYUCBgGfO4oUNTANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAdsb3ZhYmxlMB4XDTI2MDcwNzA3NDM1MloXDTM2MDcwNzA3NDUzMlowEjEQMA4GA1UEAwwHbG92YWJsZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKR0TJGRbqpXyqZxWgbG+6nLoB1SbP0wHpNHztAa7fMxIGwkVxkEXt2nV031igbiBQGt1v065C/HohPLjCJXUMsBWYVWWceULnvjmhCv+tM6SEdysD09tTL1eegV/Lm6Ie3C55JyfwCv9TFsbdEHA/8qDGUX00Z6azLMVe+yZZkpf57yunaPcfF1lMMclu0Be7pmd8al2wARV58fARUmutU92HBM7OLoJ3OZZSGEpKlrRIjDVl3ZIRCmMt6dimdSnyau/ONd2mv86qR6FCM/JCCz7H0doebQEPflAMNv9rFXPAalKgAHxO7AXih6FGX9B4sScVO6yeDjydCbjg98nNcCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAGCTFSMJZ/KJ/t0BvreUEf3dH7FcZHfOgtRgUh0EBIBH9TWUB0Pq+gh7Ya8WhPT+fdXeldqYY16xogjfY2IE87/bpdy7+cf4EwNuBlNivzkiPeKPCZvd4ZFMKVB9PvMyVVYPweFk2ZUGxyOA0FnR0nHYWe+zdYHv6btak1PxS9DcAqtMeccfSRyYVQeTkR0CaSd3VulG1Kh3CFF+7LFArdAYWBicVFcCJoQYsG4rIoZ+KuOyteN1lICtjFZeFUGjasVEmq304XOw1MCNMg81hkWaWQCptCpOcY3jpTQh5WCW2cGZk6s9h23fiOwy0aw/ITDCRrGJtn4ByqnLLwfBfXw=="],"x5t":"nJ40Fw7CEGJpx5MAs0URpw8B2uk","x5t#S256":"Wvhls2X1Q1FGXTN8vASg4eVPzMM23wlXp4NDmK-3JNA"},{"kid":"lk9I-AqO15KxgHC9X-y5-bQC4qXB8tLylyV5GjMaAAE","kty":"RSA","alg":"RS256","use":"sig","n":"oO1CNcD9n8gPv9iHSzp8bia_PKXlb7a0y6US3eT4nUUc9w-9CdMds6rXMpE6v5t7URRmFVBCtliU6azU_mOYHlBy2QHHf1y6sD0xVNxf3O-N9ShlABl2tAw0ZGHlcNpbDH7r9zKQE_ghafdaY1255TAvXHkGVlcL0mw_fXxZGNTBvZJTSFgTrmain944EH5Uu4h5_9kk7u-ocavx9Ew_D4rTKa2xUvrT0SaT1Bkkes_eH7R5xkVSEAOLftkuk86AIR4Elg9bs0GGPqVoG42n8MNLI7Xdmb-Jlfq0iO-hztbWVfwWcqM8RqH-BPExlW95q8pvixR9qdEHJg_FBq0NqQ","e":"AQAB","x5c":["MIICnTCCAYUCBgGfO4oTRDANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAdsb3ZhYmxlMB4XDTI2MDcwNzA3NDM1MloXDTM2MDcwNzA3NDUzMlowEjEQMA4GA1UEAwwHbG92YWJsZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKDtQjXA/Z/ID7/Yh0s6fG4mvzyl5W+2tMulEt3k+J1FHPcPvQnTHbOq1zKROr+be1EUZhVQQrZYlOms1P5jmB5QctkBx39curA9MVTcX9zvjfUoZQAZdrQMNGRh5XDaWwx+6/cykBP4IWn3WmNdueUwL1x5BlZXC9JsP318WRjUwb2SU0hYE65mop/eOBB+VLuIef/ZJO7vqHGr8fRMPw+K0ymtsVL609Emk9QZJHrP3h+0ecZFUhADi37ZLpPOgCEeBJYPW7NBhj6laBuNp/DDSyO13Zm/iZX6tIjvoc7W1lX8FnKjPEah/gTxMZVveavKb4sUfanRByYPxQatDakCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAX/HpJtG2I5tph0JZnBqE/9VmFDpkwVbOV/7s49a+/B430p/NXQSEIAee+UKrDQpYh83FxpB0FE8NSyS7pW9Q53ov8dZOu1+9zrqEAYVUogjDBhmiyQeyQlc623y5AdTI8KgDV6WhyDk67TaON5N+fbVm3w9woxY8WSnGPI+Ne7kdxEqNHYIvqDhfksHjyyC18L15EKgHS6VWfUtqjjCFgUJkMbJOcOcxoW221cv8a1bbzXvulYu5Zy8l3n64zkyyxsuzZYTrVkjB+saywqpcYFhH2+D/INSUqMGboEIvkJ5ZsHu7eAvpULyQULz1J1Zsp7MNq6ap0y4c+ByzO4y4/A=="],"x5t":"ipBJ5L39ws66OK_SAsvMDX6s9BA","x5t#S256":"IXyVudH11clVz8veZy5YOtwlAq3S20bwiFfWMwnpp70"},{"kty":"oct","kid":"service_role_key","k":"c3VwZXItc2VjcmV0LWp3dC10b2tlbi13aXRoLWF0LWxlYXN0LTMyLWNoYXJhY3RlcnMtbG9uZw","alg":"HS256"}]}'
+      PGRST_DB_USE_LEGACY_GUCS: "true"
+    expose:
+      - "3000"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.5
+    restart: "no"
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_DB_SCHEMA: keycloak
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /
+      JAVA_OPTS_APPEND: "-Xms64m -Xmx256m -Dkeycloak.migration.action=import -Dkeycloak.migration.provider=singleFile -Dkeycloak.migration.file=/opt/keycloak/data/import/realm.json -Dkeycloak.migration.strategy=IGNORE_EXISTING"
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 120s
+    depends_on:
+      postgres: { condition: service_healthy }
+
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-http://localhost:7051}
+        - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+    restart: "no"
+    ports:
+      - "127.0.0.1:7050:8080"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # server-side calls go through the caddy alias (see Caddyfile.local)
+      - SUPABASE_URL=http://caddy:7051
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+      - BACKEND_MODE=self
+      - PORT=8080
+      - CRON_SECRET=${CRON_SECRET}
+      - MS_TENANT_ID=${MS_TENANT_ID}
+      - MS_CLIENT_ID=${MS_CLIENT_ID}
+      - MS_CLIENT_SECRET=${MS_CLIENT_SECRET}
+      - MS_SENDER_EMAIL=${MS_SENDER_EMAIL}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - EMAIL_FROM=${EMAIL_FROM}
+      # Firebase Admin (FCM push). Single-line service-account JSON; leave empty to disable push.
+      - FCM_SERVICE_ACCOUNT_JSON=${FCM_SERVICE_ACCOUNT_JSON:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: "no"
+    ports:
+      - "127.0.0.1:7051:7051"
+      - "127.0.0.1:7052:7052"
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+
+volumes:
+  pgdata_local:

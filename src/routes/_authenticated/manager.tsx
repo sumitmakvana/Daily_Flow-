@@ -20,9 +20,9 @@ function ManagerPage() {
   const q = useQuery({
     queryKey: ["manager-command"],
     queryFn: () => fetchCmd(),
-    staleTime: 1000,
-    // No refetchInterval: updates arrive over Socket.IO (below).
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+    // No refetchInterval: updates arrive over Socket.IO (below), so a tab switch need not refetch.
+    refetchOnWindowFocus: false,
   });
 
   useRealtimeRefresh(

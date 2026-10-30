@@ -154,7 +154,8 @@ function CalendarPage() {
   }, [loadTasks]);
 
   // Task events only change tasks, so only tasks are re-read.
-  useRealtimeTasks(loadTasks, "calendar-rt");
+  // A member's calendar only shows their own tasks, so only their own changes wake it (managers see all).
+  useRealtimeTasks(loadTasks, "calendar-rt", isManager || !user?.id ? { kind: "all" } : { kind: "assignee", userId: user.id });
   // Leave / WFH changes (e.g. a manager approves a request) refresh only the leaves.
   useRealtimeRefresh(
     ["leaves"],
