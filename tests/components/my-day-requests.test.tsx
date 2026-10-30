@@ -100,6 +100,12 @@ describe("getMyDay server function and task history (static)", () => {
     expect(src).toMatch(/select\("entity_id,severity"\)/);
   });
 
+  it("getMyDay reads only the risks of the user's own tasks, in chunks of 100 ids", () => {
+    const src = read("src/lib/my-day.functions.ts");
+    expect(src).toMatch(/\.in\("entity_id", ids\)/);
+    expect(src).toMatch(/i \+= 100/);
+  });
+
   it("getMyDay only reads approval steps/roles when a request is pending", () => {
     const src = read("src/lib/my-day.functions.ts");
     expect(src).toMatch(/if \(allReqs\.length > 0\)/);

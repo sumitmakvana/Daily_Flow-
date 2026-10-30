@@ -226,6 +226,42 @@ export async function fetchSidebarCounts(tab: TaskTab, scope: ListScope): Promis
   };
 }
 
+/** A member's whole task list is small; past this many rows the head-count requests are cheaper than the rows. */
+export const MEMBER_COUNTER_MAX_ROWS = 1000;
+
+export type MemberCounterRow = { status: string; priority: string; due_date: string | null; start_date: string | null };
+export type MemberCounters = { sidebar: SidebarCounts; header: HeaderCounts };
+
+/** Pure: the sidebar counters and the KPI strip of one member, counted from their own light rows. */
+export function countMemberTasks(rows: MemberCounterRow[], today: string): MemberCounters {
+  const status = Object.fromEntries(TASK_STATUSES.map((s) => [s, 0])) as Record<string, number>;
+  const priority = Object.fromEntries(TASK_PRIORITIES.map((p) => [p, 0])) as Record<string, number>;
+  let overdue = 0;
+  for (const r of rows) {
+    if (r.status in status) status[r.status] += 1;
+    if (r.priority in priority) priority[r.priority] += 1;
+    const d = r.due_date ?? r.start_date;
+    if (r.status !== "Completed" && d && d < today) overdue += 1;
+  }
+  return { sidebar: { status, priority }, header: { total: rows.length, mine: rows.length, overdue } };
+}
+
+/**
+ * A member only ever sees their own tasks, so the nine sidebar counters and the KPI strip come from ONE
+ * request of four short columns instead of a dozen head-count requests. Returns null when the member has
+ * too many tasks for that to pay off (the caller then uses the head-count requests).
+ */
+export async function fetchMemberCounters(userId: string): Promise<MemberCounters | null> {
+  const { data, error } = await tasksTable()
+    .select("status,priority,due_date,start_date")
+    .eq("assigned_to", userId)
+    .limit(MEMBER_COUNTER_MAX_ROWS + 1);
+  if (error) throw error;
+  const rows = (data ?? []) as MemberCounterRow[];
+  if (rows.length > MEMBER_COUNTER_MAX_ROWS) return null;
+  return countMemberTasks(rows, dateWindow().today);
+}
+
 export type TabCounts = { my: number; team: number; all: number };
 /** How many tasks match the current filters in each tab (a member only has "my"). */
 export async function fetchTabCounts(p: TaskListParams): Promise<TabCounts> {

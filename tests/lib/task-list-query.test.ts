@@ -199,3 +199,37 @@ describe("export", () => {
     expect(ops(calls[1]).at(-1)).toBe("range:500,999");
   });
 });
+
+describe("member counters (one light request instead of a dozen head counts)", () => {
+  it("counts the sidebar and the KPI strip from the member's own rows", async () => {
+    const { countMemberTasks } = await import("@/lib/task-list-query");
+    const rows = [
+      { status: "To Do", priority: "High", due_date: "2026-10-29", start_date: null },
+      { status: "Completed", priority: "Low", due_date: "2026-10-01", start_date: null },
+      { status: "In Progress", priority: "High", due_date: null, start_date: "2026-10-20" },
+      { status: "Blocked", priority: "Medium", due_date: "2026-11-02", start_date: null },
+    ];
+    const r = countMemberTasks(rows, "2026-10-30");
+    expect(r.sidebar.status["To Do"]).toBe(1);
+    expect(r.sidebar.status.Completed).toBe(1);
+    expect(r.sidebar.priority.High).toBe(2);
+    expect(r.header).toEqual({ total: 4, mine: 4, overdue: 2 }); // completed and future ones are not overdue
+  });
+
+  it("asks for four short columns of the member's own tasks, bounded", async () => {
+    calls = [];
+    respond = () => [];
+    const { fetchMemberCounters, MEMBER_COUNTER_MAX_ROWS } = await import("@/lib/task-list-query");
+    await fetchMemberCounters("u1");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].select).toBe("status,priority,due_date,start_date");
+    expect(calls[0].ops).toContainEqual(["eq", ["assigned_to", "u1"]]);
+    expect(calls[0].ops).toContainEqual(["limit", [MEMBER_COUNTER_MAX_ROWS + 1]]);
+  });
+
+  it("returns null (use the head counts) for a member with too many tasks", async () => {
+    const { fetchMemberCounters, MEMBER_COUNTER_MAX_ROWS } = await import("@/lib/task-list-query");
+    respond = () => Array.from({ length: MEMBER_COUNTER_MAX_ROWS + 1 }, () => ({ status: "To Do", priority: "Low", due_date: null, start_date: null }));
+    expect(await fetchMemberCounters("u1")).toBeNull();
+  });
+});

@@ -25,6 +25,7 @@ import {
 import {
   fetchAllTaskRows,
   fetchHeaderCounts,
+  fetchMemberCounters,
   fetchSidebarCounts,
   fetchTabCounts,
   fetchTaskListPage,
@@ -349,27 +350,46 @@ function TasksPage() {
   }, [pageKey, ready, peopleOk]);
 
   // Counters: sidebar (status / priority of the active tab), tab labels (current filters), KPI strip.
+  // A member only has their own tasks: ONE request of four short columns feeds the sidebar and the KPI strip,
+  // and the "My tasks" label is the page's own total. `memberFallback` (too many tasks) uses the head counts below.
+  const [memberFallback, setMemberFallback] = useState(false);
+  const memberMode = !canSeeAll && !memberFallback;
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !memberMode || !scope.userId) return;
+    let stale = false;
+    fetchMemberCounters(scope.userId)
+      .then((r) => {
+        if (stale) return;
+        if (!r) return setMemberFallback(true);
+        setSidebar(r.sidebar);
+        setHeader(r.header);
+      })
+      .catch((e) => console.error("Member counts failed:", e));
+    return () => { stale = true; };
+  }, [memberMode, scope.userId, countsTick, ready]);
+  useEffect(() => {
+    if (!ready || memberMode) return;
     let stale = false;
     fetchSidebarCounts(tab, scope).then((r) => !stale && setSidebar(r)).catch((e) => console.error("Sidebar counts failed:", e));
     return () => { stale = true; };
-  }, [tab, scope, countsTick, ready]);
+  }, [tab, scope, countsTick, ready, memberMode]);
   useEffect(() => {
-    if (!ready || !peopleOk) return;
+    if (!ready || !peopleOk || memberMode) return;
     let stale = false;
     const timer = setTimeout(() => {
       fetchTabCounts(paramsRef.current).then((r) => !stale && setTabCounts(r)).catch((e) => console.error("Tab counts failed:", e));
     }, q.trim() ? 250 : 0);
     return () => { stale = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey, scope, countsTick, peopleOk, ready]);
+  }, [filterKey, scope, countsTick, peopleOk, ready, memberMode]);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || memberMode) return;
     let stale = false;
     fetchHeaderCounts(scope).then((r) => !stale && setHeader(r)).catch((e) => console.error("Header counts failed:", e));
     return () => { stale = true; };
-  }, [scope, countsTick, ready]);
+  }, [scope, countsTick, ready, memberMode]);
+  // A member's only tab is "my tasks": its label is the page's own (filtered) total, no request needed.
+  const shownTabCounts: TabCounts | null = memberMode ? { my: total, team: 0, all: total } : tabCounts;
 
   // A change elsewhere (realtime) or after one of our own actions: ask for the SAME page's ids + updated_at
   // (~70 bytes a row), read full rows only for what changed, and refresh the counters once things settle.
@@ -917,21 +937,21 @@ function TasksPage() {
               value="my_tasks"
               className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
-              My Tasks ({tabCounts?.my ?? 0})
+              My Tasks ({shownTabCounts?.my ?? 0})
             </TabsTrigger>
             <TabsTrigger
               hidden={!canSeeAll}
               value="team_tasks"
               className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
-              Team Tasks ({tabCounts?.team ?? 0})
+              Team Tasks ({shownTabCounts?.team ?? 0})
             </TabsTrigger>
             <TabsTrigger
               hidden={!canSeeAll}
               value="all_tasks"
               className="text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg font-medium transition-all text-[#8a99ad] hover:text-white data-[state=active]:bg-[#252834] data-[state=active]:text-[#5C8EFA] data-[state=active]:border data-[state=active]:border-[#35394b] data-[state=active]:font-bold cursor-pointer whitespace-nowrap"
             >
-              All Tasks ({tabCounts?.all ?? 0})
+              All Tasks ({shownTabCounts?.all ?? 0})
             </TabsTrigger>
           </TabsList>
 

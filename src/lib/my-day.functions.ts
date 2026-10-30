@@ -95,12 +95,6 @@ export const getMyDay = createServerFn({ method: "GET" })
     // Reads that do not depend on my task list start immediately, alongside the reviewer lookup, so the
     // whole function is two round-trips deep instead of three.
     const settingsP = supabase.from("work_settings").select("daily_capacity_hours").eq("id", 1).maybeSingle();
-    // Only the two columns the scoring uses (kind/summary were downloaded and never read).
-    const riskP = supabase
-      .from("risk_events")
-      .select("entity_id,severity")
-      .eq("entity_type", "task")
-      .is("resolved_at", null);
     const apprReqP = supabase
       .from("approval_requests")
       .select("id,work_item_id,current_step,chain_id,requested_at,status")
@@ -130,7 +124,23 @@ export const getMyDay = createServerFn({ method: "GET" })
       .or(`status.neq.Completed,completed_at.gte.${today}`)
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(400);
-    const [settingsRes, riskRes, apprReqRes] = await Promise.all([settingsP, riskP, apprReqP]);
+    // Risks only matter for the tasks above, so only those are read (was: every open risk in the company),
+    // in chunks of 100 ids so the request URL stays short. Only the two columns the scoring uses.
+    const taskIds = ((tasksRes.data ?? []) as Array<{ id: string }>).map((t) => t.id);
+    const riskChunks: string[][] = [];
+    for (let i = 0; i < taskIds.length; i += 100) riskChunks.push(taskIds.slice(i, i + 100));
+    const riskP = Promise.all(
+      riskChunks.map((ids) =>
+        supabase
+          .from("risk_events")
+          .select("entity_id,severity")
+          .eq("entity_type", "task")
+          .is("resolved_at", null)
+          .in("entity_id", ids),
+      ),
+    );
+    const [settingsRes, riskResChunks, apprReqRes] = await Promise.all([settingsP, riskP, apprReqP]);
+    const riskRes = { data: riskResChunks.flatMap((r) => r.data ?? []) };
 
     const allTasks = (tasksRes.data ?? []) as Array<{
       id: string; task_code: string; task_name: string; project_name: string | null;
