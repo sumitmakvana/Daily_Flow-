@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { TaskCard } from "@/components/TaskCard";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
+import { loadPeopleSafe } from "@/lib/people";
 import type { Profile, Task } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/blockers")({
@@ -16,12 +17,12 @@ function BlockersPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
   const load = useCallback(async () => {
-    const [{ data: t }, { data: p }] = await Promise.all([
+    const [{ data: t }, p] = await Promise.all([
       supabase.from("tasks").select("*").eq("status", "Blocked").order("blocked_at", { ascending: true }),
-      supabase.from("profiles").select("id,display_name,avatar_url"),
+      loadPeopleSafe(),
     ]);
     setTasks((t ?? []) as Task[]);
-    setProfiles((p ?? []) as Profile[]);
+    setProfiles(p);
   }, []);
 
   useEffect(() => { load(); }, [load]);

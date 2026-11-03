@@ -1,3 +1,4 @@
+import { loadPeopleSafe } from "@/lib/people";
 import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,7 +40,7 @@ function IntelligencePage() {
       );
     intelligenceService.load(14).then(setData);
     adoptionService.last14().then(setAdoption);
-    supabase.from("profiles").select("id,display_name,avatar_url").then(({ data: p }) => setProfiles((p ?? []) as Profile[]));
+    loadPeopleSafe().then(setProfiles);
   }, []);
 
   const dau = useMemo(() => dauSeries(adoption), [adoption]);

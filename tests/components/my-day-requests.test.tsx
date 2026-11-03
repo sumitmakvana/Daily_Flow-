@@ -67,7 +67,8 @@ describe("/my-day page source guards (static)", () => {
   });
 
   it("loads my tasks through the embedded-worklogs helper", () => {
-    expect(src).toMatch(/fetchMyTasksWithWorklogs\(/);
+    // (refreshMyTasksWithWorklogs does the full embedded-worklogs read first, then reads changed rows only)
+    expect(src).toMatch(/refreshMyTasksWithWorklogs\(/);
   });
 
   it("passes the loaded tasks to the Summary card instead of letting it refetch", () => {
@@ -83,11 +84,29 @@ describe("/my-day page source guards (static)", () => {
   });
 
   it("a tab return inside the stale window does not re-run the My Day server function", () => {
-    expect(src).toMatch(/staleTime:\s*30_000/);
+    // reused for MY_DAY_STALE_MS; relevant changes mark it stale sooner (see my-day-cache.ts)
+    expect(src).toMatch(/staleTime:\s*MY_DAY_STALE_MS/);
+  });
+
+  it("my tasks are cached (not loaded on every mount), and a local action plus its realtime echo is one load", () => {
+    expect(src).toMatch(/queryKey:\s*tasksKey/);
+    expect(src).not.toMatch(/useEffect\(\(\) => \{\s*loadTasks\(\);/); // no unconditional load on mount
+    expect(src).not.toMatch(/refetchOnMount/); // no forced refetch: stale data refetches, fresh data is reused
+    expect(src).toMatch(/changeTimer\.current = setTimeout/);
+  });
+
+  it("cached results are per user, so a reused result is never another account's", () => {
+    expect(src).toMatch(/\[\.\.\.MY_DAY_KEY, user\?\.id \?\? null\]/);
+    expect(src).toMatch(/\[\.\.\.MY_DAY_TASKS_KEY, user\?\.id \?\? null, todayKey\]/);
+  });
+
+  it("the own-profile read is keyed on the user id, not the user object", () => {
+    expect(src).toMatch(/Keyed on the id: a token refresh/);
+    expect(src).toMatch(/\}, \[user\?\.id\]\);/);
   });
 
   it("the people list is not re-downloaded on every task event", () => {
-    expect(src).toMatch(/profilesLoaded\.current/);
+    expect(src).toMatch(/queryKey:\s*\["my-day-people"\][\s\S]*?staleTime:\s*PEOPLE_TTL_MS/);
   });
 });
 

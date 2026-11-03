@@ -36,7 +36,7 @@ export function PhotoField({
     let cancelled = false;
     (async () => {
       if (!value?.attachment_id) { setPreviewUrl(null); return; }
-      const { data } = await supabase.from("attachments").select("*").eq("id", value.attachment_id).maybeSingle();
+      const { data } = await supabase.from("attachments").select("storage_path").eq("id", value.attachment_id).maybeSingle();
       if (!cancelled && data) {
         try {
           const url = await attachmentsService.download(data as never);

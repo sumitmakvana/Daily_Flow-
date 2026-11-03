@@ -84,8 +84,11 @@ describe("Calendar, Time Tracking and Team Capacity", () => {
 describe("My Day and Planning", () => {
   it("My Day reads the recent window of the user's tasks and counts the all-time completed total", () => {
     const src = read("src/routes/_authenticated/my-day.tsx");
-    expect(src).toContain("fetchMyTasksWithWorklogs(user.id, toLocalISO(new Date()), windowCutoff())");
-    expect(src).toContain("countMyCompleted(user.id)");
+    // the window (open + recently completed) is read in full once, then refreshed by changed rows only
+    expect(src).toContain("refreshMyTasksWithWorklogs(");
+    expect(src).toContain("windowCutoff()");
+    expect(src).toContain("countMyCompleted(user!.id)");
+    expect(src).toContain("completedCountMayHaveChanged(");
     expect(src).toContain("completedTotal={completedTotal}");
     expect(read("src/components/MyTodayWorkSummaryCard.tsx")).toContain("completedTotal ?? effectiveTasks.filter");
   });

@@ -1,3 +1,4 @@
+import { loadPeopleSafe } from "@/lib/people";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -289,11 +290,11 @@ function TasksPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [{ data: p }, { data: e }] = await Promise.all([
-          supabase.from("profiles").select("id,display_name,avatar_url"),
+        const [p, { data: e }] = await Promise.all([
+          loadPeopleSafe(),
           supabase.from("profile_emails" as never).select("id,email") as never,
         ]);
-        setProfiles((p ?? []) as Profile[]);
+        setProfiles(p);
         const map: Record<string, string> = {};
         for (const row of ((e ?? []) as Array<{ id: string; email: string }>)) map[row.id] = row.email;
         setEmails(map);

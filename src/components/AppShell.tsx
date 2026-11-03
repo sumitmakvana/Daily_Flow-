@@ -44,6 +44,7 @@ import { DesktopNotificationPromptBanner } from "@/components/DesktopNotificatio
 import { UX4GAccessibilityToolbar } from "@/components/UX4GAccessibilityToolbar";
 import { GlobalFeedbackWidget, OPEN_FEEDBACK_EVENT } from "@/components/GlobalFeedbackWidget";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMyDayFreshness } from "@/lib/my-day-cache";
 import { useAuth, signOut } from "@/hooks/use-auth";
 import { loadMyProfile } from "@/lib/my-profile";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // Keeps My Day's cache honest while another page is open: marks it stale (no request) when a relevant change arrives.
+  useMyDayFreshness(user?.id, isManager);
   const { unreadCount: unread } = useNotifications();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifModalOpen, setNotifModalOpen] = useState(false);

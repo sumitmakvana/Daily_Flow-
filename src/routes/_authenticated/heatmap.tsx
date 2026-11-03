@@ -1,3 +1,9 @@
+// TEMPORARILY DISABLED: the Workload heatmap route and its API/database calls (loadPeopleSafe, tasks read,
+// workloadService.last7Days) are commented out. Remove the block comment below (and the matching
+// "Heatmap temporarily disabled" comments in routeTree.gen.ts, _authenticated.tsx, HolidayBanner.tsx,
+// services/workload*.ts and tests/services/workload.test.ts) to re-enable.
+export {};
+/*
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +13,7 @@ import type { Profile, Task, WorkloadSnapshot } from "@/lib/types";
 import { workloadService, utilTone } from "@/services/workload";
 import { useAuth } from "@/hooks/use-auth";
 import { TASK_WORKLOAD_COLS } from "@/lib/task-columns";
+import { loadPeopleSafe } from "@/lib/people";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/heatmap")({
@@ -20,12 +27,12 @@ function HeatmapPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   const load = async () => {
-    const [{ data: p }, { data: t }, s] = await Promise.all([
-      supabase.from("profiles").select("id,display_name,avatar_url"),
+    const [p, { data: t }, s] = await Promise.all([
+      loadPeopleSafe(),
       supabase.from("tasks").select(TASK_WORKLOAD_COLS),
       workloadService.last7Days(),
     ]);
-    setProfiles((p ?? []) as Profile[]);
+    setProfiles(p);
     setTasks((t ?? []) as Task[]);
     setSnaps(s);
   };
@@ -135,3 +142,4 @@ function Legend({ label, className }: { label: string; className: string }) {
     </span>
   );
 }
+*/

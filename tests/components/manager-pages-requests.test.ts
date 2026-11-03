@@ -31,8 +31,8 @@ describe("/executive", () => {
 
   it("keeps the summary fresh for 30s so a remount or tab return does not re-run the server function", () => {
     const q = exec.slice(exec.indexOf('queryKey: ["exec-summary", range'), exec.indexOf("useRealtimeRefresh("));
-    expect(q).toMatch(/staleTime:\s*30_000/);
-    expect(q).toMatch(/refetchOnWindowFocus:\s*false/);
+    // realtimeCovered() defaults to a 30s staleTime and turns focus/reconnect refetch off (src/lib/smart-query.ts)
+    expect(q).toMatch(/\.\.\.realtimeCovered\(\)/);
   });
 });
 

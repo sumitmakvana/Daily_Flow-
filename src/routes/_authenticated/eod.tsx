@@ -1,3 +1,4 @@
+import { loadPeopleDetailedSafe } from "@/lib/people";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -79,8 +80,8 @@ function EodBoardPage() {
   const windowApply = (q: any) => q.or(eodWindowFilter(todayISO()));
   const load = async () => {
     try {
-      const [{ data: p }, c, rows, { data: proj }] = await Promise.all([
-        supabase.from("profiles").select("id,display_name,email,avatar_url,team_id,manager_id"),
+      const [p, c, rows, { data: proj }] = await Promise.all([
+        loadPeopleDetailedSafe(),
         eodService.listForDate(todayISO()),
         // Board numbers need every row but only a few columns; the member drawer loads that
         // member's full task history on demand (see below).
@@ -89,7 +90,7 @@ function EodBoardPage() {
         loadAllTasksSlim<Task>(TASK_EOD_COLS, tasksRef.current, fullAt, windowApply),
         supabase.from("projects").select("id,name"),
       ]);
-      setProfiles((p ?? []) as Profile[]);
+      setProfiles(p);
       setCheckins(c ?? []);
       tasksRef.current = rows;
       setTasks(rows);

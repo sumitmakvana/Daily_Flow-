@@ -19,6 +19,7 @@ import { workloadService, utilTone } from "@/services/workload";
 import { toast } from "sonner";
 import { Calendar, User as UserIcon, Flag, ArrowRightCircle, X } from "lucide-react";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
+import { loadPeopleSafe } from "@/lib/people";
 
 export const Route = createFileRoute("/_authenticated/planning")({
   component: PlanningPage,
@@ -32,16 +33,16 @@ function PlanningPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = async () => {
-    const [{ data: t }, { data: p }] = await Promise.all([
+    const [{ data: t }, p] = await Promise.all([
       supabase.from("tasks").select(TASK_PLANNING_COLS).not("status", "in", '("Completed")').order("priority"),
-      supabase.from("profiles").select("id,display_name,avatar_url"),
+      loadPeopleSafe(),
     ]);
     setTasks((t ?? []) as Task[]);
-    setProfiles((p ?? []) as Profile[]);
+    setProfiles(p);
     setSelected(new Set());
   };
-  useEffect(() => { load(); }, []);
-  useRealtimeTasks(load, "planning-rt");
+  useEffect(() => { if (isManager) load(); }, [isManager]);
+  useRealtimeTasks(load, "planning-rt", { kind: "all" }, isManager);
 
   const groups = useMemo(() => {
     const m = new Map<string, { label: string; key: string; tasks: Task[] }>();

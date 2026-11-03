@@ -16,6 +16,7 @@ import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { isOverdue } from "@/lib/format";
 import { TASK_COMMAND_COLS } from "@/lib/task-columns";
 import { loadAllTasksSlim } from "@/lib/task-window";
+import { loadPeopleSafe } from "@/lib/people";
 import type { Profile, Task, RiskEvent, WorkSettings } from "@/lib/types";
 import { Activity, AlertOctagon, CheckCircle2, RefreshCw, ShieldAlert, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -35,20 +36,20 @@ function CommandPage() {
   const tasksRef = useRef<Task[]>([]);
   const fullAt = useRef(0);
   const load = async () => {
-    const [rows, { data: p }, r, s] = await Promise.all([
+    const [rows, p, r, s] = await Promise.all([
       loadAllTasksSlim<Task>(TASK_COMMAND_COLS, tasksRef.current, fullAt),
-      supabase.from("profiles").select("id,display_name,avatar_url"),
+      loadPeopleSafe(),
       risksService.listOpen(),
       workSettingsService.get(),
     ]);
     tasksRef.current = rows;
     setTasks(rows);
-    setProfiles((p ?? []) as Profile[]);
+    setProfiles(p);
     setRisks(r);
     setSettings(s);
   };
-  useEffect(() => { load(); }, []);
-  useRealtimeTasks(load, "command-rt");
+  useEffect(() => { if (isManager) load(); }, [isManager]);
+  useRealtimeTasks(load, "command-rt", { kind: "all" }, isManager);
 
   useEffect(() => {
     const ch = supabase

@@ -2,7 +2,7 @@ import type { Task, WorkloadSnapshot } from "@/lib/types";
 import { isOverdue, todayISO } from "@/lib/format";
 import {
   upsertWorkloadSnapshotsFn,
-  last7DaysWorkloadFn,
+  // last7DaysWorkloadFn, // Heatmap temporarily disabled
 } from "./workload.functions";
 
 export interface UserUtil {
@@ -59,9 +59,9 @@ export const workloadService = {
     return r.inserted;
   },
 
-  async last7Days(): Promise<WorkloadSnapshot[]> {
-    return (await last7DaysWorkloadFn()) as WorkloadSnapshot[];
-  },
+  //   async last7Days(): Promise<WorkloadSnapshot[]> {
+  //     return (await last7DaysWorkloadFn()) as WorkloadSnapshot[];
+  //   },
 };
 
 /** Tone helper for heatmap colors. */

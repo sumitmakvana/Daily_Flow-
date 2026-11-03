@@ -24,6 +24,7 @@ import type { AppRole, Profile } from "@/lib/types";
 import { toast } from "sonner";
 import { deleteUser, updateUserAdminSettings } from "@/lib/admin-actions";
 import { todayISO } from "@/lib/format";
+import { invalidatePeople } from "@/lib/people";
 import { fetchAllAnnouncements, createAnnouncement, deleteAnnouncement } from "@/services/announcements.functions";
 import { DemoFeedbackDashboard } from "@/components/DemoFeedbackDashboard";
 
@@ -136,6 +137,7 @@ function AdminPage() {
         });
       }
 
+      invalidatePeople();
       toast.success("Changes saved successfully");
       load();
     } catch (e) {
@@ -150,6 +152,7 @@ function AdminPage() {
     setDeleting(true);
     try {
       await deleteUserFn({ data: userToDelete.id });
+      invalidatePeople();
       toast.success(`User "${userToDelete.display_name}" has been deleted.`);
       setUserToDelete(null);
       load();

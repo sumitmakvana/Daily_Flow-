@@ -4,6 +4,7 @@ import { Eye, Inbox } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
+import { loadPeopleSafe } from "@/lib/people";
 import { reviewsService, type ReviewQueueItem } from "@/services/reviews";
 import { ReviewActions } from "@/components/review/ReviewActions";
 import { ReviewHours, ReviewTimeline } from "@/components/review/ReviewInfo";
@@ -32,12 +33,12 @@ function ReviewsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [queue, { data: p }] = await Promise.all([
+      const [queue, p] = await Promise.all([
         reviewsService.queue(scope),
-        supabase.from("profiles").select("id,display_name"),
+        loadPeopleSafe(),
       ]);
       setItems(queue);
-      setProfiles((p ?? []) as Pick<Profile, "id" | "display_name">[]);
+      setProfiles(p);
       setError(null);
     } catch (e) {
       setError((e as Error).message || "Could not load reviews");

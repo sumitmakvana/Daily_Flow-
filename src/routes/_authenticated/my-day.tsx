@@ -1,6 +1,7 @@
+import { loadPeople, PEOPLE_TTL_MS } from "@/lib/people";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,8 +54,16 @@ import {
 } from "@/components/ui/tooltip";
 import type { Profile, Task } from "@/lib/types";
 import { isToday, isOverdue, toLocalISO } from "@/lib/format";
-import { countMyCompleted, fetchMyTasksWithWorklogs, windowCutoff } from "@/lib/task-window";
+import {
+  ALL_TASKS_FULL_RELOAD_MS,
+  completedCountMayHaveChanged,
+  countMyCompleted,
+  refreshMyTasksWithWorklogs,
+  windowCutoff,
+  type TaskWithWorklogs,
+} from "@/lib/task-window";
 import { loadMyProfile } from "@/lib/my-profile";
+import { MY_DAY_KEY, MY_DAY_STALE_MS, MY_DAY_TASKS_KEY } from "@/lib/my-day-cache";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { getTodayDateStr, isTaskCompletedToday } from "@/lib/task-date-utils";
@@ -122,6 +131,13 @@ function TaskSection({
   );
 }
 
+// When each My Day list (per user and day) was last read in full. Module level, so it survives the page being
+// left and re-opened: a cached list that is still good is refreshed by changed rows, not re-downloaded.
+const lastFullLoad = new Map<string, number>();
+
+const NO_TASKS: Task[] = [];
+const NO_PROFILES: Profile[] = [];
+
 function MyDayPage() {
   const { taskId, tab: queryTab, toast_message, openCreateTask } = Route.useSearch();
   const router = useRouter();
@@ -134,12 +150,7 @@ function MyDayPage() {
   // View mode state (board | list)
   const [viewMode, setViewMode] = useState<"board" | "list">("board");
 
-  // Raw tasks & profiles for TaskCard list views
-  const [tasks, setTasks] = useState<Task[]>([]);
-  // Every task this user ever completed; the list below holds only the recent ones (see loadTasks).
-  const [completedTotal, setCompletedTotal] = useState<number | undefined>(undefined);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const profilesLoaded = useRef(false);
+  const queryClient = useQueryClient();
 
   // Modals state
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -222,46 +233,74 @@ function MyDayPage() {
       }
     };
     loadProfile();
-  }, [user]);
-
-  // Load raw tasks for the task sections
-  const loadTasks = useCallback(async () => {
-    if (!user) return;
-    try {
-      // My open tasks plus the ones completed recently, with only THEIR worklogs embedded (was: all my
-      // tasks, including years of completed ones). The all-time completed total is a head-only count.
-      // The people list is loaded once; a task event does not need it again.
-      const needProfiles = !profilesLoaded.current;
-      const [mine, p, done] = await Promise.all([
-        fetchMyTasksWithWorklogs(user.id, toLocalISO(new Date()), windowCutoff()),
-        needProfiles ? supabase.from("profiles").select("id,display_name,avatar_url") : Promise.resolve(null),
-        countMyCompleted(user.id).catch(() => undefined),
-      ]);
-      setTasks(mine as Task[]);
-      setCompletedTotal(done);
-      if (p && !p.error) {
-        profilesLoaded.current = true;
-        setProfiles((p.data ?? []) as Profile[]);
-      }
-    } catch (err) {
-      // Keep what is on screen rather than blanking it; the next event or safety refresh retries.
-      console.warn("Failed to load My Day tasks:", err);
-    }
+    // Keyed on the id: a token refresh hands out a new `user` object for the same person.
   }, [user?.id]);
 
-  useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
+  // My tasks (open + completed recently) with only THEIR worklogs embedded, plus the all-time completed count
+  // (head-only). Cached like the priorities below: coming back to My Day reuses it while fresh, and a
+  // relevant change marks it stale (see my-day-cache.ts), so it is fetched only when it can have changed.
+  // The day is part of the key because the rows carry today's hours and a date window.
+  const todayKey = toLocalISO(new Date());
+  const tasksKey = useMemo(() => [...MY_DAY_TASKS_KEY, user?.id ?? null, todayKey] as const, [user?.id, todayKey]);
+  // Refreshes read only what changed since the list was loaded (a task event used to re-download all of it,
+  // ~44 kB for a busy user); a full read happens first, after FULL_RELOAD_MS, and whenever the delta cannot
+  // prove the list is complete (see refreshMyTasksWithWorklogs).
+  const tasksQ = useQuery({
+    queryKey: tasksKey,
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const keyId = tasksKey.join("|");
+      const prev = queryClient.getQueryData<{ tasks: Task[]; completedTotal?: number }>(tasksKey);
+      const fullAt = lastFullLoad.get(keyId);
+      const canDelta = !!prev && fullAt !== undefined && Date.now() - fullAt < ALL_TASKS_FULL_RELOAD_MS;
+      const res = await refreshMyTasksWithWorklogs(
+        canDelta ? (prev!.tasks as TaskWithWorklogs[]) : undefined,
+        user!.id,
+        todayKey,
+        windowCutoff(),
+      ).catch(async (err) => {
+        if (!canDelta) throw err;
+        console.warn("My Day delta refresh failed; reloading everything:", err);
+        return refreshMyTasksWithWorklogs(undefined, user!.id, todayKey, windowCutoff());
+      });
+      if (res.full) lastFullLoad.set(keyId, Date.now());
+      const recount = res.full || !prev || completedCountMayHaveChanged(prev.tasks, res.changed);
+      const done = recount ? await countMyCompleted(user!.id).catch(() => undefined) : prev!.completedTotal;
+      return { tasks: res.rows as Task[], completedTotal: done };
+    },
+    staleTime: MY_DAY_STALE_MS,
+    // A failed refresh keeps the last good list on screen (React Query keeps the previous data).
+  });
+  const tasks = tasksQ.data?.tasks ?? NO_TASKS;
+  // Every task this user ever completed; the list holds only the recent ones.
+  const completedTotal = tasksQ.data?.completedTotal;
+
+  // The people list comes from the shared people cache (see people.ts); a task event never re-reads it.
+  const peopleQ = useQuery({
+    queryKey: ["my-day-people"],
+    queryFn: () => loadPeople(),
+    staleTime: PEOPLE_TTL_MS,
+    refetchOnWindowFocus: false,
+  });
+  const profiles = (peopleQ.data ?? NO_PROFILES) as Profile[];
+
+  /** Reload my tasks now (after an edit or a realtime event). A reload already running is restarted so the newest change is included. */
+  const loadTasks = useCallback(
+    () => queryClient.refetchQueries({ queryKey: tasksKey, exact: true }),
+    [queryClient, tasksKey],
+  );
 
   // Algorithmic MyDay query
   const q = useQuery({
-    queryKey: ["my-day"],
+    // The user id is part of the key: a reused result must never be another account's.
+    queryKey: [...MY_DAY_KEY, user?.id ?? null],
+    enabled: !!user?.id,
     queryFn: () => fetchMyDay(),
-    // Fresh for 30s: returning to the tab within that window does not re-run the 6-query server function
-    // (realtime events refetch explicitly, so the data is not stale in the meantime).
-    staleTime: 30_000,
-    // No refetchInterval: updates arrive over Socket.IO (see the hooks below);
-    // focus/visibility and reconnect recovery cover missed events.
+    // Reused while fresh, including when you navigate back to My Day. It turns stale when a relevant change
+    // arrives (even while another page is open: useMyDayFreshness) or after MY_DAY_STALE_MS, and then the
+    // next visit / focus refetches once. Realtime events while this page is open refetch explicitly below.
+    staleTime: MY_DAY_STALE_MS,
+    // No refetchInterval: updates arrive over Socket.IO (see the hooks below).
     refetchOnWindowFocus: true,
   });
 
@@ -283,10 +322,23 @@ function MyDayPage() {
     [],
   );
 
+  // A change made on this page calls this directly AND comes back as a realtime event a moment later;
+  // a short trailing debounce turns that pair (and event bursts) into one task load.
+  const changeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleRealtimeChange = useCallback(() => {
-    loadTasks();
+    if (changeTimer.current) clearTimeout(changeTimer.current);
+    changeTimer.current = setTimeout(() => {
+      changeTimer.current = null;
+      void loadTasks();
+    }, 250);
     refetchMyDay();
   }, [loadTasks, refetchMyDay]);
+  useEffect(
+    () => () => {
+      if (changeTimer.current) clearTimeout(changeTimer.current);
+    },
+    [],
+  );
 
   // The My Day query also depends on risks and pending approvals, not only my tasks.
   useRealtimeRefresh(

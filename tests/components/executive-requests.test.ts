@@ -16,19 +16,20 @@ const execCols = /const EXEC_TASK_COLS =\s*"([^"]+)"/.exec(src)?.[1] ?? "";
 
 describe("/executive eod-widget-tasks", () => {
   it("does not refetch the whole table on every window focus", () => {
-    expect(widgetQuery).toMatch(/refetchOnWindowFocus:\s*false/);
+    // realtimeCovered() = no refetch on focus/reconnect (see src/lib/smart-query.ts)
+    expect(widgetQuery).toMatch(/\.\.\.realtimeCovered\(/);
   });
 
   it("has a staleTime of at least a minute (was 5s)", () => {
-    const m = /staleTime:\s*([\d_]+)/.exec(widgetQuery);
+    const m = /realtimeCovered\(\s*([\d_]+)\s*\)/.exec(widgetQuery);
     expect(m).not.toBeNull();
     expect(Number(m![1].replace(/_/g, ""))).toBeGreaterThanOrEqual(60_000);
   });
 
   it("is invalidated by the same realtime task events that refresh the summary (so counts stay live)", () => {
     const hook = /useRealtimeRefresh\(\s*\["tasks"\][\s\S]*?"exec-summary-rt"/.exec(src)?.[0] ?? "";
-    expect(hook).toContain('queryKey: ["exec-summary"]');
-    expect(hook).toContain('queryKey: ["eod-widget-tasks"]');
+    expect(hook).toContain('schedule(["exec-summary"]');
+    expect(hook).toContain('schedule(["eod-widget-tasks"]');
   });
 
   it("still selects every column the dashboard reads, so its numbers are computed from the same data", () => {

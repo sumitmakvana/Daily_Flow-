@@ -8,6 +8,7 @@ import { CapacityBar } from "@/components/CapacityBar";
 import { formatDate, isOverdue, daysSince } from "@/lib/format";
 import { TASK_DASHBOARD_COLS, TASK_DASHBOARD_DETAIL_COLS } from "@/lib/task-columns";
 import { loadAllTasksSlim } from "@/lib/task-window";
+import { loadPeopleSafe } from "@/lib/people";
 import type { Profile, Task } from "@/lib/types";
 import { AlertOctagon, CheckCircle2, Clock, ListChecks, TrendingUp } from "lucide-react";
 import { TaskEodReviewCard } from "@/components/TaskEodReviewCard";
@@ -24,9 +25,9 @@ function DashboardPage() {
   const fullAt = useRef(0);
   useEffect(() => {
     const load = async () => {
-      const [rows, { data: p }] = await Promise.all([
+      const [rows, p] = await Promise.all([
         loadAllTasksSlim<Task>(TASK_DASHBOARD_COLS, rowsRef.current, fullAt),
-        supabase.from("profiles").select("id,display_name,avatar_url"),
+        loadPeopleSafe(),
       ]);
       rowsRef.current = rows;
       // The two lists below need code / name / reason, but only for the few rows they show. Pick those
@@ -40,7 +41,7 @@ function DashboardPage() {
         for (const r of (d ?? []) as Array<Partial<Task> & { id: string }>) detail.set(r.id, r);
       }
       setTasks(rows.map((r) => (detail.has(r.id) ? ({ ...r, ...detail.get(r.id) } as Task) : r)));
-      setProfiles((p ?? []) as Profile[]);
+      setProfiles(p);
     };
     load();
     const ch = supabase.channel("dash").on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, load).subscribe();

@@ -74,6 +74,7 @@ import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
 import { getRolesShared, useAuth } from "@/hooks/use-auth";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
+import { realtimeCovered, slowChanging, useRefreshScheduler } from "@/lib/smart-query";
 import { TeamReviewQueue } from "@/components/review/TeamReviewQueue";
 import { isReviewAging, reviewSubmittedAt } from "@/lib/review";
 import { tasksService } from "@/services/tasks";
@@ -239,7 +240,8 @@ function TeamCapacityPage() {
         role: rolesMap.get(p.id) || "member",
       })) as (Profile & { role?: string; team_id?: string })[];
     },
-    staleTime: 10000,
+    // People and roles hardly ever change: reused for minutes, never refetched on tab focus.
+    ...slowChanging(),
   });
 
   // 2. Fetch tasks & worklogs (Real DB).
@@ -267,13 +269,15 @@ function TeamCapacityPage() {
       fullLoad.current = { at: Date.now(), cutoff };
       return rows;
     },
-    staleTime: 10000,
+    // Kept fresh by Socket.IO events (below) and the channel layer's reconnect / tab-return catch-up, so no
+    // refetch on focus; a remount after 30s still reloads.
+    ...realtimeCovered(),
   });
 
   const { data: olderCompletedCount = 0 } = useQuery({
     queryKey: ["capacity-tasks", "older-count"],
     queryFn: () => countOlderCompleted(windowCutoff()),
-    staleTime: 10000,
+    ...realtimeCovered(),
   });
 
   // Older completed tasks per member, loaded when that member's history dialog opens.
@@ -286,7 +290,7 @@ function TeamCapacityPage() {
       const { data } = await supabase.from("teams").select("id, name");
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
-    staleTime: 30000,
+    ...slowChanging(),
   });
 
   // 4. Fetch projects (Real DB)
@@ -296,7 +300,7 @@ function TeamCapacityPage() {
       const { data } = await supabase.from("projects").select("id, name, client, status");
       return (data ?? []) as Project[];
     },
-    staleTime: 30000,
+    ...slowChanging(),
   });
 
   // 5. Fetch active leaves for today (Real DB)
@@ -306,21 +310,15 @@ function TeamCapacityPage() {
       const leaves = await leavesService.getLeaves({ startDate: todayStr, endDate: todayStr, status: "__all" });
       return leaves || [];
     },
-    staleTime: 10000,
+    ...realtimeCovered(),
   });
 
   // Realtime (Socket.IO; no polling): task and worklog changes refresh the task data, leave changes
   // refresh availability. The channel layer also refetches after a reconnect / long tab absence.
-  useRealtimeRefresh(
-    ["tasks", "task_worklogs"],
-    () => queryClient.invalidateQueries({ queryKey: ["capacity-tasks"] }),
-    "capacity-tasks-rt",
-  );
-  useRealtimeRefresh(
-    ["leaves"],
-    () => queryClient.invalidateQueries({ queryKey: ["capacity-active-leaves"] }),
-    "capacity-leaves-rt",
-  );
+  // A burst of events (or a local save plus its realtime echo) becomes one delta refresh, after the last one.
+  const refresh = useRefreshScheduler(queryClient);
+  useRealtimeRefresh(["tasks", "task_worklogs"], () => refresh.schedule(["capacity-tasks"]), "capacity-tasks-rt");
+  useRealtimeRefresh(["leaves"], () => refresh.schedule(["capacity-active-leaves"]), "capacity-leaves-rt");
 
   // Extract ALL unique project names
   const allProjectsList = useMemo(() => {
@@ -898,7 +896,7 @@ function TeamCapacityPage() {
     try {
       await tasksService.setStatus(task, newStatus, user.id);
       toast.success(`${task.task_code || "Task"} updated to ${newStatus}`);
-      queryClient.invalidateQueries({ queryKey: ["capacity-tasks"] });
+      refresh.schedule(["capacity-tasks"]);
       if (activeTaskModalItem) {
         setActiveTaskModalItem({
           ...activeTaskModalItem,
@@ -1389,7 +1387,7 @@ function TeamCapacityPage() {
           profiles={profiles}
           userId={user?.id ?? ""}
           isManager={isManager}
-          onChanged={() => queryClient.invalidateQueries({ queryKey: ["capacity-tasks"] })}
+          onChanged={() => refresh.schedule(["capacity-tasks"])}
           onOpenTask={(task) =>
             setInspectTaskItem({ task, profile: profiles.find((pr) => pr.id === task.assigned_to) })
           }
@@ -2819,7 +2817,7 @@ function TeamCapacityPage() {
             setEditingTask(null);
             setSelectedAssignMemberId(null);
             setSelectedPresetProjectName(null);
-            queryClient.invalidateQueries({ queryKey: ["capacity-tasks"] });
+            refresh.schedule(["capacity-tasks"]);
           }}
         />
       )}
@@ -2850,7 +2848,7 @@ function TeamCapacityPage() {
             handleEditTask(task);
           }}
           onTaskUpdated={() => {
-            queryClient.invalidateQueries({ queryKey: ["capacity-tasks"] });
+            refresh.schedule(["capacity-tasks"]);
           }}
         />
       )}

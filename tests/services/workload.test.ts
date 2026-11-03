@@ -1,3 +1,4 @@
+// Heatmap temporarily disabled: the last7Days tests below are commented out.
 import { describe, it, expect, beforeEach } from "vitest";
 import { mockSupabase } from "../mocks/supabase";
 import { workloadService, utilTone } from "@/services/workload";
@@ -65,17 +66,17 @@ describe("services/workload.snapshotToday", () => {
   });
 });
 
-describe("services/workload.last7Days", () => {
-  beforeEach(() => mockSupabase.reset());
-  it("fetches and returns rows", async () => {
-    mockSupabase.queueResponse("select", { data: [{ user_id: "u" }] });
-    expect(await workloadService.last7Days()).toHaveLength(1);
-  });
-  it("returns [] when null", async () => {
-    mockSupabase.queueResponse("select", { data: null });
-    expect(await workloadService.last7Days()).toEqual([]);
-  });
-});
+// describe("services/workload.last7Days", () => {
+//   beforeEach(() => mockSupabase.reset());
+//   it("fetches and returns rows", async () => {
+//     mockSupabase.queueResponse("select", { data: [{ user_id: "u" }] });
+//     expect(await workloadService.last7Days()).toHaveLength(1);
+//   });
+//   it("returns [] when null", async () => {
+//     mockSupabase.queueResponse("select", { data: null });
+//     expect(await workloadService.last7Days()).toEqual([]);
+//   });
+// });
 
 describe("utilTone", () => {
   it("Under", () => expect(utilTone(1).label).toBe("Under"));

@@ -1,3 +1,4 @@
+import { loadPeopleSafe } from "@/lib/people";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,10 +18,7 @@ function PlanningSuggestionsPage() {
   // No task list is needed here: TomorrowRiskPanel reads the names of its top risks itself and
   // SuggestionsPanel reads the full task row only when a suggestion is accepted.
   useEffect(() => {
-    supabase
-      .from("profiles")
-      .select("id,display_name,avatar_url")
-      .then(({ data }) => setProfiles((data ?? []) as Profile[]));
+    loadPeopleSafe().then(setProfiles);
   }, []);
 
   if (!isManager) {

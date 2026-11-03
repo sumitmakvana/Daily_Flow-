@@ -187,7 +187,7 @@ const BANNER_LAYOUTS: Array<[string, string, string]> = [
   ["/tasks", "max-w-7xl", "px-3 md:px-6"],
   ["/command", "max-w-6xl", "px-3 md:px-6"],
   ["/dashboard", "max-w-6xl", "px-3 md:px-6"],
-  ["/heatmap", "max-w-6xl", "px-3 md:px-6"],
+  // ["/heatmap", "max-w-6xl", "px-3 md:px-6"], // Heatmap temporarily disabled
   ["/intelligence", "max-w-6xl", "px-3 md:px-6"],
   ["/manager", "max-w-6xl", "px-3 md:px-6"],
   ["/planning-suggestions", "max-w-5xl", "px-3 md:px-4"],

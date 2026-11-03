@@ -1,3 +1,4 @@
+import { loadPeopleSafe } from "@/lib/people";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -134,12 +135,12 @@ function CalendarPage() {
   }, [taskRangeKey, isManager, user?.id, rolesReady]);
 
   const loadOthers = useCallback(async () => {
-    const [{ data: p }, l, h] = await Promise.all([
-      supabase.from("profiles").select("id,display_name,avatar_url"),
+    const [p, l, h] = await Promise.all([
+      loadPeopleSafe(),
       leavesService.getLeaves().catch(() => [] as Leave[]),
       holidaysService.list().catch(() => [] as HolidayCalendar[]),
     ]);
-    setProfiles((p ?? []) as Profile[]);
+    setProfiles(p);
     setLeaves(l || []);
     setCustomHolidays(h || []);
   }, []);

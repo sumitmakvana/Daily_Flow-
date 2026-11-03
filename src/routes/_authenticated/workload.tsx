@@ -8,6 +8,7 @@ import type { Profile, Task } from "@/lib/types";
 import { isOverdue } from "@/lib/format";
 import { TASK_WORKLOAD_COLS } from "@/lib/task-columns";
 import { loadAllTasksSlim } from "@/lib/task-window";
+import { loadPeopleSafe } from "@/lib/people";
 
 export const Route = createFileRoute("/_authenticated/workload")({
   component: WorkloadPage,
@@ -19,13 +20,13 @@ function WorkloadPage() {
   const tasksRef = useRef<Task[]>([]);
   const fullAt = useRef(0);
   const load = useCallback(async () => {
-    const [rows, { data: p }] = await Promise.all([
+    const [rows, p] = await Promise.all([
       loadAllTasksSlim<Task>(TASK_WORKLOAD_COLS, tasksRef.current, fullAt),
-      supabase.from("profiles").select("id,display_name,avatar_url"),
+      loadPeopleSafe(),
     ]);
     tasksRef.current = rows;
     setTasks(rows);
-    setProfiles((p ?? []) as Profile[]);
+    setProfiles(p);
   }, []);
   useEffect(() => { load(); }, [load]);
   useRealtimeTasks(load, "workload-rt");

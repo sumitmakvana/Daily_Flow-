@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
 import { fetchIndianHolidays } from "@/lib/format";
 import { Calendar as CalendarIcon, Building2, Trash2, Plus, Palmtree, Download } from "lucide-react";
 
@@ -167,8 +166,8 @@ function OpsSettings() {
       return s;
     });
   };
-  useEffect(() => { load(); }, []);
-  useRealtimeTasks(load, "settings-ops-rt");
+  // Teams, projects, holidays and settings are not task data: no realtime subscription needed.
+  useEffect(() => { if (isManager) load(); }, [isManager]);
 
   if (!isManager) {
     return <div className="max-w-md mx-auto px-3 py-12 text-center text-sm text-muted-foreground">Managers only.</div>;

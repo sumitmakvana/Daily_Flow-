@@ -1,3 +1,4 @@
+import { loadPeopleSafe } from "@/lib/people";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -69,12 +70,7 @@ function TimeTrackingPage() {
   // 1. Fetch profiles
   const { data: profiles = [] } = useQuery({
     queryKey: ["time-tracking-profiles"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url");
-      return (data ?? []) as Profile[];
-    },
+    queryFn: () => loadPeopleSafe(),
     staleTime: 30000,
   });
 

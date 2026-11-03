@@ -1,7 +1,9 @@
+import { loadPeopleDetailedSafe } from "@/lib/people";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
+import { realtimeCovered, slowChanging, useRefreshScheduler } from "@/lib/smart-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { TaskHoursBadges } from "@/components/TaskHoursBadges";
@@ -179,13 +181,8 @@ function ExecutivePage() {
 
   const { data: eodProfiles = [], isSuccess: eodProfilesReady } = useQuery({
     queryKey: ["eod-widget-profiles"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, display_name, email, avatar_url, manager_id, team_id");
-      return (data ?? []) as Profile[];
-    },
-    staleTime: 30000,
+    queryFn: () => loadPeopleDetailedSafe(),
+    ...slowChanging(),
   });
 
   // The dashboard reads the tasks of the selected scope and range (open tasks + the ones created, due or
@@ -208,10 +205,9 @@ function ExecutivePage() {
     },
     // Wait for the people list and the scope: the window depends on both (and loading before them would read twice).
     enabled: eodProfilesReady && !!scope,
-    // Kept fresh by Socket.IO task events (invalidated below) and by the reconnect/tab-return resync,
+    // Kept fresh by Socket.IO task events (refreshed below) and by the reconnect/tab-return resync,
     // so it no longer refetches on every focus or remount.
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
+    ...realtimeCovered(60_000),
   });
 
   // A member's full history (every task, every check-in) loads only while that member's drawer is open.
@@ -223,8 +219,7 @@ function ExecutivePage() {
       if (error) throw error;
       return (data ?? []) as Task[];
     },
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    ...realtimeCovered(),
   });
   const { data: memberCheckinRows } = useQuery({
     queryKey: ["exec-member-checkins", selectedMemberId],
@@ -238,8 +233,7 @@ function ExecutivePage() {
       if (error) throw error;
       return (data ?? []) as EodCheckin[];
     },
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    ...realtimeCovered(),
   });
 
   const { data: projectsList = [] } = useQuery({
@@ -248,7 +242,7 @@ function ExecutivePage() {
       const { data } = await supabase.from("projects").select("id, name, client, status");
       return (data ?? []) as Project[];
     },
-    staleTime: 30000,
+    ...slowChanging(),
   });
 
   const { data: teamsList = [] } = useQuery({
@@ -257,7 +251,7 @@ function ExecutivePage() {
       const { data } = await supabase.from("teams").select("id, name");
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
-    staleTime: 30000,
+    ...slowChanging(),
   });
 
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -268,7 +262,7 @@ function ExecutivePage() {
       const leaves = await leavesService.getLeaves({ startDate: todayStr, endDate: todayStr, status: "__all" });
       return leaves || [];
     },
-    staleTime: 10000,
+    ...realtimeCovered(),
   });
 
   // First-load default when no persisted scope.
@@ -299,29 +293,31 @@ function ExecutivePage() {
     enabled: !!filters,
     // Fresh for 30s: a remount or a tab return inside that window reuses the result instead of re-running the
     // summary function with identical arguments. Task events invalidate it explicitly (below).
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    ...realtimeCovered(),
     // No refetchInterval: the summary is invalidated by Socket.IO task events (below).
   });
 
+  // Each refresh runs once after the last event of a burst. Only ACTIVE queries refetch (the member drawer's
+  // queries just turn stale while it is closed). The summary is a six-query server function, so it waits longer.
+  const refresh = useRefreshScheduler(queryClient);
   useRealtimeRefresh(
     ["tasks"],
     () => {
-      void queryClient.invalidateQueries({ queryKey: ["exec-summary"] });
-      void queryClient.invalidateQueries({ queryKey: ["eod-widget-tasks"] });
-      void queryClient.invalidateQueries({ queryKey: ["exec-member-tasks"] });
+      refresh.schedule(["exec-summary"], 1000);
+      refresh.schedule(["eod-widget-tasks"]);
+      refresh.schedule(["exec-member-tasks"]);
     },
     "exec-summary-rt",
   );
   // EOD check-ins and leaves change independently of tasks; refresh only those two queries.
   useRealtimeRefresh(
     ["eod_checkins"],
-    () => void queryClient.invalidateQueries({ queryKey: ["exec-member-checkins"] }),
+    () => refresh.schedule(["exec-member-checkins"]),
     "exec-checkins-rt",
   );
   useRealtimeRefresh(
     ["leaves"],
-    () => void queryClient.invalidateQueries({ queryKey: ["exec-active-leaves"] }),
+    () => refresh.schedule(["exec-active-leaves"]),
     "exec-leaves-rt",
   );
 

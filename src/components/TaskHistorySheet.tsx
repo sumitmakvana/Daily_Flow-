@@ -59,7 +59,7 @@ export function TaskHistorySheet({
       const [{ data: h }, { data: cf }, { data: at }, { data: cm }] = await Promise.all([
         supabase.from("task_history").select("*").eq("task_id", taskId).order("created_at", { ascending: false }).limit(limit),
         supabase.from("carry_forward_events").select("*").eq("task_id", taskId).order("created_at", { ascending: false }).limit(limit),
-        supabase.from("attachments").select("*").eq("work_item_id", taskId).order("uploaded_at", { ascending: false }).limit(limit),
+        supabase.from("attachments").select("id,work_item_id,file_name,file_size,file_type,storage_path,uploaded_by,uploaded_at").eq("work_item_id", taskId).order("uploaded_at", { ascending: false }).limit(limit),
         supabase.from("comments").select("*").eq("work_item_id", taskId).order("created_at", { ascending: false }).limit(limit),
       ]);
       setHasMore([h, cf, at, cm].some((r) => (r?.length ?? 0) >= limit));

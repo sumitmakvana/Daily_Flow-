@@ -350,6 +350,95 @@ export async function fetchMyTasksWithWorklogs(
   return withTodayHours(data ?? [], todayStr);
 }
 
+const byDueDate = (a: { due_date?: string | null }, b: { due_date?: string | null }) =>
+  a.due_date === b.due_date ? 0 : !a.due_date ? 1 : !b.due_date ? -1 : a.due_date < b.due_date ? -1 : 1;
+
+export type MyTasksRefresh = {
+  rows: TaskWithWorklogs[];
+  /** Rows that were read again (all of them for a full load). */
+  changed: TaskWithWorklogs[];
+  /** True when the whole window was re-read (nothing held, or the delta could not prove it was complete). */
+  full: boolean;
+};
+
+/**
+ * Refresh the My Day window without re-downloading it. Reads only the rows updated since the newest one held
+ * (with their worklogs), the worklogs written since for the held tasks, and the window's exact size (head only).
+ * If held + changed rows do not add up to that size (a task left the window: reassigned, deleted), or there is
+ * nothing to anchor on, the window is read in full instead, so the result is always the same list a full load
+ * would return.
+ */
+export async function refreshMyTasksWithWorklogs(
+  prev: TaskWithWorklogs[] | undefined,
+  userId: string,
+  todayStr: string,
+  cutoff: string,
+): Promise<MyTasksRefresh> {
+  const full = async (): Promise<MyTasksRefresh> => {
+    const rows = await fetchMyTasksWithWorklogs(userId, todayStr, cutoff);
+    return { rows, changed: rows, full: true };
+  };
+  if (!prev || prev.length === 0) return full();
+  const taskSince = deltaSince(prev);
+  if (!taskSince) return full();
+  const logSince = deltaSince(prev.flatMap((t) => t.worklogs ?? []));
+  const sinceLogs = logSince && logSince < taskSince ? logSince : taskSince;
+
+  const mine = (cols: string, opts?: Record<string, unknown>) =>
+    (tasksTable() as any).select(cols, opts).eq("assigned_to", userId).or(recentFilter(cutoff));
+  const [countRes, changedRes] = await Promise.all([
+    mine("id", { count: "exact", head: true }),
+    mine(WITH_WORKLOGS).gte("updated_at", taskSince).order("work_date", WORKLOG_ORDER),
+  ]);
+  if (countRes.error) throw countRes.error;
+  if (changedRes.error) throw changedRes.error;
+
+  const changed = withTodayHours(changedRes.data ?? [], todayStr);
+  let next = mergeById<TaskWithWorklogs>(prev, changed);
+  if (next.length !== (countRes.count ?? -1)) return full();
+
+  // Worklogs are written together with their task (same transaction), so a changed task row already carries its
+  // fresh worklogs. Only when NO task row changed is a worklog-only change possible: then read the held tasks'
+  // worklogs written since (never everyone's: a manager's session must not pull the whole team's).
+  let logs: TaskWorklog[] = [];
+  if (changed.length === 0) {
+    const heldIds = prev.map((t) => t.id);
+    const chunks: string[][] = [];
+    for (let i = 0; i < heldIds.length; i += 100) chunks.push(heldIds.slice(i, i + 100));
+    const logRes = await Promise.all(
+      chunks.map((ids) =>
+        (supabase.from("task_worklogs" as never) as any).select(WORKLOG_COLS).in("task_id", ids).gte("updated_at", sinceLogs),
+      ),
+    );
+    for (const r of logRes) if (r.error) throw r.error;
+    logs = logRes.flatMap((r) => (r.data ?? []) as TaskWorklog[]);
+  }
+  if (logs.length > 0) {
+    const byTask = new Map<string, TaskWorklog[]>();
+    for (const w of logs) byTask.set(w.task_id, [...(byTask.get(w.task_id) ?? []), w]);
+    next = next.map((t) => {
+      const fresh = byTask.get(t.id);
+      if (!fresh) return t;
+      const merged = mergeById<TaskWorklog>(t.worklogs ?? [], fresh).sort((a, b) => b.work_date.localeCompare(a.work_date));
+      return withTodayHours([{ ...t, worklogs: merged }], todayStr)[0];
+    });
+  }
+  return { rows: [...next].sort(byDueDate), changed, full: false };
+}
+
+/**
+ * Does the all-time "completed" total need re-counting after a delta? Only when a changed row is or was
+ * completed, or is new to the list (a re-opened old task and a brand new task look the same here). A status,
+ * timer or priority edit on a task that stays open changes nothing.
+ */
+export function completedCountMayHaveChanged(
+  prev: Array<{ id: string; status?: string | null }>,
+  changed: Array<{ id: string; status?: string | null }>,
+): boolean {
+  const before = new Map(prev.map((t) => [t.id, t.status]));
+  return changed.some((t) => t.status === "Completed" || !before.has(t.id) || before.get(t.id) === "Completed");
+}
+
 /** How many tasks `userId` has completed, ever (head-only request, no rows). */
 export async function countMyCompleted(userId: string): Promise<number> {
   const { count, error } = await (tasksTable() as any)

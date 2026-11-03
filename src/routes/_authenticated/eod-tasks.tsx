@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
+import { useAuth } from "@/hooks/use-auth";
 import {
   CheckCircle2,
   Loader2,
@@ -52,6 +53,7 @@ const PROGRESS_OPTIONS: { value: EodProgressStatus; label: string; icon: typeof 
 ];
 
 function EodTasksPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<EodTaskRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,8 @@ function EodTasksPage() {
   useEffect(() => {
     reload();
   }, []);
-  useRealtimeTasks(reload, "eod-tasks-rt");
+  // This page lists only my own tasks, so only changes to tasks assigned to me matter.
+  useRealtimeTasks(reload, "eod-tasks-rt", user?.id ? { kind: "assignee", userId: user.id } : { kind: "all" });
 
   const submittedCount = useMemo(() => rows.filter((r) => r.submission).length, [rows]);
 
