@@ -1,3 +1,14 @@
+import { loadPeopleSafe } from "@/lib/people";
+import {
+  loadMasterProjects,
+  loadTaskNameHints,
+  loadWorkItemTypes,
+  loadHolidayCalendars,
+  loadActiveLeaves,
+  invalidateTaskFormOptions,
+  type MasterProject,
+  type TaskNameHints,
+} from "@/lib/task-form-options";
 import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Dialog,
@@ -374,30 +385,13 @@ export function TaskFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    supabase
-      .from("profiles")
-      .select("id,display_name,avatar_url")
-      .then(async ({ data: profileData }) => {
-        const loadedProfiles = (profileData ?? []) as Profile[];
+    loadPeopleSafe()
+      .then(async (profileData) => {
+        const loadedProfiles = profileData;
         setProfiles(loadedProfiles);
 
-        const { data: recentTasks } = await supabase
-          .from("tasks")
-          .select("assigned_to, client, project_name, created_at")
-          .not("assigned_to", "is", null)
-          .order("created_at", { ascending: false });
-
-        const lastTasks: Record<string, { client: string; project_name: string }> = {};
-        if (recentTasks) {
-          for (const t of recentTasks) {
-            if (t.assigned_to && !lastTasks[t.assigned_to]) {
-              lastTasks[t.assigned_to] = {
-                client: t.client || "",
-                project_name: t.project_name || "",
-              };
-            }
-          }
-        }
+        // Shared, cached, bounded read (see task-form-options.ts); also feeds the project list below.
+        const lastTasks = (await loadTaskNameHints().catch(() => null))?.lastByAssignee ?? {};
         setProfileLastTasks(lastTasks);
 
         if (!initial?.id) {
@@ -436,18 +430,18 @@ export function TaskFormDialog({
           setGridRows(initialRows);
         }
       });
-    workItemTypesService.list().then(setTypes).catch(() => setTypes([]));
-    holidaysService.list().then(setHolidayCalendar).catch(() => {});
+    loadWorkItemTypes().then(setTypes).catch(() => setTypes([]));
+    loadHolidayCalendars().then(setHolidayCalendar).catch(() => {});
 
-    // Fetch both projects table AND distinct project/client names from tasks table
+    // Projects table AND distinct project/client names found on recent tasks (both cached, see task-form-options.ts)
     Promise.all([
-      supabase.from("projects").select("id, name, client").order("name", { ascending: true }),
-      supabase.from("tasks").select("project_name, client"),
-    ]).then(([projRes, taskRes]) => {
+      loadMasterProjects().catch(() => [] as MasterProject[]),
+      loadTaskNameHints().then((h) => h.pairs).catch(() => [] as TaskNameHints["pairs"]),
+    ]).then(([projRows, taskRows]) => {
       const map = new Map<string, { id: string; name: string; client: string | null }>();
 
       // 1. Add entries from projects table (case-insensitive keys)
-      (projRes.data ?? []).forEach((p) => {
+      projRows.forEach((p) => {
         if (p.name?.trim()) {
           const key = p.name.trim().toLowerCase();
           map.set(key, { id: p.id, name: p.name.trim(), client: p.client?.trim() || null });
@@ -455,7 +449,7 @@ export function TaskFormDialog({
       });
 
       // 2. Add entries directly typed by members in tasks table (deduplicating case-insensitively and splitting merged names)
-      (taskRes.data ?? []).forEach((t) => {
+      taskRows.forEach((t) => {
         if (t.project_name?.trim()) {
           const parts = t.project_name.trim().split("|");
           parts.forEach((part) => {
@@ -480,7 +474,7 @@ export function TaskFormDialog({
       setProjects(Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)));
     });
 
-    leavesService.getLeaves().then(setActiveLeaves).catch(() => {});
+    loadActiveLeaves().then(setActiveLeaves).catch(() => {});
   }, [open]);
 
   // Check if current assignee is on leave/WFH on the chosen due_date
@@ -709,6 +703,8 @@ export function TaskFormDialog({
         console.warn("Auto project master creation skipped:", err);
       }
     }
+    // The saved task may use a new project / client and is now this person's latest: the next open must see it.
+    invalidateTaskFormOptions();
   };
 
   const uploadPendingFilesToTask = async (taskId: string) => {

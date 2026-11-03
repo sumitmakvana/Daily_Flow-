@@ -1,3 +1,5 @@
+import { loadPeopleDetailedSafe } from "@/lib/people";
+import { searchTaskPage, searchTaskCounts, searchMembers, fetchFullTask, resetTaskSearch, type TaskSearchRow, type TabCounts } from "@/lib/task-search";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -35,123 +37,115 @@ const PAGE_SIZE = 6;
 export function GlobalSearchModal({ open, onOpenChange, onOpenCreateTask }: GlobalSearchModalProps) {
   const { user: authUser, isManager: authIsManager } = useAuth();
   // A member only searches their own assigned tasks (managers and admins search every task).
-  const scopeTasks = (q: any) => (authIsManager ? q : q.eq("assigned_to", authUser?.id ?? "00000000-0000-0000-0000-000000000000")); // fail closed
+  const scope = React.useMemo(
+    () => ({ userId: authUser?.id ?? "", canSeeAll: !!authIsManager }),
+    [authUser?.id, authIsManager],
+  );
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [isSearching, setIsSearching] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  
+  // The page number belongs to the search it was chosen for: a new query or tab is page 1 again,
+  // without a second request for a page that no longer exists.
+  const shapeKey = `${query.trim()}|${activeFilter}`;
+  const [pageState, setPageState] = useState<{ key: string; page: number }>({ key: shapeKey, page: 1 });
+  const currentPage = pageState.key === shapeKey ? pageState.page : 1;
+  const setCurrentPage = (v: number | ((p: number) => number)) =>
+    setPageState((prev) => {
+      const cur = prev.key === shapeKey ? prev.page : 1;
+      return { key: shapeKey, page: typeof v === "function" ? v(cur) : v };
+    });
+
   // Selected task for direct TaskDetailModal popup
   const [selectedTaskForModal, setSelectedTaskForModal] = useState<Task | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
-  const [searchResults, setSearchResults] = useState<{
-    tasks: Task[];
-    members: Profile[];
-  }>({ tasks: [], members: [] });
+  // The page on screen (short rows + the exact total), tab counters and matching people.
+  const [pageRows, setPageRows] = useState<TaskSearchRow[]>([]);
+  const [pageTotal, setPageTotal] = useState(0);
+  const [tabCounts, setTabCounts] = useState<TabCounts>({ all: 0, in_progress: 0, pending: 0, completed: 0, in_review: 0 });
+  const [members, setMembers] = useState<Profile[]>([]);
+  const [reloadTick, setReloadTick] = useState(0);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const justClosedDetailRef = useRef(false);
 
-  // Focus input & load profiles + recent tasks on open
+  // Focus input on open; reset on close
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 50);
-      loadRecentData();
     } else {
       setQuery("");
       setSelectedTaskForModal(null);
-      setCurrentPage(1);
+      setPageState({ key: "|all", page: 1 });
     }
   }, [open]);
 
-  // Reset pagination when query or tab changes
+  // People and tab counters depend on the query only (not on the tab or the page).
   useEffect(() => {
-    setCurrentPage(1);
-  }, [query, activeFilter]);
-
-  const loadRecentData = async () => {
-    setIsSearching(true);
-    try {
-      const [{ data: tasksData }, { data: membersData }] = await Promise.all([
-        scopeTasks(supabase
-          .from("tasks")
-          .select("*"))
-          .order("updated_at", { ascending: false })
-          .limit(100),
-        supabase
-          .from("profiles")
-          .select("id, display_name, email, avatar_url, team_id, manager_id"),
-      ]);
-
-      setSearchResults({
-        tasks: (tasksData ?? []) as Task[],
-        members: (membersData ?? []) as Profile[],
-      });
-      setProfiles((membersData ?? []) as Profile[]);
-    } catch (err) {
-      console.warn("Error loading recent search items:", err);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  // Debounced tokenized fuzzy search
-  useEffect(() => {
+    if (!open) return;
     const q = query.trim();
-    if (!q) {
-      if (open) loadRecentData();
+    let stale = false;
+    const timer = setTimeout(async () => {
+      try {
+        const [counts, people] = await Promise.all([
+          searchTaskCounts(scope, q),
+          q ? searchMembers(q) : loadPeopleDetailedSafe(),
+        ]);
+        if (stale) return;
+        setTabCounts(counts);
+        setMembers(people);
+        if (!q) setProfiles(people);
+      } catch (err) {
+        console.warn("Search error:", err);
+      }
+    }, q ? 120 : 0);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [open, query, scope, reloadTick]);
+
+  // The rows of the page on screen (nothing to read for the people tab).
+  useEffect(() => {
+    if (!open) return;
+    if (activeFilter === "members") {
+      setIsSearching(false);
       return;
     }
-
+    let stale = false;
+    setIsSearching(true);
+    const q = query.trim();
     const timer = setTimeout(async () => {
-      setIsSearching(true);
       try {
-        const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-        const primaryToken = tokens[0] || "";
-
-        const [{ data: tasksData }, { data: membersData }] = await Promise.all([
-          scopeTasks(supabase
-            .from("tasks")
-            .select("*"))
-            .or(
-              `task_name.ilike.%${primaryToken}%,task_code.ilike.%${primaryToken}%,project_name.ilike.%${primaryToken}%,client.ilike.%${primaryToken}%,remarks.ilike.%${primaryToken}%`
-            )
-            .limit(150),
-          supabase
-            .from("profiles")
-            .select("id, display_name, email, avatar_url, team_id, manager_id")
-            .or(`display_name.ilike.%${primaryToken}%,email.ilike.%${primaryToken}%`)
-            .limit(20),
-        ]);
-
-        const filteredTasks = ((tasksData ?? []) as Task[]).filter((t) => {
-          const combined = `${t.task_code || ""} ${t.task_name || ""} ${t.project_name || ""} ${t.client || ""} ${t.remarks || ""} ${t.status || ""} ${t.priority || ""}`.toLowerCase();
-          return tokens.every((token) => combined.includes(token));
-        });
-
-        const filteredMembers = ((membersData ?? []) as Profile[]).filter((m) => {
-          const combined = `${m.display_name || ""} ${m.email || ""}`.toLowerCase();
-          return tokens.every((token) => combined.includes(token));
-        });
-
-        setSearchResults({
-          tasks: filteredTasks,
-          members: filteredMembers,
-        });
+        const res = await searchTaskPage({ scope, query: q, tab: activeFilter, page: currentPage, pageSize: PAGE_SIZE });
+        if (stale) return;
+        setPageRows(res.rows);
+        setPageTotal(res.total);
+        // e.g. the last row of the last page was changed elsewhere
+        const pages = Math.max(1, Math.ceil(res.total / PAGE_SIZE));
+        if (res.rows.length === 0 && currentPage > pages) setCurrentPage(pages);
       } catch (err) {
         console.warn("Search error:", err);
       } finally {
-        setIsSearching(false);
+        if (!stale) setIsSearching(false);
       }
-    }, 120);
+    }, q ? 120 : 0);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, query, activeFilter, currentPage, scope, reloadTick]);
 
-    return () => clearTimeout(timer);
-  }, [query]);
+  // Re-read after the opened task was edited from the detail view.
+  const loadRecentData = () => {
+    resetTaskSearch();
+    setReloadTick((n) => n + 1);
+  };
 
   // Open ChatGPT with prompt pre-filled
-  const handleAskAI = (e?: React.MouseEvent, task?: Task) => {
+  const handleAskAI = (e?: React.MouseEvent, task?: TaskSearchRow) => {
     if (e) e.stopPropagation();
     let promptText = "";
     if (task) {
@@ -178,35 +172,26 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
   };
 
   // Direct Task Click -> Open TaskDetailModal with full card data
-  const handleOpenTaskDetail = (task: Task) => {
-    setSelectedTaskForModal(task);
+  // The list only holds short rows; the detail view reads the full row of the one task opened.
+  const handleOpenTaskDetail = async (task: TaskSearchRow) => {
+    const full = await fetchFullTask(task.id);
+    if (full) setSelectedTaskForModal(full);
+    else toast.error("Could not open this task");
   };
 
-  // Filter tasks based on selected tab
-  const filteredTasks = searchResults.tasks.filter((t) => {
-    if (activeFilter === "all") return true;
-    if (activeFilter === "in_progress") return t.status === "In Progress";
-    if (activeFilter === "pending") return t.status === "Pending" || t.status === "To Do";
-    if (activeFilter === "completed") return t.status === "Completed";
-    if (activeFilter === "in_review") return t.status === "In Review";
-    if (activeFilter === "members") return false;
-    return true;
-  });
-
-  // Calculate Tab Counts
-  const inProgressCount = searchResults.tasks.filter((t) => t.status === "In Progress").length;
-  const pendingCount = searchResults.tasks.filter((t) => t.status === "Pending" || t.status === "To Do").length;
-  const completedCount = searchResults.tasks.filter((t) => t.status === "Completed").length;
-  const inReviewCount = searchResults.tasks.filter((t) => t.status === "In Review").length;
+  // Tab counters come from the server (matching the current search, not narrowed by the tab)
+  const inProgressCount = tabCounts.in_progress;
+  const pendingCount = tabCounts.pending;
+  const completedCount = tabCounts.completed;
+  const inReviewCount = tabCounts.in_review;
 
   const showMembers = activeFilter === "all" || activeFilter === "members";
 
-  // Pagination calculation
-  const totalPages = Math.ceil(filteredTasks.length / PAGE_SIZE) || 1;
-  const paginatedTasks = filteredTasks.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
+  // Pagination: the server returned this page and the exact total
+  const filteredTasks = activeFilter === "members" ? [] : pageRows;
+  const filteredTotal = activeFilter === "members" ? 0 : pageTotal;
+  const totalPages = Math.ceil(filteredTotal / PAGE_SIZE) || 1;
+  const paginatedTasks = filteredTasks;
 
   const getStatusDotClass = (status: string) => {
     switch (status) {
@@ -276,7 +261,7 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
               )}
             >
-              All ({searchResults.tasks.length})
+              All ({tabCounts.all})
             </button>
 
             <button
@@ -347,7 +332,7 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
               )}
             >
               <Users className="h-3 w-3" />
-              <span>Team ({searchResults.members.length})</span>
+              <span>Team ({members.length})</span>
             </button>
           </div>
 
@@ -362,9 +347,9 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
                 {activeFilter === "completed" && "Completed Tasks"}
                 {activeFilter === "in_review" && "In Review Tasks"}
                 {activeFilter === "members" && "Team Members"}
-                {activeFilter === "all" && (query.trim() ? `Search Results (${filteredTasks.length})` : `Recent Tasks (${filteredTasks.length})`)}
+                {activeFilter === "all" && (query.trim() ? `Search Results (${filteredTotal})` : `Recent Tasks (${filteredTotal})`)}
               </span>
-              {filteredTasks.length > 0 && (
+              {filteredTotal > 0 && (
                 <span className="normal-case font-normal text-slate-500">
                   Page {currentPage} of {totalPages}
                 </span>
@@ -467,12 +452,12 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
             )}
 
             {/* Team Members List */}
-            {!isSearching && showMembers && searchResults.members.length > 0 && (
+            {!isSearching && showMembers && members.length > 0 && (
               <div className="space-y-1 pt-2">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">
-                  Team Members ({searchResults.members.length})
+                  Team Members ({members.length})
                 </div>
-                {searchResults.members.map((m) => (
+                {members.map((m) => (
                   <div
                     key={m.id}
                     onClick={() => {
@@ -505,7 +490,7 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
             )}
 
             {/* Empty State */}
-            {!isSearching && filteredTasks.length === 0 && (!showMembers || searchResults.members.length === 0) && (
+            {!isSearching && filteredTasks.length === 0 && (!showMembers || members.length === 0) && (
               <div className="py-12 text-center text-xs text-slate-400 bg-[#0E131F] rounded-xl border border-dashed border-slate-800/80">
                 <p>No matching tasks found.</p>
               </div>
@@ -513,10 +498,10 @@ Remarks/Details: ${task.remarks || "No additional notes"}`;
           </div>
 
           {/* 4. PAGINATION CONTROLS */}
-          {!isSearching && filteredTasks.length > PAGE_SIZE && (
+          {!isSearching && filteredTotal > PAGE_SIZE && (
             <div className="flex items-center justify-between px-4 py-2 bg-[#060810] border-t border-slate-800/80 text-xs text-slate-400">
               <span className="font-medium">
-                Showing <strong className="text-slate-200">{(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredTasks.length)}</strong> of <strong className="text-slate-200">{filteredTasks.length}</strong> tasks
+                Showing <strong className="text-slate-200">{(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredTotal)}</strong> of <strong className="text-slate-200">{filteredTotal}</strong> tasks
               </span>
               <div className="flex items-center gap-2">
                 <button

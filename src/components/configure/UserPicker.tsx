@@ -1,3 +1,4 @@
+import { loadPeopleSafe } from "@/lib/people";
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,8 +15,8 @@ export function UserPicker({
 }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   useEffect(() => {
-    supabase.from("profiles").select("id,display_name,avatar_url").order("display_name").then(({ data }) => {
-      setProfiles((data ?? []) as Profile[]);
+    loadPeopleSafe().then((rows) => {
+      setProfiles(rows.sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? "")));
     });
   }, []);
   return (
