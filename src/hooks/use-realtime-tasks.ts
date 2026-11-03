@@ -16,6 +16,8 @@ export function useRealtimeTasks(
   onChange: () => void,
   channelName = "tasks-rt",
   scope: RealtimeScope = { kind: "all" },
+  /** false = no subscription (e.g. a manager-only page opened by someone else). */
+  enabled = true,
 ) {
   const savedCallback = useRef(onChange);
   useEffect(() => {
@@ -23,6 +25,7 @@ export function useRealtimeTasks(
   }, [onChange]);
 
   useEffect(() => {
+    if (!enabled) return;
     const base = { event: "*" as const, schema: "public", table: "tasks" };
     let filter: string | undefined;
     if (scope.kind === "assignee") filter = `assigned_to=eq.${scope.userId}`;
@@ -38,6 +41,6 @@ export function useRealtimeTasks(
       supabase.removeChannel(ch);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelName, scope.kind, "userId" in scope ? scope.userId : "", "ids" in scope ? scope.ids.join(",") : ""]);
+  }, [enabled, channelName, scope.kind, "userId" in scope ? scope.userId : "", "ids" in scope ? scope.ids.join(",") : ""]);
 }
 

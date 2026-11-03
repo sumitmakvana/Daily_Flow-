@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { auth as keycloakAuth } from '../backend/auth';
 import { createRealtimeChannel } from '../realtime/channel';
-import { pokeRealtime } from '../realtime/socket';
 import { createReadOnlyFetch, isClientReadOnly } from '../../lib/read-only-fetch';
 
 function createSupabaseClient() {
@@ -72,14 +71,7 @@ function createSupabaseClient() {
         }
         // Read-only build (VITE_OPERON_READ_ONLY=1): refuse every non-GET request.
         const send = isClientReadOnly() ? createReadOnlyFetch(fetch) : fetch;
-        const method = String(options.method ?? 'GET').toUpperCase();
-        const isWrite = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
-        return send(url, options).then((res: Response) => {
-          // After a successful write, nudge the server to look for changes now so
-          // other users' screens update right away (no data is sent).
-          if (isWrite && res.ok) pokeRealtime();
-          return res;
-        });
+        return send(url, options);
       }
     }
   });

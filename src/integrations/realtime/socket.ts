@@ -315,31 +315,6 @@ export function isRealtimeConnected(): boolean {
   return !!socket?.connected;
 }
 
-let lastPoke = 0;
-let pokeTimer: ReturnType<typeof setTimeout> | null = null;
-const POKE_MIN_GAP_MS = 300;
-
-/**
- * Tell the server "I just wrote something" so it can run its read-only change
- * check immediately instead of waiting for its next periodic one. Carries no
- * data; throttled; a no-op while the socket is not connected.
- */
-export function pokeRealtime(): void {
-  if (!socket?.connected) return;
-  const gap = Date.now() - lastPoke;
-  if (gap >= POKE_MIN_GAP_MS) {
-    lastPoke = Date.now();
-    socket.emit("entity:poke");
-    return;
-  }
-  if (pokeTimer) return;
-  pokeTimer = setTimeout(() => {
-    pokeTimer = null;
-    lastPoke = Date.now();
-    if (socket?.connected) socket.emit("entity:poke");
-  }, POKE_MIN_GAP_MS - gap);
-}
-
 /** Subscribe to a server event. Safe to call before the socket connects. */
 export function onRealtime<T = unknown>(event: string, handler: (payload: T) => void): () => void {
   const s = ensureSocket();
@@ -379,7 +354,4 @@ export function __resetRealtimeForTests() {
   resyncHandlers.clear();
   safetyHandlers.clear();
   disarmSafetyNet();
-  lastPoke = 0;
-  if (pokeTimer) clearTimeout(pokeTimer);
-  pokeTimer = null;
 }

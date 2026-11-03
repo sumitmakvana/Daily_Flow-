@@ -7,8 +7,8 @@
  *
  * Auth: the client passes its Keycloak access token in `handshake.auth.token`.
  * It is verified with the same `verifyBackendJwt` used by server functions.
- * Each socket joins `user:<sub>`, the all-users room (task events; see
- * entity-events.server.ts) and `role:manager` / `role:admin` when the user has
+ * Each socket joins `user:<sub>`, the all-users room (only TRUNCATE and outage-recovery
+ * signals use it; see entity-events.server.ts) and `role:manager` / `role:admin` when the user has
  * those roles. Rooms come from the verified token and the database,
  * never from client-supplied ids.
  *
@@ -51,7 +51,8 @@ function eventLog(): EventLog {
 
 /** Which table a pushed event is about (null = not a resync-able event). */
 function tableOf(event: string, payload: unknown): string | null {
-  if (event === "notification:new") return "notifications";
+  // A read marker is part of the same resync class: a client that missed one asks "did notifications change?"
+  if (event === "notification:new" || event === "notification:read") return "notifications";
   const t = (payload as { table?: unknown } | null)?.table;
   if (typeof t === "string") return t;
   if (event === "automation:health") return "automation_health";
@@ -94,17 +95,7 @@ type SocketData = {
   userId: string;
   roleRooms?: string[];
   expTimer?: NodeJS.Timeout;
-  pokes?: number[];
 };
-
-// Called when a signed-in client reports "I just wrote something" (entity:poke).
-// It carries no data: it only asks the server to run its own read-only change check.
-let pokeHandler: (() => void) | null = null;
-export function setPokeHandler(fn: (() => void) | null) {
-  pokeHandler = fn;
-}
-const POKE_LIMIT = 10; // per socket
-const POKE_WINDOW_MS = 10_000;
 
 function extractToken(socket: Socket): string | null {
   const t = (socket.handshake.auth as { token?: unknown } | undefined)?.token;
@@ -196,24 +187,6 @@ export function attachRealtime(httpServer: HttpServer): Server {
     socket.join(ALL_USERS_ROOM); // every authenticated socket (task events)
     syncRoleRooms(socket, data.roleRooms ?? []);
     armExpiry(socket, data.exp);
-
-    // Authenticated sockets only (the middleware already rejected the rest). A
-    // client cannot inject data or choose recipients; excess pokes are ignored.
-    socket.on("entity:poke", () => {
-      const now = Date.now();
-      const recent = (data.pokes ?? []).filter((t) => now - t < POKE_WINDOW_MS);
-      if (recent.length >= POKE_LIMIT) {
-        data.pokes = recent;
-        return;
-      }
-      recent.push(now);
-      data.pokes = recent;
-      try {
-        pokeHandler?.();
-      } catch (err) {
-        console.warn("[Realtime] poke handler failed:", (err as Error).message);
-      }
-    });
 
     // "What did I miss?" Answered from the room memberships this socket actually has,
     // so a client only hears about tables it is entitled to. Carries no data.

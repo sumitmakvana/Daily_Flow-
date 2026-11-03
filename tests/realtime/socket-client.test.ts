@@ -37,7 +37,7 @@ vi.mock("@/integrations/backend/auth", () => ({
 const fireAuth = (e: string) => authListeners.forEach((cb) => cb(e, {}));
 
 import type { Server as IoServer } from "socket.io";
-import { __resetEventLogForTests, attachRealtime, emitToRooms, emitToUser, setPokeHandler } from "@/lib/realtime.server";
+import { __resetEventLogForTests, attachRealtime, emitToRooms, emitToUser } from "@/lib/realtime.server";
 
 let http: HttpServer;
 let ioServer: IoServer;
@@ -164,40 +164,6 @@ describe("frontend socket client", () => {
     expect(connects).toBeGreaterThanOrEqual(2);
     rt.stopRealtime();
   }, 20000);
-
-  it("pokeRealtime reaches the server once connected, is throttled, and is a no-op while disconnected", async () => {
-    const handler = vi.fn();
-    setPokeHandler(handler);
-    try {
-      rt.pokeRealtime(); // not started, not connected: nothing happens
-      await wait(100);
-      expect(handler).not.toHaveBeenCalled();
-
-      store.kc_token = `alice:${inSeconds(60)}`;
-      rt.startRealtime();
-      await until(() => rt.isRealtimeConnected());
-      for (let i = 0; i < 60; i++) rt.pokeRealtime(); // e.g. 60 quick writes
-      await wait(800);
-      expect(handler.mock.calls.length).toBeGreaterThanOrEqual(1);
-      expect(handler.mock.calls.length).toBeLessThanOrEqual(3); // leading + trailing, not 60
-
-      const before = handler.mock.calls.length;
-      await wait(400);
-      rt.pokeRealtime(); // a later, separate write goes through
-      await wait(200);
-      expect(handler.mock.calls.length).toBe(before + 1);
-
-      rt.stopRealtime();
-      await until(() => !rt.isRealtimeConnected());
-      const after = handler.mock.calls.length;
-      rt.pokeRealtime(); // after logout: nothing
-      await wait(300);
-      expect(handler.mock.calls.length).toBe(after);
-    } finally {
-      setPokeHandler(null);
-      rt.stopRealtime();
-    }
-  });
 
   it("reports isReconnect=true only after the first connect", async () => {
     store.kc_token = `alice:${inSeconds(60)}`;

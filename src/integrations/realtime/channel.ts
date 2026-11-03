@@ -38,8 +38,8 @@ export const PUSH_TABLES = new Set<string>([
 
 /**
  * Tables whose client poll has been removed: all of them. Events come from the
- * server (DB triggers when installed, otherwise the server's read-only change
- * watcher plus write pokes), so no client needs to poll.
+ * server (database triggers -> outbox -> LISTEN, see outbox-listener.server.ts and
+ * entity-events.server.ts for who receives what), so no client needs to poll.
  */
 export const POLL_DISABLED_TABLES = new Set<string>(PUSH_TABLES);
 
@@ -67,7 +67,50 @@ type Sub = {
   cb: (payload?: ChangePayload) => void;
   timer?: ReturnType<typeof setTimeout>;
   pending?: ChangePayload;
+  /** A change arrived while the tab was hidden: refetch once when it is visible again. */
+  dirty?: boolean;
+  lastFiredAt?: number;
 };
+
+/** A resync that follows a tab coming back skips subscribers the visibility flush just refetched. */
+const RECENT_FIRE_MS = 2000;
+
+const isHidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
+/**
+ * Hidden tabs do not refetch: the change is remembered (`dirty`) and each affected subscriber runs
+ * ONCE when the tab becomes visible. One shared listener serves every channel.
+ */
+const flushers = new Set<() => void>();
+let visibilityHooked = false;
+function onVisible() {
+  if (isHidden()) return;
+  flushers.forEach((f) => f());
+}
+function addFlusher(f: () => void) {
+  flushers.add(f);
+  if (!visibilityHooked && typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("visibilitychange", onVisible);
+    visibilityHooked = true;
+  }
+}
+function removeFlusher(f: () => void) {
+  flushers.delete(f);
+  if (flushers.size === 0 && visibilityHooked && typeof document !== "undefined") {
+    document.removeEventListener("visibilitychange", onVisible);
+    visibilityHooked = false;
+  }
+}
+
+/** Run a subscriber now, or remember to run it when the tab is visible. */
+function fire(s: Sub, payload?: ChangePayload) {
+  if (isHidden()) {
+    s.dirty = true;
+    return;
+  }
+  s.lastFiredAt = Date.now();
+  s.cb(payload);
+}
 
 const isPush = (s: Sub) => !!s.table && PUSH_TABLES.has(s.table);
 const isPollDisabled = (s: Sub) => !!s.table && POLL_DISABLED_TABLES.has(s.table);
@@ -103,12 +146,12 @@ export function createRealtimeChannel(_name: string) {
       s.pending = payload; // trailing call will use the latest
       return;
     }
-    s.cb(payload); // leading call
+    fire(s, payload); // leading call
     s.timer = setTimeout(() => {
       s.timer = undefined;
       const p = s.pending;
       s.pending = undefined;
-      if (p) s.cb(p);
+      if (p) fire(s, p);
     }, THROTTLE_MS);
   };
 
@@ -149,11 +192,26 @@ export function createRealtimeChannel(_name: string) {
           // Catch up on exactly what was missed (targeted), or everything when the server cannot tell.
           onRealtimeResync((info) => {
             for (const s of pushed) {
-              if (info.full || (s.table && info.tables.includes(s.table))) s.cb();
+              if (!(info.full || (s.table && info.tables.includes(s.table)))) continue;
+              // The tab just came back and the visibility flush already refetched this subscriber.
+              if (info.reason === "visibility" && s.lastFiredAt && Date.now() - s.lastFiredAt < RECENT_FIRE_MS) continue;
+              fire(s);
             }
           }),
           // Socket stayed down: the single shared, backed-off safety refresh.
-          onRealtimeSafetyRefresh(() => pushed.forEach((s) => s.cb())),
+          onRealtimeSafetyRefresh(() => pushed.forEach((s) => fire(s))),
+          // Tab visible again: refetch what changed while it was hidden, once per subscriber.
+          (() => {
+            const flush = () => {
+              for (const s of pushed) {
+                if (!s.dirty) continue;
+                s.dirty = false;
+                fire(s);
+              }
+            };
+            addFlusher(flush);
+            return () => removeFlusher(flush);
+          })(),
         );
       }
 
@@ -171,6 +229,7 @@ export function createRealtimeChannel(_name: string) {
         if (s.timer) clearTimeout(s.timer);
         s.timer = undefined;
         s.pending = undefined;
+        s.dirty = false;
       }
     },
     presenceState: () => ({}),

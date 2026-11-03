@@ -3,7 +3,7 @@ import { startBackgroundCronTicker } from "./lib/cron-ticker.server";
 import { startNotificationListener } from "./lib/notification-listener.server";
 import { attachRealtime } from "./lib/realtime.server";
 import { installReadOnlyGuards, isReadOnlyMode } from "./lib/read-only-mode.server";
-import { pokeEntityWatcher, startEntityWatcher } from "./lib/entity-watcher.server";
+import { startOutboxListener } from "./lib/outbox-listener.server";
 
 // Start internal 60-second EOD cron loop and notification listener automatically in Node server process.
 // In read-only mode (local run against a database that must not change) the cron
@@ -14,9 +14,9 @@ if (isReadOnlyMode()) {
   startBackgroundCronTicker();
 }
 startNotificationListener();
-// Detects task/nudge/risk/suggestion/approval changes with read-only SELECTs when
-// the database cannot push them (no triggers). Safe in read-only mode.
-void startEntityWatcher().catch((err) => console.error("[EntityWatcher] failed to start:", err));
+// Live updates: database triggers write realtime.outbox and NOTIFY; this listener routes each
+// committed change to the sockets that may see it. No polling. Safe in read-only mode (LISTEN + SELECT).
+startOutboxListener();
 
 // runner.js owns the HTTP server (PORT 8080 in the container, 7050 on the host).
 // It calls this hook once the bundle is loaded so Socket.IO shares that server
@@ -95,11 +95,6 @@ export default {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      // Any write request this server just handled (server functions, API hooks,
-      // actions) may have changed tasks etc.: have the watcher look right away.
-      if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS") {
-        pokeEntityWatcher();
-      }
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);

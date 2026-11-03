@@ -20,7 +20,7 @@ const MANAGER_ONLY_PREFIXES = [
   "/planning-suggestions",
   "/dashboard",
   "/planning",
-  "/heatmap",
+  // "/heatmap", // Heatmap temporarily disabled
   "/analytics",
   "/exports",
   "/eod",

@@ -31,7 +31,6 @@ import {
   emitToRole,
   emitToRooms,
   emitToUser,
-  setPokeHandler,
 } from "@/lib/realtime.server";
 
 const inSeconds = (n: number) => Math.floor(Date.now() / 1000) + n;
@@ -243,78 +242,17 @@ describe("all-users room (task events)", () => {
   });
 });
 
-describe("entity:poke (client says 'I just wrote something')", () => {
-  afterEach(() => setPokeHandler(null));
-
-  it("an authenticated socket's poke runs the server's change check — and carries no data", async () => {
-    const handler = vi.fn();
-    setPokeHandler(handler);
-    const s = client(`poker1:${inSeconds(60)}`);
+describe("there is no client write-poke any more (events come from the database outbox)", () => {
+  it("an entity:poke from a client is ignored: nothing is emitted to anyone", async () => {
+    const s = client(`nopoke:${inSeconds(60)}`);
+    const other = client(`nopoke2:${inSeconds(60)}`);
     await connected(s);
-    s.emit("entity:poke", { table: "tasks", assigned_to: "someone", evil: "<script>" }); // payload is ignored
-    await wait(100);
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(); // called with NO arguments: nothing the client sent is used
-  });
-
-  it("is rate-limited per socket: a spammer gets at most 10 per 10s, and the connection survives", async () => {
-    const handler = vi.fn();
-    setPokeHandler(handler);
-    const s = client(`poker2:${inSeconds(60)}`);
-    await connected(s);
-    for (let i = 0; i < 100; i++) s.emit("entity:poke");
-    await wait(300);
-    expect(handler.mock.calls.length).toBe(10);
-    expect(s.connected).toBe(true);
-  });
-
-  it("the limit is per socket: another user's pokes still work while one is throttled", async () => {
-    const handler = vi.fn();
-    setPokeHandler(handler);
-    const spam = client(`poker3:${inSeconds(60)}`);
-    const other = client(`poker4:${inSeconds(60)}`);
-    await Promise.all([connected(spam), connected(other)]);
-    for (let i = 0; i < 50; i++) spam.emit("entity:poke");
-    await wait(200);
-    const before = handler.mock.calls.length;
-    other.emit("entity:poke");
-    await wait(100);
-    expect(handler.mock.calls.length).toBe(before + 1);
-  });
-
-  it("a rejected (unauthenticated) socket can never poke", async () => {
-    const handler = vi.fn();
-    setPokeHandler(handler);
-    const bad = client(null);
-    await once(bad, "connect_error");
-    bad.emit("entity:poke");
+    await connected(other);
+    const got = vi.fn();
+    other.onAny(got);
+    s.emit("entity:poke", { table: "tasks", evil: "<script>" });
     await wait(150);
-    expect(handler).not.toHaveBeenCalled();
-  });
-
-  it("a throwing handler is contained: logged, socket stays connected, later pokes still work", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const handler = vi.fn().mockImplementationOnce(() => {
-      throw new Error("boom");
-    });
-    setPokeHandler(handler);
-    const s = client(`poker5:${inSeconds(60)}`);
-    await connected(s);
-    s.emit("entity:poke");
-    await wait(100);
-    s.emit("entity:poke");
-    await wait(100);
-    expect(s.connected).toBe(true);
-    expect(handler).toHaveBeenCalledTimes(2);
-    warn.mockRestore();
-  });
-
-  it("with no handler installed (watcher disabled) a poke is a harmless no-op", async () => {
-    setPokeHandler(null);
-    const s = client(`poker6:${inSeconds(60)}`);
-    await connected(s);
-    s.emit("entity:poke");
-    await wait(100);
+    expect(got).not.toHaveBeenCalled();
     expect(s.connected).toBe(true);
   });
 });
@@ -394,6 +332,37 @@ describe("resync (missed-update recovery)", () => {
     expect(forMgr.tables).not.toContain("notifications"); // alice's and bob's notifications are not the manager's
     a.close();
     m.close();
+  });
+
+  it("notification:read reaches only the owner's sockets and counts as a notifications change for them alone", async () => {
+    const a1 = client(`alice:${inSeconds(60)}`);
+    const a2 = client(`alice:${inSeconds(60)}`);
+    const b = client(`bob:${inSeconds(60)}`);
+    await Promise.all([connected(a1), connected(a2), connected(b)]);
+    const baseA = await ask(a1, { bootId: null, seq: null });
+    const baseB = await ask(b, { bootId: null, seq: null });
+
+    const got1 = new Promise<unknown[]>((res) => a1.once("notification:read", (...args) => res(args)));
+    const got2 = new Promise<unknown[]>((res) => a2.once("notification:read", (...args) => res(args)));
+    let bobHeard = false;
+    b.on("notification:read", () => (bobHeard = true));
+    emitToUser("alice", "notification:read", { ids: ["n1", "n2"], read_at: "2026-11-02T10:00:00Z" });
+
+    // every tab of the owner hears it, with the payload unchanged and a { seq, boot } stamp
+    for (const g of await Promise.all([got1, got2])) {
+      const [payload, meta] = g as [unknown, { seq: number; boot: string }];
+      expect(payload).toEqual({ ids: ["n1", "n2"], read_at: "2026-11-02T10:00:00Z" });
+      expect(typeof meta.seq).toBe("number");
+    }
+    await wait(100);
+    expect(bobHeard).toBe(false);
+
+    // a client that missed it learns "notifications changed"; another user does not
+    expect((await ask(a1, { bootId: baseA.bootId, seq: baseA.seq })).tables).toEqual(["notifications"]);
+    expect((await ask(b, { bootId: baseB.bootId, seq: baseB.seq })).tables).toEqual([]);
+    a1.close();
+    a2.close();
+    b.close();
   });
 
   it("nothing changed since the given position = empty list, not a full refetch", async () => {
