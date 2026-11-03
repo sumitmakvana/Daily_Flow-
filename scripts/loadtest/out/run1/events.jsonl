@@ -1,0 +1,25 @@
+{"t":1793620165542,"user":"ltmgr5","msg":"session:start"}
+{"t":1793620165697,"user":"ltmgr5","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793620166258,"user":"ltmgr1","msg":"session:start"}
+{"t":1793620166489,"user":"ltmgr1","msg":"nav","route":"/planning","url":"http://localhost:7050/planning"}
+{"t":1793620169469,"user":"ltmgr4","msg":"session:start"}
+{"t":1793620169602,"user":"ltmgr4","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793620170953,"user":"ltmem4","msg":"session:start"}
+{"t":1793620171183,"user":"ltmem5","msg":"session:start"}
+{"t":1793620171187,"user":"ltmem4","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793620171381,"user":"ltmem5","msg":"nav","route":"/my-day","url":"http://localhost:7050/my-day"}
+{"t":1793620172394,"user":"ltmem3","msg":"session:start"}
+{"t":1793620172601,"user":"ltmem3","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793620172868,"user":"ltmgr3","msg":"session:start"}
+{"t":1793620172993,"user":"ltmgr3","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793620173648,"user":"ltmem2","msg":"session:start"}
+{"t":1793620173855,"user":"ltmem2","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793620181543,"user":"ltmgr2","msg":"session:start"}
+{"t":1793620181691,"user":"ltmgr2","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793620184385,"user":"ltmem1","msg":"session:start"}
+{"t":1793620184519,"user":"ltmem1","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793620206570,"user":"ltmem5","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793620222974,"user":"ltmem4","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793620223314,"user":"ltmgr2","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793620224400,"user":"ltmgr1","msg":"nav:error","route":"/workload","err":"Error: page.goto: Target page, context or browser has been closed"}
+{"t":1793620224466,"user":"ltmem1","msg":"nav:error","route":"/calendar","err":"Error: locator.click: Target page, context or browser has been closed\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class="}

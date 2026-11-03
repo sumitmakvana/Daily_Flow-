@@ -1,0 +1,140 @@
+# DailyFlow LAN stack - run the app on one Windows PC, open it from other devices on the same
+# Wi-Fi at http://<LAN_IP>:<APP_PORT>. Standalone: own project name, volume and ports, so it never
+# touches infra/docker-compose.yml (prod) or infra/docker-compose.local.yml (local).
+# Run via start.ps1 (it detects LAN_IP, restores the DB once and configures Keycloak).
+#
+# Exposed to the LAN: app (APP_PORT), PostgREST via caddy (API_PORT), Keycloak via caddy (AUTH_PORT).
+# PostgreSQL, PostgREST and Keycloak have no host port: they are reachable only on the compose network.
+#
+# NOTE: the browser derives the Keycloak URL by replacing "7050" with "7052" in the app's host
+# (src/integrations/backend/auth.ts), so APP_PORT must contain 7050 and AUTH_PORT the same with 7052.
+name: dailyflow-lan
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_cron
+      - -c
+      - cron.database_name=${POSTGRES_DB}
+    volumes:
+      - pgdata_lan:/var/lib/postgresql/data
+      - ../sql:/sql:ro
+      - ./00-roles.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgrest:
+    image: postgrest/postgrest:v12.2.0
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+    environment:
+      PGRST_DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      # JWKS holding the Keycloak realm public keys + service-role key (same value as the local stack).
+      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "true"
+      # Browser origins allowed to call the API (the page origin is the app on the LAN IP).
+      PGRST_SERVER_CORS_ALLOWED_ORIGINS: http://${LAN_IP}:${APP_PORT},http://${LAN_IP}:${API_PORT},http://${LAN_IP}:${AUTH_PORT},http://localhost:${APP_PORT},http://127.0.0.1:${APP_PORT}
+    expose:
+      - "3000"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.5
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_DB_SCHEMA: keycloak
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /
+      # Build public URLs from the request Host (LAN IP), not a fixed hostname.
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+      JAVA_OPTS_APPEND: "-Xms64m -Xmx256m -Dkeycloak.migration.action=import -Dkeycloak.migration.provider=singleFile -Dkeycloak.migration.file=/opt/keycloak/data/import/realm.json -Dkeycloak.migration.strategy=IGNORE_EXISTING"
+    volumes:
+      - ../keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 120s
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        # Baked into the browser bundle: rebuilt automatically when LAN_IP / API_PORT change.
+        - VITE_SUPABASE_URL=http://${LAN_IP}:${API_PORT}
+        - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:${APP_PORT}:8080"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # server-side calls go through the caddy alias (see Caddyfile.lan)
+      - SUPABASE_URL=http://caddy:7051
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+      - BACKEND_MODE=self
+      - PORT=8080
+      # The cron ticker calls the app's own hooks; inside the container that is port 8080.
+      - APP_URL=http://127.0.0.1:8080
+      - CRON_SECRET=${CRON_SECRET}
+      - MS_TENANT_ID=${MS_TENANT_ID:-}
+      - MS_CLIENT_ID=${MS_CLIENT_ID:-}
+      - MS_CLIENT_SECRET=${MS_CLIENT_SECRET:-}
+      - MS_SENDER_EMAIL=${MS_SENDER_EMAIL:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - EMAIL_FROM=${EMAIL_FROM:-}
+      # Firebase Admin (FCM push). Single-line service-account JSON; leave empty to disable push.
+      - FCM_SERVICE_ACCOUNT_JSON=${FCM_SERVICE_ACCOUNT_JSON:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:${API_PORT}:7051"
+      - "0.0.0.0:${AUTH_PORT}:7052"
+    volumes:
+      - ./Caddyfile.lan:/etc/caddy/Caddyfile:ro
+
+volumes:
+  pgdata_lan:

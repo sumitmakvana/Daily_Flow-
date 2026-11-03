@@ -1,5 +1,6 @@
 http://{$API_DOMAIN} {
     uri strip_prefix /rest/v1
+    encode zstd gzip
     reverse_proxy postgrest:3000
 }
 

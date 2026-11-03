@@ -1,0 +1,62 @@
+[
+  {
+    "n": "ltmgr1",
+    "role": "manager",
+    "email": "ltmgr1@loadtest.local",
+    "id": "0425cfee-279f-4026-b495-9e97438f567e"
+  },
+  {
+    "n": "ltmgr2",
+    "role": "manager",
+    "email": "ltmgr2@loadtest.local",
+    "id": "6ad438bc-1797-447e-ac1d-e054fbddb1e5"
+  },
+  {
+    "n": "ltmgr3",
+    "role": "manager",
+    "email": "ltmgr3@loadtest.local",
+    "id": "70132b1a-44f3-4714-a537-6581ef240b67"
+  },
+  {
+    "n": "ltmgr4",
+    "role": "manager",
+    "email": "ltmgr4@loadtest.local",
+    "id": "b7e3d427-b86a-475b-940b-46b6bdbc061a"
+  },
+  {
+    "n": "ltmgr5",
+    "role": "manager",
+    "email": "ltmgr5@loadtest.local",
+    "id": "b68e54e2-2359-4b36-abc3-f7e9dd07a486"
+  },
+  {
+    "n": "ltmem1",
+    "role": "member",
+    "email": "ltmem1@loadtest.local",
+    "id": "ced86182-c902-4ab0-ba4f-bd3040d98101"
+  },
+  {
+    "n": "ltmem2",
+    "role": "member",
+    "email": "ltmem2@loadtest.local",
+    "id": "93a93ce8-640f-466b-bc33-cde2a647cc55"
+  },
+  {
+    "n": "ltmem3",
+    "role": "member",
+    "email": "ltmem3@loadtest.local",
+    "id": "5731af6e-4f74-4250-82e2-66565f46a18d"
+  },
+  {
+    "n": "ltmem4",
+    "role": "member",
+    "email": "ltmem4@loadtest.local",
+    "id": "efd8c7c2-1073-4fbc-b5b8-12b53b3d42ee"
+  },
+  {
+    "n": "ltmem5",
+    "role": "member",
+    "email": "ltmem5@loadtest.local",
+    "id": "993f87fb-2005-4cdf-b69b-90dbadbbb9a5"
+  }
+]

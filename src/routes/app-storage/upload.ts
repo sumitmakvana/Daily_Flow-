@@ -4,6 +4,15 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const BUCKET = "work-item-files";
 
+let fileDataColumn: Promise<unknown> | null = null;
+function ensureFileDataColumn() {
+  fileDataColumn ??= adminQuery("ALTER TABLE public.attachments ADD COLUMN IF NOT EXISTS file_data bytea").catch((err) => {
+    fileDataColumn = null; // retry on the next upload
+    throw err;
+  });
+  return fileDataColumn;
+}
+
 export const Route = createFileRoute("/app-storage/upload")({
   server: {
     handlers: {
@@ -25,8 +34,8 @@ export const Route = createFileRoute("/app-storage/upload")({
             const buffer = Buffer.from(arrayBuffer);
             const workItemId = path.split("/")[0];
 
-            // Ensure bytea column exists
-            await adminQuery("ALTER TABLE public.attachments ADD COLUMN IF NOT EXISTS file_data bytea");
+            // Ensure bytea column exists (DDL takes a catalog lock: once per process, not per upload)
+            await ensureFileDataColumn();
 
             // Store binary buffer in attachments table
             await adminQuery(

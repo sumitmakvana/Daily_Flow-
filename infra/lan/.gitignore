@@ -1,0 +1,2 @@
+# .env.lan holds secrets and stays untracked; only the example is committed.
+!.env.lan.example

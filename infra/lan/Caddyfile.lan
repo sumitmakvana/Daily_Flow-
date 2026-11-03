@@ -1,0 +1,22 @@
+# LAN stack Caddy. Listens on fixed container ports; compose maps them to
+# API_PORT / AUTH_PORT on the host. Plain http (no TLS) on the LAN, so auto_https is off.
+# Host-agnostic (":port") so the LAN IP, localhost and the in-network "caddy" alias all match.
+#
+# CORS: PostgREST answers preflights itself and restricts origins via
+# PGRST_SERVER_CORS_ALLOWED_ORIGINS; Keycloak uses the client's webOrigins.
+# Neither is duplicated here, to avoid double Access-Control-* headers.
+{
+    auto_https off
+}
+
+# API (PostgREST). The app container also calls this server-side via http://caddy:7051.
+:7051 {
+    uri strip_prefix /rest/v1
+    encode zstd gzip
+    reverse_proxy postgrest:3000
+}
+
+# Auth (Keycloak)
+:7052 {
+    reverse_proxy keycloak:8080
+}

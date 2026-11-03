@@ -1,0 +1,339 @@
+{"t":1793443135505,"user":"ltmgr2","msg":"session:start"}
+{"t":1793443135736,"user":"ltmgr2","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793443135800,"user":"ltmem2","msg":"session:start"}
+{"t":1793443136019,"user":"ltmem2","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793443136473,"user":"ltmem4","msg":"session:start"}
+{"t":1793443136703,"user":"ltmem4","msg":"nav","route":"/notebook","url":"http://localhost:7050/notebook"}
+{"t":1793443137091,"user":"ltmgr1","msg":"session:start"}
+{"t":1793443137241,"user":"ltmgr1","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793443141749,"user":"ltmem5","msg":"session:start"}
+{"t":1793443141862,"user":"ltmem5","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793443143957,"user":"ltmgr3","msg":"session:start"}
+{"t":1793443144090,"user":"ltmgr3","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443145051,"user":"ltmgr4","msg":"session:start"}
+{"t":1793443145191,"user":"ltmgr4","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443148514,"user":"ltmem3","msg":"session:start"}
+{"t":1793443148673,"user":"ltmem3","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793443150873,"user":"ltmgr5","msg":"session:start"}
+{"t":1793443151078,"user":"ltmgr5","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443152800,"user":"ltmem1","msg":"session:start"}
+{"t":1793443152982,"user":"ltmem1","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793443173462,"user":"ltmgr2","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793443197358,"user":"ltmgr3","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443204513,"user":"ltmgr1","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793443207910,"user":"ltmem2","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443217158,"user":"ltmgr5","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793443218242,"user":"ltmem5","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a aria-current=\"page\" data-status=\"a"}
+{"t":1793443227670,"user":"ltmem3","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793443227705,"user":"ltmem4","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793443231347,"user":"ltmgr4","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793443231649,"user":"ltmem1","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793443240174,"user":"ltmgr2","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443260062,"user":"ltmgr5","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793443268923,"user":"ltmem2","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793443276567,"user":"ltmgr3","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793443276643,"user":"ltmgr1","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443292715,"user":"ltmem5","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793443293978,"user":"ltmgr2","msg":"nav","route":"/reviews","url":"http://localhost:7050/reviews"}
+{"t":1793443302501,"user":"ltmgr4","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443307485,"user":"ltmem1","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793443312882,"user":"ltmem4","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793443317103,"user":"ltmgr3","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793443323951,"user":"ltmem3","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a aria-current=\"page\" data-status=\"a"}
+{"t":1793443327363,"user":"ltmgr5","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443345228,"user":"ltmem2","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443352170,"user":"ltmgr1","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793443357795,"user":"ltmgr2","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793443359788,"user":"ltmgr3","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443364787,"user":"ltmgr4","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443375845,"user":"ltmem3","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443381762,"user":"ltmem5","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793443390912,"user":"ltmem1","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793443402616,"user":"ltmgr5","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443404567,"user":"ltmem4","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443406638,"user":"ltmgr3","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793443422667,"user":"ltmem4","msg":"reload"}
+{"t":1793443423779,"user":"ltmem2","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793443425726,"user":"ltmem3","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443426113,"user":"ltmgr1","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793443431097,"user":"ltmgr2","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443432948,"user":"ltmem1","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793443434512,"user":"ltmem5","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443440652,"user":"ltmem4","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443451751,"user":"ltmgr4","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443460833,"user":"ltmgr5","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793443471752,"user":"ltmem5","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793443471796,"user":"ltmgr1","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793443475309,"user":"ltmgr3","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793443481043,"user":"ltmgr5","msg":"reload"}
+{"t":1793443496439,"user":"ltmgr4","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443498181,"user":"ltmem3","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793443500164,"user":"ltmgr2","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793443503629,"user":"ltmem2","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793443504571,"user":"ltmgr5","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793443506617,"user":"ltmem1","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793443515001,"user":"ltmem3","msg":"reload"}
+{"t":1793443524305,"user":"ltmem2","msg":"reload"}
+{"t":1793443525302,"user":"ltmem5","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443529014,"user":"ltmem4","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793443549511,"user":"ltmgr3","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793443556212,"user":"ltmgr1","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793443560949,"user":"ltmem3","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443565357,"user":"ltmgr2","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793443572478,"user":"ltmem1","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793443572940,"user":"ltmem2","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443573884,"user":"ltmgr4","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793443576136,"user":"ltmem5","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443579027,"user":"ltmgr5","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793443590127,"user":"ltmgr2","msg":"reload"}
+{"t":1793443602513,"user":"ltmgr1","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443604201,"user":"ltmem4","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793443614239,"user":"ltmem3","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793443616857,"user":"ltmgr2","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793443620206,"user":"ltmem2","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793443628604,"user":"ltmgr3","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793443636838,"user":"ltmem5","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793443649382,"user":"ltmgr5","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793443658525,"user":"ltmem1","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443659995,"user":"ltmem3","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443661475,"user":"ltmgr4","msg":"nav","route":"/planning","url":"http://localhost:7050/planning"}
+{"t":1793443671262,"user":"ltmgr1","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793443674288,"user":"ltmem1","msg":"reload"}
+{"t":1793443676893,"user":"ltmem2","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443681602,"user":"ltmgr3","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793443694497,"user":"ltmem4","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443696718,"user":"ltmgr2","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793443711534,"user":"ltmem3","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793443721294,"user":"ltmgr5","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793443724248,"user":"ltmgr1","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793443727743,"user":"ltmem5","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443729377,"user":"ltmgr3","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793443749216,"user":"ltmem1","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793443751037,"user":"ltmgr2","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793443752893,"user":"ltmem2","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443753624,"user":"ltmem3","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443755515,"user":"ltmgr4","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443781187,"user":"ltmem4","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793443791674,"user":"ltmgr1","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793443792424,"user":"ltmgr3","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793443793422,"user":"ltmem5","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443805557,"user":"ltmem3","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443809488,"user":"ltmgr5","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793443809709,"user":"ltmgr2","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793443813994,"user":"ltmem2","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793443816712,"user":"ltmgr3","msg":"reload"}
+{"t":1793443818444,"user":"ltmgr4","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793443831831,"user":"ltmgr5","msg":"reload"}
+{"t":1793443831994,"user":"ltmem1","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443836459,"user":"ltmgr2","msg":"reload"}
+{"t":1793443838975,"user":"ltmem4","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793443845011,"user":"ltmgr1","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443855449,"user":"ltmem5","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793443856921,"user":"ltmgr3","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793443860626,"user":"ltmem3","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793443866784,"user":"ltmgr5","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793443879105,"user":"ltmgr4","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793443886195,"user":"ltmem1","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793443900138,"user":"ltmem2","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793443900398,"user":"ltmgr4","msg":"reload"}
+{"t":1793443902256,"user":"ltmem5","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793443905091,"user":"ltmgr1","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793443907877,"user":"ltmem4","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793443908055,"user":"ltmgr2","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793443916376,"user":"ltmem3","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793443926129,"user":"ltmgr1","msg":"reload"}
+{"t":1793443929051,"user":"ltmgr5","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793443944352,"user":"ltmgr2","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793443945075,"user":"ltmem5","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793443946350,"user":"ltmem1","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443949538,"user":"ltmgr3","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793443956596,"user":"ltmem4","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793443959430,"user":"ltmgr4","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793443967529,"user":"ltmem1","msg":"reload"}
+{"t":1793443972616,"user":"ltmgr1","msg":"nav","route":"/reviews","url":"http://localhost:7050/reviews"}
+{"t":1793443979079,"user":"ltmem2","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793443988794,"user":"ltmem5","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793443991027,"user":"ltmem3","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444003036,"user":"ltmgr5","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444015668,"user":"ltmgr3","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793444017047,"user":"ltmem4","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793444020738,"user":"ltmgr4","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793444023411,"user":"ltmgr2","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793444029584,"user":"ltmem1","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793444053376,"user":"ltmgr1","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793444065154,"user":"ltmem2","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793444070053,"user":"ltmem3","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793444070704,"user":"ltmgr4","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793444075398,"user":"ltmem5","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444084354,"user":"ltmgr5","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793444094435,"user":"ltmgr2","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793444096221,"user":"ltmem1","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793444110682,"user":"ltmem4","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793444111073,"user":"ltmgr3","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793444111642,"user":"ltmgr4","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793444111760,"user":"ltmem2","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793444121114,"user":"ltmem3","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793444123313,"user":"ltmgr5","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793444126707,"user":"ltmgr3","msg":"reload"}
+{"t":1793444129685,"user":"ltmem2","msg":"reload"}
+{"t":1793444137781,"user":"ltmgr1","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793444142946,"user":"ltmgr3","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444154354,"user":"ltmgr5","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444162496,"user":"ltmgr4","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793444169235,"user":"ltmem5","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793444174197,"user":"ltmem3","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444175899,"user":"ltmgr2","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444176068,"user":"ltmem4","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444179163,"user":"ltmgr3","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793444189785,"user":"ltmem2","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793444196898,"user":"ltmem1","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444202641,"user":"ltmgr1","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444214344,"user":"ltmgr5","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793444214919,"user":"ltmgr3","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793444219168,"user":"ltmgr2","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444233816,"user":"ltmgr4","msg":"nav","route":"/reviews","url":"http://localhost:7050/reviews"}
+{"t":1793444240121,"user":"ltmem2","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793444251620,"user":"ltmem5","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793444258105,"user":"ltmgr4","msg":"reload"}
+{"t":1793444261023,"user":"ltmem1","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444261263,"user":"ltmem3","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444268813,"user":"ltmem4","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444271747,"user":"ltmgr3","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793444277657,"user":"ltmgr5","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444281305,"user":"ltmgr4","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793444282528,"user":"ltmgr2","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793444287236,"user":"ltmgr1","msg":"nav","route":"/planning","url":"http://localhost:7050/planning"}
+{"t":1793444291402,"user":"ltmem4","msg":"reload"}
+{"t":1793444304717,"user":"ltmem2","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444304813,"user":"ltmem5","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444308006,"user":"ltmem3","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444320045,"user":"ltmem1","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444321909,"user":"ltmgr4","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444323207,"user":"ltmgr1","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793444328810,"user":"ltmem3","msg":"reload"}
+{"t":1793444334077,"user":"ltmgr5","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793444345275,"user":"ltmgr2","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793444352630,"user":"ltmgr5","msg":"reload"}
+{"t":1793444354375,"user":"ltmgr1","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793444354953,"user":"ltmgr3","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793444357745,"user":"ltmem5","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444359963,"user":"ltmem4","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793444362693,"user":"ltmem3","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444365798,"user":"ltmem2","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793444369830,"user":"ltmgr2","msg":"reload"}
+{"t":1793444373055,"user":"ltmem1","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444378891,"user":"ltmgr5","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793444381300,"user":"ltmgr4","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793444384387,"user":"ltmem4","msg":"reload"}
+{"t":1793444387481,"user":"ltmem1","msg":"reload"}
+{"t":1793444390734,"user":"ltmgr3","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793444392730,"user":"ltmem5","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444399149,"user":"ltmgr1","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793444418020,"user":"ltmem2","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444419432,"user":"ltmem4","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793444433886,"user":"ltmgr5","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444440785,"user":"ltmgr2","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793444441420,"user":"ltmem5","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793444454131,"user":"ltmem3","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444457697,"user":"ltmgr3","msg":"nav","route":"/reviews","url":"http://localhost:7050/reviews"}
+{"t":1793444459967,"user":"ltmem1","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444460838,"user":"ltmgr1","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793444464413,"user":"ltmgr4","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444479226,"user":"ltmem2","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793444484671,"user":"ltmgr5","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444497325,"user":"ltmem5","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444498828,"user":"ltmem1","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" class=\"flex items-center g"}
+{"t":1793444503466,"user":"ltmgr4","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793444505900,"user":"ltmem4","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444512908,"user":"ltmgr2","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793444518618,"user":"ltmgr1","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444522692,"user":"ltmgr4","msg":"reload"}
+{"t":1793444529353,"user":"ltmem3","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444542653,"user":"ltmem2","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793444545212,"user":"ltmgr3","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793444549745,"user":"ltmgr5","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793444551463,"user":"ltmem1","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444560807,"user":"ltmem5","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444570628,"user":"ltmgr5","msg":"reload"}
+{"t":1793444577319,"user":"ltmgr1","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444581871,"user":"ltmgr4","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444582542,"user":"ltmem3","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444588255,"user":"ltmgr5","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444590845,"user":"ltmem4","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444597162,"user":"ltmgr2","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793444601821,"user":"ltmgr3","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793444603402,"user":"ltmem3","msg":"reload"}
+{"t":1793444625105,"user":"ltmem2","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444632699,"user":"ltmem1","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444644177,"user":"ltmgr3","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444645667,"user":"ltmem5","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444650414,"user":"ltmem4","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793444655214,"user":"ltmem1","msg":"reload"}
+{"t":1793444658047,"user":"ltmgr4","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793444667476,"user":"ltmgr1","msg":"nav","route":"/time-tracking","url":"http://localhost:7050/time-tracking"}
+{"t":1793444669371,"user":"ltmem3","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444677250,"user":"ltmgr5","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793444683064,"user":"ltmem3","msg":"reload"}
+{"t":1793444684235,"user":"ltmgr3","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793444685156,"user":"ltmgr2","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793444697383,"user":"ltmem1","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444711229,"user":"ltmgr5","msg":"nav","route":"/reviews","url":"http://localhost:7050/reviews"}
+{"t":1793444715469,"user":"ltmem4","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793444717195,"user":"ltmem2","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444719020,"user":"ltmgr4","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444720128,"user":"ltmgr1","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793444728159,"user":"ltmem5","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444735252,"user":"ltmem3","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793444751841,"user":"ltmgr3","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793444762310,"user":"ltmem5","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444769706,"user":"ltmgr2","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793444780589,"user":"ltmgr5","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793444784332,"user":"ltmem2","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444785388,"user":"ltmem1","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444791369,"user":"ltmgr1","msg":"nav","route":"/manager","url":"http://localhost:7050/manager"}
+{"t":1793444802495,"user":"ltmem3","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793444803047,"user":"ltmgr4","msg":"nav","route":"/workload","url":"http://localhost:7050/workload"}
+{"t":1793444809109,"user":"ltmgr2","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793444814696,"user":"ltmem4","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444828004,"user":"ltmgr3","msg":"nav","route":"/command","url":"http://localhost:7050/command"}
+{"t":1793444839871,"user":"ltmgr4","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793444842366,"user":"ltmem1","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444848923,"user":"ltmem3","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444850029,"user":"ltmgr1","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793444850642,"user":"ltmgr2","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793444851817,"user":"ltmem5","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793444858170,"user":"ltmgr5","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793444863013,"user":"ltmem2","msg":"nav:error","route":"/calendar","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/calendar\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/calendar\" class=\"px-2.5 py-1 rou"}
+{"t":1793444891375,"user":"ltmem3","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444894775,"user":"ltmgr2","msg":"nav","route":"/planning","url":"http://localhost:7050/planning"}
+{"t":1793444901967,"user":"ltmem4","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444903509,"user":"ltmgr3","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793444907398,"user":"ltmem1","msg":"nav:error","route":"/notebook","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notebook\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notebook\" class=\"px-2.5 py-1 rou"}
+{"t":1793444925156,"user":"ltmgr4","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793444928150,"user":"ltmgr3","msg":"reload"}
+{"t":1793444928851,"user":"ltmem5","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444937392,"user":"ltmgr2","msg":"nav","route":"/notifications","url":"http://localhost:7050/notifications"}
+{"t":1793444939927,"user":"ltmgr1","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
+{"t":1793444944882,"user":"ltmgr5","msg":"nav","route":"/reviews","url":"http://localhost:7050/reviews"}
+{"t":1793444948738,"user":"ltmem3","msg":"nav","route":"/today","url":"http://localhost:7050/today"}
+{"t":1793444948959,"user":"ltmem2","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793444952558,"user":"ltmgr4","msg":"reload"}
+{"t":1793444964296,"user":"ltmem1","msg":"nav:error","route":"/tasks","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/tasks\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/tasks\" class=\"px-2.5 py-1 rounded-m"}
+{"t":1793444979077,"user":"ltmgr4","msg":"nav","route":"/eod-tasks","url":"http://localhost:7050/eod-tasks"}
+{"t":1793444980562,"user":"ltmem4","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793444995376,"user":"ltmem4","msg":"reload"}
+{"t":1793444997878,"user":"ltmem2","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793444998562,"user":"ltmgr2","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793445002754,"user":"ltmgr3","msg":"nav","route":"/dashboard","url":"http://localhost:7050/dashboard"}
+{"t":1793445005102,"user":"ltmgr5","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793445007303,"user":"ltmem5","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793445007589,"user":"ltmgr1","msg":"nav","route":"/tasks","url":"http://localhost:7050/tasks"}
+{"t":1793445017503,"user":"ltmgr4","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793445019855,"user":"ltmem2","msg":"reload"}
+{"t":1793445028286,"user":"ltmem1","msg":"nav:error","route":"/notifications","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/notifications\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/notifications\" class=\"px-2."}
+{"t":1793445032586,"user":"ltmgr2","msg":"nav","route":"/executive","url":"http://localhost:7050/executive"}
+{"t":1793445033945,"user":"ltmem4","msg":"nav","route":"/leaves","url":"http://localhost:7050/leaves"}
+{"t":1793445041237,"user":"ltmem3","msg":"nav:error","route":"/my-day","err":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/my-day\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/my-day\" aria-current=\"page\" data-s"}
+{"t":1793445042632,"user":"ltmem2","msg":"nav","route":"/eod","url":"http://localhost:7050/eod"}
+{"t":1793445050263,"user":"ltmgr5","msg":"nav","route":"/calendar","url":"http://localhost:7050/calendar"}
+{"t":1793445050563,"user":"ltmgr4","msg":"nav","route":"/team-capacity","url":"http://localhost:7050/team-capacity"}
