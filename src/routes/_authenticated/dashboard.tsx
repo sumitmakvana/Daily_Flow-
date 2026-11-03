@@ -1,3 +1,9 @@
+// TEMPORARILY DISABLED: the /dashboard route and its API/database calls are commented out.
+// Only /team-capacity is in use. Remove the block comment below (and the matching "temporarily disabled"
+// comments in routeTree.gen.ts, _authenticated.tsx, HolidayBanner.tsx, services/risks*.ts, services/task-eod*.ts
+// and the related tests) to re-enable.
+export {};
+/*
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -156,3 +162,4 @@ function Tile({ icon, label, value, tone }: { icon: React.ReactNode; label: stri
     </Card>
   );
 }
+*/

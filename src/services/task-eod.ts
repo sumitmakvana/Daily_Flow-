@@ -1,8 +1,9 @@
 import {
   listMyEodTasksFn,
   upsertTaskEodFn,
-  listEodForDateFn,
-  acknowledgeEodFn,
+// DISABLED: used only by TaskEodReviewCard on /dashboard (disabled). Restore together with it.
+//   listEodForDateFn,
+//   acknowledgeEodFn,
   type EodTaskRow,
   type ManagerEodRow,
   type EodProgressStatus,
@@ -25,10 +26,11 @@ export const taskEodService = {
       data: { taskId, progressStatus, actualHours, note },
     })) as unknown as TaskEodSubmission;
   },
-  async listForDate(date: string): Promise<ManagerEodRow[]> {
-    return (await listEodForDateFn({ data: { date } })) as unknown as ManagerEodRow[];
-  },
-  async acknowledge(id: string): Promise<void> {
-    await acknowledgeEodFn({ data: { id } });
-  },
+// DISABLED: used only by TaskEodReviewCard on /dashboard (disabled). Restore together with it.
+//   async listForDate(date: string): Promise<ManagerEodRow[]> {
+//     return (await listEodForDateFn({ data: { date } })) as unknown as ManagerEodRow[];
+//   },
+//   async acknowledge(id: string): Promise<void> {
+//     await acknowledgeEodFn({ data: { id } });
+//   },
 };

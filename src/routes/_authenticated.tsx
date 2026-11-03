@@ -13,18 +13,18 @@ import { NotificationsProvider } from "@/hooks/use-notifications";
  */
 const MANAGER_ONLY_PREFIXES = [
   "/manager",
-  "/command",
+  // "/command", // Command temporarily disabled
   "/executive",
   "/forecast",
   "/intelligence",
   "/planning-suggestions",
-  "/dashboard",
+  // "/dashboard", // Dashboard temporarily disabled
   "/planning",
   // "/heatmap", // Heatmap temporarily disabled
   "/analytics",
   "/exports",
   "/eod",
-  "/workload",
+  // "/workload", // Workload temporarily disabled
   "/reports",
 ];
 

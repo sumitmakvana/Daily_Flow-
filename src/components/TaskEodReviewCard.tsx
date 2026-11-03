@@ -1,3 +1,9 @@
+// TEMPORARILY DISABLED: TaskEodReviewCard (used only by /dashboard) is commented out.
+// Only /team-capacity is in use. Remove the block comment below (and the matching "temporarily disabled"
+// comments in routeTree.gen.ts, _authenticated.tsx, HolidayBanner.tsx, services/risks*.ts, services/task-eod*.ts
+// and the related tests) to re-enable.
+export {};
+/*
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -123,3 +129,4 @@ export function TaskEodReviewCard() {
     </Card>
   );
 }
+*/

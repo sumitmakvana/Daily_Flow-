@@ -1,3 +1,9 @@
+// TEMPORARILY DISABLED: the /command route and its API/database calls are commented out.
+// Only /team-capacity is in use. Remove the block comment below (and the matching "temporarily disabled"
+// comments in routeTree.gen.ts, _authenticated.tsx, HolidayBanner.tsx, services/risks*.ts, services/task-eod*.ts
+// and the related tests) to re-enable.
+export {};
+/*
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -210,3 +216,4 @@ function Kpi({ icon, label, value }: { icon: React.ReactNode; label: string; val
     </Card>
   );
 }
+*/

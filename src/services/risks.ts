@@ -1,5 +1,6 @@
-import type { RiskEvent, RiskSeverity } from "@/lib/types";
-import { listOpenRisksFn, resolveRiskFn } from "./risks.functions";
+import type { RiskSeverity } from "@/lib/types"; // RiskEvent was only used by the commented risksService
+// DISABLED: used only by the /command page (disabled). Restore together with it.
+// import { listOpenRisksFn, resolveRiskFn } from "./risks.functions";
 
 export const SEVERITY_RANK: Record<RiskSeverity, number> = {
   critical: 4, high: 3, medium: 2, low: 1,
@@ -21,20 +22,21 @@ export const KIND_LABEL: Record<string, string> = {
   workload_spike: "Workload spike",
 };
 
-export const risksService = {
-  async listOpen(): Promise<RiskEvent[]> {
-    return (await listOpenRisksFn()) as RiskEvent[];
-  },
-  async resolve(id: string, _userId: string) {
-    await resolveRiskFn({ data: { id } });
-  },
-  /** Trigger backend detection via cron hook from the UI. */
-  async detectNow() {
-    const res = await fetch("/api/public/hooks/detect-risks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    return res.ok;
-  },
-};
+// DISABLED: used only by the /command page (disabled). Restore together with it. risksService (the cron hook /api/public/hooks/detect-risks is shared and untouched)
+// export const risksService = {
+//   async listOpen(): Promise<RiskEvent[]> {
+//     return (await listOpenRisksFn()) as RiskEvent[];
+//   },
+//   async resolve(id: string, _userId: string) {
+//     await resolveRiskFn({ data: { id } });
+//   },
+//   /** Trigger backend detection via cron hook from the UI. */
+//   async detectNow() {
+//     const res = await fetch("/api/public/hooks/detect-risks", {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       body: "{}",
+//     });
+//     return res.ok;
+//   },
+// };

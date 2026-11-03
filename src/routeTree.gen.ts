@@ -14,7 +14,6 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppStorageUploadRouteImport } from './routes/app-storage/upload'
 import { Route as AppStorageFileRouteImport } from './routes/app-storage/file'
-import { Route as AuthenticatedWorkloadRouteImport } from './routes/_authenticated/workload'
 import { Route as AuthenticatedTodayRouteImport } from './routes/_authenticated/today'
 import { Route as AuthenticatedTimeTrackingRouteImport } from './routes/_authenticated/time-tracking'
 import { Route as AuthenticatedTeamCapacityRouteImport } from './routes/_authenticated/team-capacity'
@@ -37,9 +36,7 @@ import { Route as AuthenticatedExecutiveRouteImport } from './routes/_authentica
 import { Route as AuthenticatedEodTasksRouteImport } from './routes/_authenticated/eod-tasks'
 import { Route as AuthenticatedEodRouteImport } from './routes/_authenticated/eod'
 import { Route as AuthenticatedDesktopHubRouteImport } from './routes/_authenticated/desktop-hub'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedConfigureRouteImport } from './routes/_authenticated/configure'
-import { Route as AuthenticatedCommandRouteImport } from './routes/_authenticated/command'
 import { Route as AuthenticatedCalendarRouteImport } from './routes/_authenticated/calendar'
 import { Route as AuthenticatedBlockersRouteImport } from './routes/_authenticated/blockers'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
@@ -88,11 +85,6 @@ const AppStorageFileRoute = AppStorageFileRouteImport.update({
   id: '/app-storage/file',
   path: '/app-storage/file',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedWorkloadRoute = AuthenticatedWorkloadRouteImport.update({
-  id: '/workload',
-  path: '/workload',
-  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedTodayRoute = AuthenticatedTodayRouteImport.update({
   id: '/today',
@@ -209,19 +201,9 @@ const AuthenticatedDesktopHubRoute = AuthenticatedDesktopHubRouteImport.update({
   path: '/desktop-hub',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
 const AuthenticatedConfigureRoute = AuthenticatedConfigureRouteImport.update({
   id: '/configure',
   path: '/configure',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedCommandRoute = AuthenticatedCommandRouteImport.update({
-  id: '/command',
-  path: '/command',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedCalendarRoute = AuthenticatedCalendarRouteImport.update({
@@ -372,9 +354,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/blockers': typeof AuthenticatedBlockersRoute
   '/calendar': typeof AuthenticatedCalendarRoute
-  '/command': typeof AuthenticatedCommandRoute
   '/configure': typeof AuthenticatedConfigureRouteWithChildren
-  '/dashboard': typeof AuthenticatedDashboardRoute
   '/desktop-hub': typeof AuthenticatedDesktopHubRoute
   '/eod': typeof AuthenticatedEodRoute
   '/eod-tasks': typeof AuthenticatedEodTasksRoute
@@ -397,7 +377,6 @@ export interface FileRoutesByFullPath {
   '/team-capacity': typeof AuthenticatedTeamCapacityRoute
   '/time-tracking': typeof AuthenticatedTimeTrackingRoute
   '/today': typeof AuthenticatedTodayRoute
-  '/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
   '/app-storage/upload': typeof AppStorageUploadRoute
   '/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
@@ -428,9 +407,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/blockers': typeof AuthenticatedBlockersRoute
   '/calendar': typeof AuthenticatedCalendarRoute
-  '/command': typeof AuthenticatedCommandRoute
   '/configure': typeof AuthenticatedConfigureRouteWithChildren
-  '/dashboard': typeof AuthenticatedDashboardRoute
   '/desktop-hub': typeof AuthenticatedDesktopHubRoute
   '/eod': typeof AuthenticatedEodRoute
   '/eod-tasks': typeof AuthenticatedEodTasksRoute
@@ -453,7 +430,6 @@ export interface FileRoutesByTo {
   '/team-capacity': typeof AuthenticatedTeamCapacityRoute
   '/time-tracking': typeof AuthenticatedTimeTrackingRoute
   '/today': typeof AuthenticatedTodayRoute
-  '/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
   '/app-storage/upload': typeof AppStorageUploadRoute
   '/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
@@ -486,9 +462,7 @@ export interface FileRoutesById {
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/blockers': typeof AuthenticatedBlockersRoute
   '/_authenticated/calendar': typeof AuthenticatedCalendarRoute
-  '/_authenticated/command': typeof AuthenticatedCommandRoute
   '/_authenticated/configure': typeof AuthenticatedConfigureRouteWithChildren
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/desktop-hub': typeof AuthenticatedDesktopHubRoute
   '/_authenticated/eod': typeof AuthenticatedEodRoute
   '/_authenticated/eod-tasks': typeof AuthenticatedEodTasksRoute
@@ -511,7 +485,6 @@ export interface FileRoutesById {
   '/_authenticated/team-capacity': typeof AuthenticatedTeamCapacityRoute
   '/_authenticated/time-tracking': typeof AuthenticatedTimeTrackingRoute
   '/_authenticated/today': typeof AuthenticatedTodayRoute
-  '/_authenticated/workload': typeof AuthenticatedWorkloadRoute
   '/app-storage/file': typeof AppStorageFileRoute
   '/app-storage/upload': typeof AppStorageUploadRoute
   '/_authenticated/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
@@ -544,9 +517,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blockers'
     | '/calendar'
-    | '/command'
     | '/configure'
-    | '/dashboard'
     | '/desktop-hub'
     | '/eod'
     | '/eod-tasks'
@@ -569,7 +540,6 @@ export interface FileRouteTypes {
     | '/team-capacity'
     | '/time-tracking'
     | '/today'
-    | '/workload'
     | '/app-storage/file'
     | '/app-storage/upload'
     | '/configure/automations'
@@ -600,9 +570,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blockers'
     | '/calendar'
-    | '/command'
     | '/configure'
-    | '/dashboard'
     | '/desktop-hub'
     | '/eod'
     | '/eod-tasks'
@@ -625,7 +593,6 @@ export interface FileRouteTypes {
     | '/team-capacity'
     | '/time-tracking'
     | '/today'
-    | '/workload'
     | '/app-storage/file'
     | '/app-storage/upload'
     | '/configure/automations'
@@ -657,9 +624,7 @@ export interface FileRouteTypes {
     | '/_authenticated/analytics'
     | '/_authenticated/blockers'
     | '/_authenticated/calendar'
-    | '/_authenticated/command'
     | '/_authenticated/configure'
-    | '/_authenticated/dashboard'
     | '/_authenticated/desktop-hub'
     | '/_authenticated/eod'
     | '/_authenticated/eod-tasks'
@@ -682,7 +647,6 @@ export interface FileRouteTypes {
     | '/_authenticated/team-capacity'
     | '/_authenticated/time-tracking'
     | '/_authenticated/today'
-    | '/_authenticated/workload'
     | '/app-storage/file'
     | '/app-storage/upload'
     | '/_authenticated/configure/automations'
@@ -766,13 +730,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/app-storage/file'
       preLoaderRoute: typeof AppStorageFileRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/workload': {
-      id: '/_authenticated/workload'
-      path: '/workload'
-      fullPath: '/workload'
-      preLoaderRoute: typeof AuthenticatedWorkloadRouteImport
-      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/today': {
       id: '/_authenticated/today'
@@ -928,25 +885,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDesktopHubRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/configure': {
       id: '/_authenticated/configure'
       path: '/configure'
       fullPath: '/configure'
       preLoaderRoute: typeof AuthenticatedConfigureRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/command': {
-      id: '/_authenticated/command'
-      path: '/command'
-      fullPath: '/command'
-      preLoaderRoute: typeof AuthenticatedCommandRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/calendar': {
@@ -1142,9 +1085,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedBlockersRoute: typeof AuthenticatedBlockersRoute
   AuthenticatedCalendarRoute: typeof AuthenticatedCalendarRoute
-  AuthenticatedCommandRoute: typeof AuthenticatedCommandRoute
   AuthenticatedConfigureRoute: typeof AuthenticatedConfigureRouteWithChildren
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDesktopHubRoute: typeof AuthenticatedDesktopHubRoute
   AuthenticatedEodRoute: typeof AuthenticatedEodRoute
   AuthenticatedEodTasksRoute: typeof AuthenticatedEodTasksRoute
@@ -1167,7 +1108,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTeamCapacityRoute: typeof AuthenticatedTeamCapacityRoute
   AuthenticatedTimeTrackingRoute: typeof AuthenticatedTimeTrackingRoute
   AuthenticatedTodayRoute: typeof AuthenticatedTodayRoute
-  AuthenticatedWorkloadRoute: typeof AuthenticatedWorkloadRoute
   AuthenticatedSettingsEmailOperationsRoute: typeof AuthenticatedSettingsEmailOperationsRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsOperationsRoute: typeof AuthenticatedSettingsOperationsRoute
@@ -1178,9 +1118,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedBlockersRoute: AuthenticatedBlockersRoute,
   AuthenticatedCalendarRoute: AuthenticatedCalendarRoute,
-  AuthenticatedCommandRoute: AuthenticatedCommandRoute,
   AuthenticatedConfigureRoute: AuthenticatedConfigureRouteWithChildren,
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDesktopHubRoute: AuthenticatedDesktopHubRoute,
   AuthenticatedEodRoute: AuthenticatedEodRoute,
   AuthenticatedEodTasksRoute: AuthenticatedEodTasksRoute,
@@ -1203,7 +1141,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedTeamCapacityRoute: AuthenticatedTeamCapacityRoute,
   AuthenticatedTimeTrackingRoute: AuthenticatedTimeTrackingRoute,
   AuthenticatedTodayRoute: AuthenticatedTodayRoute,
-  AuthenticatedWorkloadRoute: AuthenticatedWorkloadRoute,
   AuthenticatedSettingsEmailOperationsRoute:
     AuthenticatedSettingsEmailOperationsRoute,
   AuthenticatedSettingsNotificationsRoute:

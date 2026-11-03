@@ -215,44 +215,45 @@ export const upsertTaskEodFn = createServerFn({ method: "POST" })
     return row as any;
   });
 
-/** Manager view: all EOD submissions on a given date, joined with task + submitter info. */
-export const listEodForDateFn = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: { date: string }) =>
-    z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(d),
-  )
-  .handler(async ({ data, context }) => {
-    const rows = await withUser(context.userId, async (client) => {
-      const res = await client.query<ManagerEodRow>(
-        `SELECT e.*, t.task_code, t.task_name,
-                p.display_name AS user_display_name
-           FROM public.task_eod_submissions e
-           JOIN public.tasks t       ON t.id = e.task_id
-           LEFT JOIN public.profiles p ON p.id = e.user_id
-          WHERE e.submission_date = $1
-          ORDER BY e.acknowledged_at IS NULL DESC,
-                   (e.progress_status = 'blocked') DESC,
-                   e.submitted_at DESC`,
-        [data.date],
-      );
-      return res.rows;
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return rows as any;
-  });
+// DISABLED: used only by TaskEodReviewCard on /dashboard (disabled). Restore together with it.
+// /** Manager view: all EOD submissions on a given date, joined with task + submitter info. */
+// export const listEodForDateFn = createServerFn({ method: "GET" })
+//   .middleware([requireSupabaseAuth])
+//   .inputValidator((d: { date: string }) =>
+//     z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(d),
+//   )
+//   .handler(async ({ data, context }) => {
+//     const rows = await withUser(context.userId, async (client) => {
+//       const res = await client.query<ManagerEodRow>(
+//         `SELECT e.*, t.task_code, t.task_name,
+//                 p.display_name AS user_display_name
+//            FROM public.task_eod_submissions e
+//            JOIN public.tasks t       ON t.id = e.task_id
+//            LEFT JOIN public.profiles p ON p.id = e.user_id
+//           WHERE e.submission_date = $1
+//           ORDER BY e.acknowledged_at IS NULL DESC,
+//                    (e.progress_status = 'blocked') DESC,
+//                    e.submitted_at DESC`,
+//         [data.date],
+//       );
+//       return res.rows;
+//     });
+//     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+//     return rows as any;
+//   });
 
-export const acknowledgeEodFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
-    await withUser(context.userId, async (client) => {
-      await client.query(
-        `UPDATE public.task_eod_submissions
-            SET acknowledged_at = now(),
-                acknowledged_by = $2
-          WHERE id = $1`,
-        [data.id, context.userId],
-      );
-    });
-    return { ok: true };
-  });
+// export const acknowledgeEodFn = createServerFn({ method: "POST" })
+//   .middleware([requireSupabaseAuth])
+//   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+//   .handler(async ({ data, context }) => {
+//     await withUser(context.userId, async (client) => {
+//       await client.query(
+//         `UPDATE public.task_eod_submissions
+//             SET acknowledged_at = now(),
+//                 acknowledged_by = $2
+//           WHERE id = $1`,
+//         [data.id, context.userId],
+//       );
+//     });
+//     return { ok: true };
+//   });
