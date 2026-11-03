@@ -25,9 +25,8 @@ import {
 } from "@/lib/task-window";
 import {
   fetchAllTaskRows,
-  fetchHeaderCounts,
+  fetchTaskCounters,
   fetchMemberCounters,
-  fetchSidebarCounts,
   fetchTabCounts,
   fetchTaskListPage,
   fetchTaskListSignature,
@@ -368,10 +367,13 @@ function TasksPage() {
       .catch((e) => console.error("Member counts failed:", e));
     return () => { stale = true; };
   }, [memberMode, scope.userId, countsTick, ready]);
+  // Sidebar + KPI strip: one request (rpc task_list_counters) instead of one head count per status / priority / KPI.
   useEffect(() => {
     if (!ready || memberMode) return;
     let stale = false;
-    fetchSidebarCounts(tab, scope).then((r) => !stale && setSidebar(r)).catch((e) => console.error("Sidebar counts failed:", e));
+    fetchTaskCounters(tab, scope)
+      .then((r) => { if (stale) return; setSidebar(r.sidebar); setHeader(r.header); })
+      .catch((e) => console.error("Counters failed:", e));
     return () => { stale = true; };
   }, [tab, scope, countsTick, ready, memberMode]);
   useEffect(() => {
@@ -383,12 +385,6 @@ function TasksPage() {
     return () => { stale = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey, scope, countsTick, peopleOk, ready, memberMode]);
-  useEffect(() => {
-    if (!ready || memberMode) return;
-    let stale = false;
-    fetchHeaderCounts(scope).then((r) => !stale && setHeader(r)).catch((e) => console.error("Header counts failed:", e));
-    return () => { stale = true; };
-  }, [scope, countsTick, ready, memberMode]);
   // A member's only tab is "my tasks": its label is the page's own (filtered) total, no request needed.
   const shownTabCounts: TabCounts | null = memberMode ? { my: total, team: 0, all: total } : tabCounts;
 

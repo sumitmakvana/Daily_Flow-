@@ -25,9 +25,8 @@ describe("Tasks page: server-side pagination", () => {
     expect(src).not.toMatch(/from("tasks")s*.select("*")s*;?s*$/m);
   });
   it("applies filters, search, sort and counters on the server, with a member always scoped to their own tasks", () => {
-    expect(src).toContain("fetchSidebarCounts(tab, scope)");
+    expect(src).toContain("fetchTaskCounters(tab, scope)"); // sidebar + KPI strip in one rpc call
     expect(src).toContain("fetchTabCounts(paramsRef.current)");
-    expect(src).toContain("fetchHeaderCounts(scope)");
     expect(src).toContain('const tab: TaskTab = canSeeAll ? (activeTab as TaskTab) : "my_tasks"');
     expect(src).toContain("const canSeeAll = isManager");
   });

@@ -290,3 +290,33 @@ export async function fetchHeaderCounts(scope: ListScope): Promise<HeaderCounts>
   ]);
   return { total, mine, overdue };
 }
+
+export type TaskCounters = { sidebar: SidebarCounts; header: HeaderCounts };
+
+/** Pure: turns the jsonb of public.task_list_counters into the shapes the page uses (missing keys count as 0). */
+export function countersFromRpc(d: any): TaskCounters {
+  const num = (v: unknown) => Number(v ?? 0);
+  return {
+    sidebar: {
+      status: Object.fromEntries(TASK_STATUSES.map((s) => [s, num(d?.status?.[s])])),
+      priority: Object.fromEntries(TASK_PRIORITIES.map((p) => [p, num(d?.priority?.[p])])),
+    },
+    header: { total: num(d?.total), mine: num(d?.mine), overdue: num(d?.overdue) },
+  };
+}
+
+/**
+ * Sidebar (status + priority of the active tab) and KPI strip in ONE request (rpc task_list_counters)
+ * instead of one head-count request per status / priority / KPI. Falls back to the head counts if the
+ * function is not deployed yet, so the page keeps working during a rollout.
+ */
+export async function fetchTaskCounters(tab: TaskTab, scope: ListScope): Promise<TaskCounters> {
+  const { data, error } = await (supabase as any).rpc("task_list_counters", {
+    p_tab: tab,
+    p_user: scope.userId,
+    p_today: dateWindow().today,
+  });
+  if (!error && data) return countersFromRpc(data);
+  const [sidebar, header] = await Promise.all([fetchSidebarCounts(tab, scope), fetchHeaderCounts(scope)]);
+  return { sidebar, header };
+}
