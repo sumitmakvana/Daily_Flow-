@@ -2,6 +2,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Inside the 24 h window the provider enforces.
+const BASE = Date.now() - 2 * 3600_000;
 const mk = (i: number, read = false) => ({
   id: `n${i}`,
   user_id: "me",
@@ -11,7 +13,7 @@ const mk = (i: number, read = false) => ({
   task_id: null,
   read_at: read ? "2026-01-01T00:00:00Z" : null,
   // higher i = newer
-  created_at: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+  created_at: new Date(BASE + i * 1000).toISOString(),
 });
 
 let all: ReturnType<typeof mk>[] = [];
@@ -33,6 +35,7 @@ function query(head: boolean) {
       st.unreadOnly = true;
       return q;
     },
+    gte: () => q,
     lt: (_c: string, v: string) => {
       st.lt = v;
       return q;
@@ -48,7 +51,12 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: () => ({
       select: (_cols?: string, opts?: { head?: boolean }) => query(Boolean(opts?.head)),
-      update: () => ({ eq: () => Object.assign(Promise.resolve({ error: null }), { is: async () => ({ error: null }) }) }),
+      update: () => ({
+        eq: () =>
+          Object.assign(Promise.resolve({ error: null }), {
+            is: () => Object.assign(Promise.resolve({ error: null }), { gte: async () => ({ error: null }) }),
+          }),
+      }),
     }),
   },
 }));
@@ -75,6 +83,7 @@ describe("notifications paging", () => {
   it("loads one page of 50, not the whole history, and reports older ones exist", async () => {
     all = Array.from({ length: 120 }, (_, i) => mk(i)); // all unread
     const { result } = renderHook(() => useNotifications(), { wrapper });
+    await act(async () => result.current.ensureLoaded()); // the bell was opened
     await waitFor(() => expect(result.current.items.length).toBe(50));
     expect(result.current.hasMore).toBe(true);
     expect(calls.find((c) => !c.head)?.limit).toBe(50);
@@ -83,6 +92,7 @@ describe("notifications paging", () => {
   it("the badge counts unread rows beyond the loaded page with a head-only count", async () => {
     all = Array.from({ length: 120 }, (_, i) => mk(i));
     const { result } = renderHook(() => useNotifications(), { wrapper });
+    await act(async () => result.current.ensureLoaded()); // the bell was opened
     await waitFor(() => expect(result.current.unreadCount).toBe(120));
     expect(calls.some((c) => c.head)).toBe(true);
   });
@@ -90,6 +100,7 @@ describe("notifications paging", () => {
   it("loadMore appends the next older page by cursor, without duplicates, until exhausted", async () => {
     all = Array.from({ length: 120 }, (_, i) => mk(i));
     const { result } = renderHook(() => useNotifications(), { wrapper });
+    await act(async () => result.current.ensureLoaded()); // the bell was opened
     await waitFor(() => expect(result.current.items.length).toBe(50));
     await act(async () => result.current.loadMore());
     expect(result.current.items.length).toBe(100);
@@ -100,12 +111,13 @@ describe("notifications paging", () => {
     expect(result.current.unreadCount).toBe(120);
   });
 
-  it("a short list issues no extra count request", async () => {
+  it("a short list issues no count beyond the initial badge count", async () => {
     all = [mk(1), mk(2, true)];
     const { result } = renderHook(() => useNotifications(), { wrapper });
+    await act(async () => result.current.ensureLoaded()); // the bell was opened
     await waitFor(() => expect(result.current.items.length).toBe(2));
     expect(result.current.hasMore).toBe(false);
-    expect(calls.some((c) => c.head)).toBe(false);
+    expect(calls.filter((c) => c.head)).toHaveLength(1); // the sign-in badge count only
     expect(result.current.unreadCount).toBe(1);
   });
 });

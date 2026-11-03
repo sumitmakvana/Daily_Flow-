@@ -96,7 +96,11 @@ export function NotificationsModalContent({
   onClose?: () => void;
   isEmbedded?: boolean;
 }) {
-  const { items, markRead, markAllRead, unreadCount, hasMore, loadMore } = useNotifications();
+  const { items, markRead, markAllRead, unreadCount, hasMore, loadMore, ensureLoaded } = useNotifications();
+  // The list is fetched only when the panel/inbox is actually opened.
+  useEffect(() => {
+    void ensureLoaded();
+  }, [ensureLoaded]);
   const [loadingMore, setLoadingMore] = useState(false);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
@@ -251,7 +255,7 @@ export function NotificationsModalContent({
             <Bell className="h-4 w-4 opacity-60" />
           </div>
           <p className="text-xs font-medium text-muted-foreground">
-            {activeTab === "unread" ? "No unread notifications." : "No notifications yet."}
+            {activeTab === "unread" ? "No unread notifications." : "No notifications in the last 24 hours."}
           </p>
         </div>
       ) : (
