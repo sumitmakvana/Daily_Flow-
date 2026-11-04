@@ -1,37 +1,45 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getPool } from "@/integrations/postgres/client.server";
-import { generateEodHtmlReport } from "@/services/pdf-report.generator";
-import { sendEodEmail } from "@/services/email-dispatcher";
 
-import {
-  getTodayDateStr,
-  isTaskCompletedToday,
-  isTaskDueOrActiveToday,
-} from "@/lib/task-date-utils";
+import { getTodayDateStr } from "@/lib/task-date-utils";
 
-import { checkIsWorkingDayServer, getUsersOnLeaveTodayServer } from "@/lib/workday-checker.server";
+import { checkIsWorkingDayServer } from "@/lib/workday-checker.server";
 import { pushOverdueTasks } from "@/lib/task-push.server";
 import { promoteDueTentativeLeaves } from "@/services/leaves.server";
+import { runMorningDigest } from "@/lib/digests/morning-digest.server";
+import { runEveningDigest } from "@/lib/digests/evening-digest.server";
+import { runNoTasksReminder } from "@/lib/digests/no-tasks-reminder.server";
+
+/**
+ * The ONLY scheduler for the digests (the pg_cron digest jobs are removed): morning digest, evening digest (member
+ * EOD + manager team report), no-tasks reminder, advance leave alerts and overdue pushes. Each minute it only
+ * compares the clock with cached settings; the digests read their data only at their configured minute.
+ */
+const PROMOTE_EVERY_MS = 5 * 60_000;
+const SETTINGS_TTL_MS = 5 * 60_000;
+const NO_TASKS_REMINDER_EVERY_MIN = 20;
+/** How long after its configured minute a job may still start (covers a tick that skipped the exact minute). */
+const DUE_WINDOW_MIN = 5;
+/**
+ * The email dispatcher drops a second email to the same recipient within 10 s. A digest emails managers and the
+ * leave alerts right after it email the same managers, so they are sent this long after the digest.
+ */
+const GAP_BEFORE_LEAVE_ALERTS_MS = 15_000;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+type TickerSettings = { date: string; at: number; isWorkingDay: boolean; morningTime: string; eveningTime: string };
 
 // Global singleton state to survive Vite / HMR module re-evaluations in dev server
 const globalCronState = globalThis as unknown as {
   __cronTickerInterval?: NodeJS.Timeout;
   __cronFiredKeys?: Set<string>;
-  __isManagerReportDispatching?: boolean;
+  __tickerSettings?: TickerSettings;
+  __lastPromoteDate?: string;
+  __lastPromoteAt?: number;
 };
 
 if (!globalCronState.__cronFiredKeys) {
   globalCronState.__cronFiredKeys = new Set<string>();
-}
-
-function addMinutesToTime(timeStr: string, minsToAdd: number): string {
-  const [hStr, mStr] = timeStr.split(":");
-  const hours = parseInt(hStr || "18", 10);
-  const minutes = parseInt(mStr || "00", 10);
-  const totalMins = (hours * 60 + minutes + minsToAdd) % 1440;
-  const finalH = Math.floor(totalMins / 60).toString().padStart(2, "0");
-  const finalM = (totalMins % 60).toString().padStart(2, "0");
-  return `${finalH}:${finalM}`;
 }
 
 export function startBackgroundCronTicker() {
@@ -46,14 +54,45 @@ export function startBackgroundCronTicker() {
   globalCronState.__cronTickerInterval = setInterval(async () => {
     try {
       const todayStr = getTodayDateStr("Asia/Kolkata");
+      const now = Date.now();
+
+      // New day: forget the previous days' fired keys.
+      if (globalCronState.__lastPromoteDate !== todayStr) {
+        for (const k of globalCronState.__cronFiredKeys!) if (!k.startsWith(todayStr)) globalCronState.__cronFiredKeys!.delete(k);
+      }
 
       // Promote due tentative leaves to approved Planned Leave (idempotent; runs before the working-day
-      // check so a missed day is caught up on the next tick)
-      await promoteDueTentativeLeaves(todayStr);
+      // check so a missed day is caught up). Every 5 minutes, and at once when the date changes.
+      if (globalCronState.__lastPromoteDate !== todayStr || now - (globalCronState.__lastPromoteAt ?? 0) >= PROMOTE_EVERY_MS) {
+        globalCronState.__lastPromoteDate = todayStr;
+        globalCronState.__lastPromoteAt = now;
+        await promoteDueTentativeLeaves(todayStr);
+      }
 
-      // Verify if today is a valid working day (not a weekend or official company/public holiday)
-      const workStatus = await checkIsWorkingDayServer(todayStr);
-      if (!workStatus.isWorkingDay) {
+      // Working day + configured times change rarely: read them once per SETTINGS_TTL_MS (and when the date
+      // changes) instead of every minute.
+      const cached = globalCronState.__tickerSettings;
+      const settingsFresh = cached && cached.date === todayStr && now - cached.at < SETTINGS_TTL_MS;
+      const tick = settingsFresh
+        ? cached
+        : await (async () => {
+            const workStatus = await checkIsWorkingDayServer(todayStr);
+            const { data: settings } = await supabaseAdmin
+              .from("work_settings")
+              .select("morning_digest_time, evening_digest_time")
+              .eq("id", 1)
+              .maybeSingle();
+            const fresh = {
+              date: todayStr,
+              at: now,
+              isWorkingDay: workStatus.isWorkingDay,
+              morningTime: settings?.morning_digest_time ?? "10:30", // Dynamic from UI
+              eveningTime: settings?.evening_digest_time ?? "18:00", // Dynamic from UI
+            };
+            globalCronState.__tickerSettings = fresh;
+            return fresh;
+          })();
+      if (!tick.isWorkingDay) {
         // Skip automated digests and notifications on non-working days & holidays
         return;
       }
@@ -64,42 +103,35 @@ export function startBackgroundCronTicker() {
         minute: "2-digit",
         hour12: false,
       });
+      const currentMinute = Number(currentLocalTime.slice(3, 5));
+      const nowMins = Number(currentLocalTime.slice(0, 2)) * 60 + currentMinute;
+      // A 60 s interval drifts, so one tick can skip a whole minute: a job is due from its configured minute for
+      // DUE_WINDOW_MIN minutes, and the fired key makes it run once.
+      const isDue = (hhmm: string) => {
+        const diff = nowMins - (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5)));
+        return diff >= 0 && diff < DUE_WINDOW_MIN;
+      };
 
-      // 1. Fetch configured digest times dynamically from work_settings (UI editable)
-      const { data: settings } = await supabaseAdmin
-        .from("work_settings")
-        .select("morning_digest_time, evening_digest_time")
-        .eq("id", 1)
-        .maybeSingle();
-
-      const morningTime = settings?.morning_digest_time ?? "10:30"; // Dynamic from UI
-      const memberEodTime = settings?.evening_digest_time ?? "18:00"; // Dynamic from UI
-      const managerReportTime = addMinutesToTime(memberEodTime, 15); // Auto 15 mins after EOD
-
-      const morningFireKey = `${todayStr}_morning_${morningTime}`;
-      const memberFireKey = `${todayStr}_member_${memberEodTime}`;
-      const managerFireKey = `${todayStr}_manager_${managerReportTime}`;
+      const morningFireKey = `${todayStr}_morning_${tick.morningTime}`;
+      const eveningFireKey = `${todayStr}_evening_${tick.eveningTime}`;
 
       // -------------------------------------------------------------
-      // STEP A: At Configured Morning Time (UI Setting) -> Trigger Morning Digest & Leave Alerts
+      // STEP A: At Configured Morning Time (UI Setting) -> Morning Digest & Leave Alerts
       // -------------------------------------------------------------
-      if (currentLocalTime === morningTime && !globalCronState.__cronFiredKeys!.has(morningFireKey)) {
+      if (isDue(tick.morningTime) && !globalCronState.__cronFiredKeys!.has(morningFireKey)) {
         globalCronState.__cronFiredKeys!.add(morningFireKey);
         console.log(
-          `[CronTicker] Time matched Morning Digest (${currentLocalTime} === ${morningTime})! Triggering Morning Digest & Leave Alerts...`,
+          `[CronTicker] Morning Digest due (${currentLocalTime}, configured ${tick.morningTime})! Triggering Morning Digest & Leave Alerts...`,
         );
 
         try {
-          const origin = process.env.APP_URL || "http://localhost:7050";
-          await fetch(`${origin}/api/public/hooks/morning-digest?force=true`, {
-            method: "POST",
-            headers: { "x-cron-secret": process.env.CRON_SECRET || "" },
-          });
+          await runMorningDigest("scheduled");
         } catch (err) {
-          console.error("[CronTicker] Error auto-triggering morning-digest:", err);
+          console.error("[CronTicker] Error running morning digest:", err);
         }
 
         // Dispatch advance alerts for leaves starting tomorrow morning
+        await sleep(GAP_BEFORE_LEAVE_ALERTS_MS);
         await dispatchAdvanceLeaveAlerts("morning", todayStr);
 
         // Push alerts for tasks that just became overdue (no-op unless FCM is configured)
@@ -107,272 +139,37 @@ export function startBackgroundCronTicker() {
       }
 
       // -------------------------------------------------------------
-      // STEP B: At Configured Evening Time (UI Setting) -> Trigger Member EOD & Handover Alerts
+      // STEP B: At Configured Evening Time (UI Setting) -> Member EOD digest + Manager EOD team report
+      // (both sent by the evening digest, idempotent per day) & Handover Alerts
       // -------------------------------------------------------------
-      if (currentLocalTime === memberEodTime && !globalCronState.__cronFiredKeys!.has(memberFireKey)) {
-        globalCronState.__cronFiredKeys!.add(memberFireKey);
+      if (isDue(tick.eveningTime) && !globalCronState.__cronFiredKeys!.has(eveningFireKey)) {
+        globalCronState.__cronFiredKeys!.add(eveningFireKey);
         console.log(
-          `[CronTicker] Time matched Evening Digest (${currentLocalTime} === ${memberEodTime})! Triggering Member EOD & Leave Alerts...`,
+          `[CronTicker] Evening Digest due (${currentLocalTime}, configured ${tick.eveningTime})! Triggering Member EOD, Manager Report & Leave Alerts...`,
         );
 
-        const [{ data: profiles }, usersOnLeave] = await Promise.all([
-          supabaseAdmin.from("profiles").select("id, display_name, email, is_active").eq("is_active", true),
-          getUsersOnLeaveTodayServer(todayStr),
-        ]);
-
-        for (const p of profiles ?? []) {
-          if (usersOnLeave.has(p.id)) continue; // Skip users on approved leave today
-          const dedupeKey = `EOD_${todayStr}_${p.id}`;
-          // Check idempotency marker before inserting notification
-          const { data: existingNotif } = await supabaseAdmin
-            .from("notifications")
-            .select("id")
-            .eq("dedupe_key", dedupeKey)
-            .maybeSingle();
-
-          if (!existingNotif) {
-            await supabaseAdmin.from("notifications").insert({
-              user_id: p.id,
-              type: "eod_digest",
-              title: `End of Day Check-in`,
-              body: `Please review and update your uncompleted tasks for today.`,
-              dedupe_key: dedupeKey,
-            });
-          }
+        try {
+          await runEveningDigest("scheduled");
+        } catch (err) {
+          console.error("[CronTicker] Error running evening digest:", err);
         }
 
         // Dispatch advance handover alerts for leaves starting tomorrow evening
+        await sleep(GAP_BEFORE_LEAVE_ALERTS_MS);
         await dispatchAdvanceLeaveAlerts("evening", todayStr);
       }
 
-
       // -------------------------------------------------------------
-      // STEP C: At Manager Report Time (15 mins after EOD) -> Dispatch Manager EOD Team Summary Report
+      // STEP C: No-tasks reminder, every 20 minutes (:00 / :20 / :40) like the former pg_cron job. The reminder
+      // itself skips outside working hours or when it is disabled in settings.
       // -------------------------------------------------------------
-      if (
-        currentLocalTime === managerReportTime &&
-        !globalCronState.__cronFiredKeys!.has(managerFireKey) &&
-        !globalCronState.__isManagerReportDispatching
-      ) {
-        globalCronState.__cronFiredKeys!.add(managerFireKey);
-        globalCronState.__isManagerReportDispatching = true;
-
+      const reminderFireKey = `${todayStr}_reminder_${currentLocalTime.slice(0, 2)}_${Math.floor(currentMinute / NO_TASKS_REMINDER_EVERY_MIN)}`;
+      if (currentMinute % NO_TASKS_REMINDER_EVERY_MIN < DUE_WINDOW_MIN && !globalCronState.__cronFiredKeys!.has(reminderFireKey)) {
+        globalCronState.__cronFiredKeys!.add(reminderFireKey);
         try {
-          console.log(
-            `[CronTicker] Time matched (${currentLocalTime} === ${managerReportTime})! Triggering Manager EOD Team Summary Report...`,
-          );
-
-          const dispatchDedupeKey = `EOD_TEAM_REPORT_${todayStr}`;
-          const { data: existingDispatch } = await supabaseAdmin
-            .from("notifications")
-            .select("id")
-            .eq("dedupe_key", dispatchDedupeKey)
-            .maybeSingle();
-
-          if (existingDispatch) {
-            console.log(
-              `[CronTicker] Manager EOD report dispatch for ${todayStr} already completed today. Skipping duplicate.`,
-            );
-            return;
-          }
-
-          const [{ data: profiles }, { data: tasks }, { data: prefs }] = await Promise.all([
-            supabaseAdmin
-              .from("profiles")
-              .select("id, display_name, email, manager_id, is_active")
-              .eq("is_active", true),
-            supabaseAdmin
-              .from("tasks")
-              .select(
-                "id, task_code, task_name, assigned_to, status, priority, due_date, completed_at, updated_at, blocker_reason, remarks",
-              ),
-            supabaseAdmin.from("notification_prefs").select("*"),
-          ]);
-
-          const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
-          const plateByUser = new Map<string, typeof tasks>();
-
-          for (const t of tasks ?? []) {
-            if (!t.assigned_to) continue;
-            const arr = plateByUser.get(t.assigned_to) ?? [];
-            const isCompToday = isTaskCompletedToday(t, todayStr);
-            const isDueTodayOrPast = isTaskDueOrActiveToday(t, todayStr);
-            if (isCompToday || (t.status !== "Completed" && isDueTodayOrPast)) {
-              arr.push(t);
-            }
-            plateByUser.set(t.assigned_to, arr);
-          }
-
-          let completedCount = 0;
-          let inProgressCount = 0;
-          let inReviewCount = 0;
-          let todoCount = 0;
-          let blockedCount = 0;
-          let pendingCount = 0;
-
-          const memberSummaries = (profiles ?? []).map((p) => {
-            const mine = plateByUser.get(p.id) ?? [];
-            const completed = mine.filter((t) => t.status === "Completed");
-            const inProgress = mine.filter((t) => t.status === "In Progress");
-            const inReview = mine.filter((t) => t.status === "In Review");
-            const todo = mine.filter((t) => t.status === "To Do");
-            const blocked = mine.filter((t) => t.status === "Blocked" || t.status === "On Hold");
-            const pending = mine.filter(
-              (t) =>
-                t.status !== "Completed" &&
-                t.status !== "In Progress" &&
-                t.status !== "In Review" &&
-                t.status !== "Blocked" &&
-                t.status !== "On Hold",
-            );
-
-            const overdueTasks = mine.filter(
-              (t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < todayStr,
-            );
-            const overdueDates = Array.from(
-              new Set(overdueTasks.map((t) => t.due_date?.slice(5, 10)).filter(Boolean)),
-            ).join(", ");
-
-            completedCount += completed.length;
-            inProgressCount += inProgress.length;
-            inReviewCount += inReview.length;
-            todoCount += todo.length;
-            blockedCount += blocked.length;
-            pendingCount += pending.length;
-
-            return {
-              name: p.display_name || "Team Member",
-              completedCount: completed.length,
-              inProgressCount: inProgress.length,
-              inReviewCount: inReview.length,
-              todoCount: todo.length,
-              blockedCount: blocked.length,
-              pendingCount: pending.length + todo.length,
-              overdueCount: overdueTasks.length,
-              overdueDates: overdueDates || undefined,
-              totalCount: mine.length,
-              tasks: [],
-            };
-          });
-
-          const totalCount =
-            completedCount +
-            inProgressCount +
-            inReviewCount +
-            todoCount +
-            blockedCount +
-            pendingCount;
-          const completionRate =
-            totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-          const blockedAlerts: Array<{
-            code: string;
-            name: string;
-            memberName: string;
-            reason: string;
-          }> = [];
-
-          for (const t of tasks ?? []) {
-            if (t.status === "Blocked" || t.status === "On Hold") {
-              const isDueTodayOrPast = !t.due_date || t.due_date.slice(0, 10) <= todayStr;
-              if (isDueTodayOrPast) {
-                blockedAlerts.push({
-                  code: t.task_code,
-                  name: t.task_name,
-                  memberName: profileById.get(t.assigned_to || "")?.display_name || "Unassigned",
-                  reason:
-                    (t as { blocker_reason?: string; remarks?: string }).blocker_reason ||
-                    (t as { blocker_reason?: string; remarks?: string }).remarks ||
-                    "No details provided",
-                });
-              }
-            }
-          }
-
-          const recipientEmails = new Set<string>();
-
-          for (const pref of (prefs as any[]) ?? []) {
-            if (pref.digest_enabled === false) continue;
-
-            // 1. Custom Target Email(s)
-            if (pref.eod_send_to_custom && pref.custom_target_email) {
-              pref.custom_target_email
-                .split(",")
-                .map((e: string) => e.trim().toLowerCase())
-                .filter(Boolean)
-                .forEach((e: string) => recipientEmails.add(e));
-            }
-
-            // 2. Direct Managers
-            if (pref.eod_send_to_managers) {
-              const userProfile = profileById.get(pref.user_id);
-              if (userProfile?.manager_id) {
-                const mgr = profileById.get(userProfile.manager_id);
-                if (mgr && mgr.email) recipientEmails.add(mgr.email.trim().toLowerCase());
-              } else if (userProfile?.email) {
-                const isAManager = (profiles ?? []).some((p) => p.manager_id === pref.user_id);
-                if (isAManager) recipientEmails.add(userProfile.email.trim().toLowerCase());
-              }
-            }
-
-            // 3. Admins
-            if (pref.eod_send_to_admins) {
-              for (const p of profiles ?? []) {
-                if (p.email) recipientEmails.add(p.email.trim().toLowerCase());
-              }
-            }
-          }
-
-          const toList = Array.from(recipientEmails);
-          if (toList.length === 0) {
-            console.log("[CronTicker] No manager/admin recipients configured for EOD report. Skipping dispatch.");
-            return;
-          }
-
-          // Atomically claim dedupe key in DB BEFORE triggering email send to avoid race conditions
-          if (profiles && profiles.length > 0) {
-            const { error: insertErr } = await supabaseAdmin.from("notifications").insert({
-              user_id: profiles[0].id,
-              type: "eod_team_digest",
-              title: `Manager EOD Report Dispatched - ${todayStr}`,
-              body: `Automated EOD team performance report dispatched to ${toList.join(", ")}.`,
-              dedupe_key: dispatchDedupeKey,
-            });
-
-            if (insertErr) {
-              console.log(
-                `[CronTicker] Dedupe marker insert failed or already exists (${insertErr.message}). Skipping duplicate email dispatch.`,
-              );
-              return;
-            }
-          }
-
-          const reportHtml = generateEodHtmlReport({
-            dateStr: todayStr,
-            totalTasks: totalCount,
-            completedTasks: completedCount,
-            inProgressTasks: inProgressCount,
-            inReviewTasks: inReviewCount,
-            todoTasks: todoCount,
-            blockedTasks: blockedCount,
-            pendingTasks: pendingCount,
-            completionRate,
-            memberSummaries,
-            blockedAlerts,
-          });
-
-          const res = await sendEodEmail({
-            to: toList,
-            subject: `📊 [EOD Team Digest] Today's Team Status Report - ${todayStr} | Operon`,
-            html: reportHtml,
-          });
-
-          console.log(
-            `[CronTicker] Automated Manager EOD Report dispatched to: ${toList.join(", ")}`,
-            res,
-          );
-        } finally {
-          globalCronState.__isManagerReportDispatching = false;
+          await runNoTasksReminder("scheduled");
+        } catch (err) {
+          console.error("[CronTicker] Error running no-tasks reminder:", err);
         }
       }
     } catch (err) {

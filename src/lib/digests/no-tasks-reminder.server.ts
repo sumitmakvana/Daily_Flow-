@@ -1,0 +1,188 @@
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { recordFailure } from "@/lib/ops-failures.server";
+
+import { checkIsWorkingDayServer, getUsersOnLeaveTodayServer } from "@/lib/workday-checker.server";
+import type { DigestMode } from "@/lib/digests/mode";
+
+/**
+ * Recurring reminder cron (intended to run every 20 minutes).
+ * Sends a nudge to active users who still have 0 tasks on their plate today.
+ * Only runs during configured working hours.
+ */
+export async function runNoTasksReminder(mode: DigestMode): Promise<Response> {
+  const force = mode === "force";
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Get current time in Indian Standard Time (IST)
+  const kolkataTime = new Date().toLocaleTimeString("en-US", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const currentHour = new Date().toLocaleTimeString("en-US", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    hour12: false,
+  });
+  const currentMinute = new Date().toLocaleTimeString("en-US", {
+    timeZone: "Asia/Kolkata",
+    minute: "2-digit",
+  });
+
+  // Settings first (one 1-row read): disabled / outside working hours returns before any other query.
+  const { data: settings } = await supabaseAdmin
+    .from("work_settings")
+    .select("morning_digest_time, evening_digest_time, no_tasks_reminder_interval")
+    .eq("id", 1)
+    .maybeSingle();
+
+  const morningTime = settings?.morning_digest_time ?? "10:00";
+  const eveningTime = settings?.evening_digest_time ?? "18:00";
+  const interval = settings?.no_tasks_reminder_interval ?? 20;
+
+  // If reminder is disabled, skip sending (unless forced)
+  if (interval <= 0 && !force) {
+    return Response.json({
+      ok: true,
+      skipped: true,
+      reason: "No-tasks reminder is disabled in settings",
+    });
+  }
+
+  // Check if current time is within working hours (morning time to evening time)
+  if ((kolkataTime < morningTime || kolkataTime >= eveningTime) && !force) {
+    return Response.json({
+      ok: true,
+      skipped: true,
+      reason: `Current local time ${kolkataTime} is outside working hours (${morningTime} to ${eveningTime})`,
+    });
+  }
+
+  if (mode === "cron") {
+    const workStatus = await checkIsWorkingDayServer(today);
+    if (!workStatus.isWorkingDay) {
+      return Response.json({
+        ok: true,
+        skipped: true,
+        reason: `Today is a non-working day (${workStatus.label}). No-tasks reminder skipped.`,
+      });
+    }
+  }
+  const usersOnLeave = await getUsersOnLeaveTodayServer(today);
+  const todayMs = new Date(today).getTime();
+
+  const [{ data: profiles }, { data: tasks }, { data: prefs }, { data: activeReminders }] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select("id, display_name, manager_id, is_active")
+      .eq("is_active", true),
+    supabaseAdmin
+      .from("tasks")
+      .select("id, task_code, task_name, assigned_to, status, priority, due_date"),
+    supabaseAdmin.from("notification_prefs").select("user_id, digest_enabled"),
+    supabaseAdmin
+      .from("notifications")
+      .select("user_id")
+      .eq("title", "Reminder: 0 tasks on plate")
+      .is("read_at", null),
+  ]);
+
+  const optedOut = new Set(
+    (prefs ?? []).filter((p) => p.digest_enabled === false).map((p) => p.user_id),
+  );
+  const activeIds = new Set((profiles ?? []).map((p) => p.id));
+  const activeReminderUserIds = new Set(
+    (activeReminders ?? []).map((r) => r.user_id),
+  );
+
+  const plateByUser = new Map<string, NonNullable<typeof tasks>>();
+  for (const t of tasks ?? []) {
+    if (!t.assigned_to || !activeIds.has(t.assigned_to)) continue;
+    if (t.status === "Completed") continue;
+    const dueMs = t.due_date ? new Date(t.due_date).getTime() : null;
+    if (dueMs === null || dueMs <= todayMs) {
+      const arr = plateByUser.get(t.assigned_to) ?? [];
+      arr.push(t);
+      plateByUser.set(t.assigned_to, arr);
+    }
+  }
+
+  let sentUsers = 0;
+  let failed = 0;
+
+  const h = parseInt(currentHour, 10);
+  const m = parseInt(currentMinute, 10);
+  const slotInterval = interval > 0 ? interval : 20; // fallback to 20 if disabled but forced
+  const slot = Math.floor(m / slotInterval); 
+
+  for (const p of profiles ?? []) {
+    if (usersOnLeave.has(p.id)) continue; // Skip users on approved leave today
+    const mine = plateByUser.get(p.id) ?? [];
+    const userTasks = (tasks ?? []).filter((t) => t.assigned_to === p.id);
+    const hasStartedTask = userTasks.some(
+      (t) => t.status === "In Progress" || t.status === "In Review" || t.status === "Completed",
+    );
+
+    const hasNoTasks = mine.length === 0;
+    const hasNotStarted = !hasStartedTask;
+
+    // Only notify if they have 0 tasks OR haven't started any task today
+    if (!hasNoTasks && !hasNotStarted) continue;
+
+    // If the user already has an active, unread reminder, skip
+    if (activeReminderUserIds.has(p.id)) continue;
+
+    if (!optedOut.has(p.id)) {
+      const dedupeKey = `NO_TASKS_REMINDER_${today}_${h}_${slot}_${p.id}`;
+      const title = hasNoTasks
+        ? "Reminder: 0 tasks on plate"
+        : "Reminder: Start your first task";
+      const body = hasNoTasks
+        ? "You still have no tasks on your plate today. Click here to add a task."
+        : "You have tasks on your plate today but haven't started any yet. Click here to start working on a task.";
+
+      const { error } = await supabaseAdmin.from("notifications").insert({
+        user_id: p.id,
+        type: "sod_digest",
+        title,
+        body,
+        dedupe_key: dedupeKey,
+      });
+
+      if (!error) {
+        sentUsers += 1;
+
+        // Also notify their manager if they have one assigned
+        if (p.manager_id) {
+          const managerDedupeKey = `MGR_NO_TASKS_REMINDER_${today}_${h}_${slot}_${p.id}_${p.manager_id}`;
+          await supabaseAdmin.from("notifications").insert({
+            user_id: p.manager_id,
+            type: "sod_digest",
+            title: hasNoTasks
+              ? `Team Alert: 0 tasks on ${p.display_name}'s plate`
+              : `Team Alert: ${p.display_name} hasn't started any task today`,
+            body: hasNoTasks
+              ? `${p.display_name} has no tasks on their plate today.`
+              : `${p.display_name} has tasks assigned but hasn't started any yet.`,
+            dedupe_key: managerDedupeKey,
+          });
+        }
+      } else if (error.code === "23505") {
+        // already sent in this slot
+      } else {
+        failed += 1;
+        await recordFailure({
+          source: "cron.no_tasks_reminder",
+          entityType: "user",
+          entityId: p.id,
+          errorCode: error.code ?? null,
+          errorMessage: error.message,
+        });
+      }
+    }
+  }
+
+  return Response.json({ ok: true, sentUsers, failed });
+}
