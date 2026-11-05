@@ -28,6 +28,10 @@ const ROUTES = {
   member: ["/my-day", "/today", "/tasks", "/calendar", "/notifications", "/eod", "/leaves", "/notebook", "/my-day", "/today"],
 };
 const rand = (a, b) => a + Math.random() * (b - a);
+// Deterministic route order per user (SEED) so two builds can be compared on the same workload.
+const rng = (seed) => () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const EXCLUDE = new Set((process.env.ROUTES_EXCLUDE || "").split(",").filter(Boolean));
+for (const k of Object.keys(ROUTES)) ROUTES[k] = ROUTES[k].filter((r) => !EXCLUDE.has(r));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stream = fs.createWriteStream(path.join(OUT, "requests.jsonl"), { flags: "a" });
@@ -54,6 +58,7 @@ const kind = (url) => {
 
 async function session(u, browser) {
   const tok = await login(u);
+  const next = process.env.SEED ? rng(Number(process.env.SEED) + [...u.n].reduce((a, c) => a + c.charCodeAt(0) * 31, 0)) : Math.random;
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript(({ a, r }) => { try { if (!localStorage.getItem("kc_token")) { localStorage.setItem("kc_token", a); localStorage.setItem("kc_refresh_token", r); } } catch {} }, { a: tok.access_token, r: tok.refresh_token });
   const page = await ctx.newPage();
@@ -82,7 +87,7 @@ async function session(u, browser) {
   await page.goto(APP + ROUTES[u.role][0], { waitUntil: "load" });
   log(u, "session:start");
   while (Date.now() < endAt) {
-    const route = pick(ROUTES[u.role]);
+    const route = ROUTES[u.role][Math.floor(next() * ROUTES[u.role].length)];
     try {
       const link = page.locator(`a[href="${route}"]`).first();
       if (await link.isVisible({ timeout: 1000 }).catch(() => false)) await link.click({ timeout: 5000 });
