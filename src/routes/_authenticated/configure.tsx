@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { getRolesShared } from "@/hooks/use-auth";
 import { TypesPanel } from "@/components/configure/TypesPanel";
 import { StatusesPanel } from "@/components/configure/StatusesPanel";
 import { WorkflowPanel } from "@/components/configure/WorkflowPanel";
@@ -13,14 +14,14 @@ import { RolesPanel } from "@/components/configure/RolesPanel";
 import { VersionsPanel } from "@/components/configure/VersionsPanel";
 import { ImportExportPanel } from "@/components/configure/ImportExportPanel";
 import { useState } from "react";
-import { Sparkles, Rocket, Zap } from "lucide-react";
+import { Sparkles, Rocket } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/configure")({
   beforeLoad: async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw redirect({ to: "/login" });
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id).eq("role", "admin");
-    if (!data?.length) throw redirect({ to: "/today" });
+    const roles = await getRolesShared(session.user.id);
+    if (!roles.includes("admin")) throw redirect({ to: "/today" });
   },
   component: ConfigurePage,
 });
@@ -37,9 +38,6 @@ function ConfigurePage() {
           <p className="text-xs text-muted-foreground">Build work types, workflows, forms, and approvals — no code needed.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate({ to: "/configure/automations" })}>
-            <Zap className="h-4 w-4 mr-2" />Automations
-          </Button>
           <Button variant="outline" onClick={() => navigate({ to: "/onboarding" })}>
             <Rocket className="h-4 w-4 mr-2" />Onboarding
           </Button>

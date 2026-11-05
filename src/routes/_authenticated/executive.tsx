@@ -32,7 +32,6 @@ import {
 import {
   AlertOctagon,
   AlertTriangle,
-  Bot,
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
@@ -98,9 +97,8 @@ export const Route = createFileRoute("/_authenticated/executive")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (!data.user) return;
-    // Fresh read for this navigation (maxAge 0), but it joins the layout's in-flight request, so the
-    // guard and the layout cost one user_roles request instead of two.
-    const roles = await getRolesShared(data.user.id, 0);
+    // Same session cache as the layout and useAuth(): no extra user_roles request per navigation.
+    const roles = await getRolesShared(data.user.id);
     const set = new Set<string>(roles);
     if (!set.has("admin") && !set.has("manager")) {
       throw redirect({ to: "/today" });
@@ -603,7 +601,6 @@ function ExecutivePage() {
           <RiskCenter s={summary} />
           <WorkloadBalance s={summary} />
           <ExecutionDiscipline s={summary} />
-          <AutomationROI s={summary} />
           <AdoptionMetrics s={summary} />
           <TeamHealthSection s={summary} />
           <ManagerEffectivenessSection s={summary} />
@@ -2625,42 +2622,6 @@ function ExecutionDiscipline({ s }: { s: ExecSummary }) {
           label="EOD Active Users"
           value={d.eod_users_range}
           sub="In selected range"
-          tone="neutral"
-        />
-      </div>
-    </Section>
-  );
-}
-
-/* ---------------- 6. Automation ROI ---------------- */
-
-function AutomationROI({ s }: { s: ExecSummary }) {
-  const a = s.automation;
-  return (
-    <Section title="Automation & Operations" icon={<Bot className="h-4 w-4 text-primary" />}>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi
-          label="Runs Today"
-          value={a.today_runs}
-          sub={`${a.total_runs} total runs`}
-          tone="neutral"
-        />
-        <Kpi
-          label="Success Rate"
-          value={a.success_rate !== null ? `${Math.round(a.success_rate)}%` : "—"}
-          sub={`${a.failed_24h} failures (24h)`}
-          tone={a.success_rate && a.success_rate > 95 ? "good" : "warn"}
-        />
-        <Kpi
-          label="Active Rules"
-          value={a.active_rules}
-          sub={`${a.auto_disabled_rules} disabled`}
-          tone="neutral"
-        />
-        <Kpi
-          label="Auto Approvals"
-          value={a.approvals_auto}
-          sub={`${a.escalations} escalations`}
           tone="neutral"
         />
       </div>

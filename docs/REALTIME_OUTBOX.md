@@ -8,7 +8,7 @@ any writer (PostgREST, app, cron, psql, pg_restore)
   └─ AFTER ROW trigger trg_realtime_<table>      (same transaction as the write)
        ├─ INSERT INTO realtime.outbox              ids only
        └─ pg_notify('realtime_outbox', …)          delivered at COMMIT
-            └─ src/lib/outbox-listener.server.ts   own pg connection: LISTEN, keepalive, heartbeat
+            └─ src/lib/outbox-listener.server.ts   own pg connection: LISTEN, TCP keepalive
                  └─ entity-events.server.ts        audience router + 100 ms batcher
                       └─ Socket.IO rooms user:<id> / role:manager / role:admin
                            └─ browser: channel.ts → one REST refetch (RLS enforced there)
@@ -25,7 +25,6 @@ any writer (PostgREST, app, cron, psql, pg_restore)
 | nudges | owner |
 | risk_events, planning_suggestions | managers |
 | approval_requests | requester, the chain's approvers, admins |
-| automation_health (`automation:health`) | admins |
 | TRUNCATE of any table | the table's whole audience class (one bulk "refetch" signal) |
 
 Behaviour change to know about: a normal member no longer hears about **other people's** tasks or
@@ -43,9 +42,11 @@ RLS is unchanged: events are signals, the data is still read over REST.
   `resync → full` and refetches what it shows.
 * **Outbox pruned past the cursor** (cannot prove nothing was missed): `onGap` makes every connected
   browser refetch, and an error is logged.
-* **Dead connection**: TCP keepalive + `SELECT 1` heartbeat every 30 s (5 s timeout) → reconnect with
+* **Dead connection**: TCP keepalive (first probe after 10 s idle; later probes follow the OS
+  `tcp_keepalive_intvl`/`_probes`, default 75 s x 9) → socket closes/errors → reconnect with
   1 s, 2 s, … 30 s backoff, every attempt logged as `[Realtime] … reconnect #n in …ms`.
-  The heartbeat is the only recurring statement; it reads no data.
+  No query runs on an idle connection. Lower the kernel keepalive interval/probes for faster
+  half-open detection.
 * **Never silent**: `[Realtime]` errors for lost connections, delivery failures, unreadable
   payloads, a missing `realtime.outbox` (names the migration to apply) and missing/disabled triggers
   (lists them). `getOutboxStatus()` exposes counters.

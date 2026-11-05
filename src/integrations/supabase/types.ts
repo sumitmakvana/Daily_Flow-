@@ -123,39 +123,6 @@ export type Database = {
           },
         ]
       }
-      approval_outbox_events: {
-        Row: {
-          actor_id: string | null
-          created_at: string
-          event_kind: string
-          id: string
-          payload: Json
-          processed_at: string | null
-          request_id: string
-          work_item_id: string | null
-        }
-        Insert: {
-          actor_id?: string | null
-          created_at?: string
-          event_kind: string
-          id?: string
-          payload?: Json
-          processed_at?: string | null
-          request_id: string
-          work_item_id?: string | null
-        }
-        Update: {
-          actor_id?: string | null
-          created_at?: string
-          event_kind?: string
-          id?: string
-          payload?: Json
-          processed_at?: string | null
-          request_id?: string
-          work_item_id?: string | null
-        }
-        Relationships: []
-      }
       approval_requests: {
         Row: {
           chain_id: string
@@ -357,259 +324,6 @@ export type Database = {
           id?: string
         }
         Relationships: []
-      }
-      automation_action_log: {
-        Row: {
-          action_index: number
-          action_kind: string
-          created_at: string
-          error: string | null
-          id: string
-          result: Json | null
-          run_id: string
-          status: string
-          target_id: string | null
-          target_type: string | null
-        }
-        Insert: {
-          action_index: number
-          action_kind: string
-          created_at?: string
-          error?: string | null
-          id?: string
-          result?: Json | null
-          run_id: string
-          status: string
-          target_id?: string | null
-          target_type?: string | null
-        }
-        Update: {
-          action_index?: number
-          action_kind?: string
-          created_at?: string
-          error?: string | null
-          id?: string
-          result?: Json | null
-          run_id?: string
-          status?: string
-          target_id?: string | null
-          target_type?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "automation_action_log_run_id_fkey"
-            columns: ["run_id"]
-            isOneToOne: false
-            referencedRelation: "automation_runs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      automation_events: {
-        Row: {
-          actor_id: string | null
-          attempts: number
-          available_at: string
-          depth: number
-          drop_reason: string | null
-          dropped: boolean
-          enqueued_at: string
-          entity_id: string | null
-          entity_type: string
-          event_kind: string
-          id: string
-          payload: Json
-          processed_at: string | null
-        }
-        Insert: {
-          actor_id?: string | null
-          attempts?: number
-          available_at?: string
-          depth?: number
-          drop_reason?: string | null
-          dropped?: boolean
-          enqueued_at?: string
-          entity_id?: string | null
-          entity_type: string
-          event_kind: string
-          id?: string
-          payload?: Json
-          processed_at?: string | null
-        }
-        Update: {
-          actor_id?: string | null
-          attempts?: number
-          available_at?: string
-          depth?: number
-          drop_reason?: string | null
-          dropped?: boolean
-          enqueued_at?: string
-          entity_id?: string | null
-          entity_type?: string
-          event_kind?: string
-          id?: string
-          payload?: Json
-          processed_at?: string | null
-        }
-        Relationships: []
-      }
-      automation_queue_stats: {
-        Row: {
-          id: number
-          pending_count: number
-          updated_at: string
-        }
-        Insert: {
-          id?: number
-          pending_count?: number
-          updated_at?: string
-        }
-        Update: {
-          id?: number
-          pending_count?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      automation_rules: {
-        Row: {
-          actions: Json
-          allow_self_retrigger: boolean
-          auto_disabled_at: string | null
-          auto_disabled_reason: string | null
-          condition_expr: Json
-          created_at: string
-          created_by: string | null
-          dedupe_window_minutes: number
-          description: string | null
-          description_internal: string | null
-          id: string
-          is_active: boolean
-          max_runs_per_entity: number | null
-          max_runs_per_minute: number
-          name: string
-          run_mode: string
-          sort_order: number
-          trigger_kind: string
-          type_id: string | null
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          actions?: Json
-          allow_self_retrigger?: boolean
-          auto_disabled_at?: string | null
-          auto_disabled_reason?: string | null
-          condition_expr?: Json
-          created_at?: string
-          created_by?: string | null
-          dedupe_window_minutes?: number
-          description?: string | null
-          description_internal?: string | null
-          id?: string
-          is_active?: boolean
-          max_runs_per_entity?: number | null
-          max_runs_per_minute?: number
-          name: string
-          run_mode?: string
-          sort_order?: number
-          trigger_kind: string
-          type_id?: string | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          actions?: Json
-          allow_self_retrigger?: boolean
-          auto_disabled_at?: string | null
-          auto_disabled_reason?: string | null
-          condition_expr?: Json
-          created_at?: string
-          created_by?: string | null
-          dedupe_window_minutes?: number
-          description?: string | null
-          description_internal?: string | null
-          id?: string
-          is_active?: boolean
-          max_runs_per_entity?: number | null
-          max_runs_per_minute?: number
-          name?: string
-          run_mode?: string
-          sort_order?: number
-          trigger_kind?: string
-          type_id?: string | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "automation_rules_type_id_fkey"
-            columns: ["type_id"]
-            isOneToOne: false
-            referencedRelation: "work_item_types"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      automation_runs: {
-        Row: {
-          actions_log: Json
-          attempts: number
-          dedupe_key: string | null
-          entity_id: string | null
-          entity_type: string | null
-          error: string | null
-          event_id: string | null
-          finished_at: string | null
-          id: string
-          rule_id: string | null
-          started_at: string
-          status: string
-        }
-        Insert: {
-          actions_log?: Json
-          attempts?: number
-          dedupe_key?: string | null
-          entity_id?: string | null
-          entity_type?: string | null
-          error?: string | null
-          event_id?: string | null
-          finished_at?: string | null
-          id?: string
-          rule_id?: string | null
-          started_at?: string
-          status: string
-        }
-        Update: {
-          actions_log?: Json
-          attempts?: number
-          dedupe_key?: string | null
-          entity_id?: string | null
-          entity_type?: string | null
-          error?: string | null
-          event_id?: string | null
-          finished_at?: string | null
-          id?: string
-          rule_id?: string | null
-          started_at?: string
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "automation_runs_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "automation_events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "automation_runs_rule_id_fkey"
-            columns: ["rule_id"]
-            isOneToOne: false
-            referencedRelation: "automation_rules"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       carry_forward_events: {
         Row: {
@@ -2073,7 +1787,6 @@ export type Database = {
           workdays: number[]
           morning_digest_time: string
           evening_digest_time: string
-          no_tasks_reminder_interval: number
         }
         Insert: {
           daily_capacity_hours?: number
@@ -2083,7 +1796,6 @@ export type Database = {
           workdays?: number[]
           morning_digest_time?: string
           evening_digest_time?: string
-          no_tasks_reminder_interval?: number
         }
         Update: {
           daily_capacity_hours?: number
@@ -2093,7 +1805,6 @@ export type Database = {
           workdays?: number[]
           morning_digest_time?: string
           evening_digest_time?: string
-          no_tasks_reminder_interval?: number
         }
         Relationships: []
       }
@@ -2117,15 +1828,7 @@ export type Database = {
     }
     Functions: {
       _cron_secret: { Args: never; Returns: string }
-      _current_automation_depth: { Args: never; Returns: number }
       adoption_rollup: { Args: { _for_date?: string }; Returns: number }
-      automation_replay_dead_run: {
-        Args: { _run_id: string }
-        Returns: undefined
-      }
-      automation_set_depth: { Args: { _depth: number }; Returns: undefined }
-      automation_try_lock: { Args: { _key: number }; Returns: boolean }
-      automation_unlock: { Args: { _key: number }; Returns: boolean }
       bump_user_streak: { Args: { _user_id: string }; Returns: undefined }
       capture_config_payload: { Args: never; Returns: Json }
       carry_task_forward: {
@@ -2177,18 +1880,6 @@ export type Database = {
         }
       }
       detect_risks: { Args: never; Returns: number }
-      enqueue_automation_event: {
-        Args: {
-          _actor_id?: string
-          _available_at?: string
-          _depth?: number
-          _entity_id: string
-          _entity_type: string
-          _event_kind: string
-          _payload?: Json
-        }
-        Returns: string
-      }
       exec_summary: {
         Args: {
           _days?: number
@@ -2235,7 +1926,6 @@ export type Database = {
           task_id: string
         }[]
       }
-      purge_automation_artifacts: { Args: { _days?: number }; Returns: number }
       purge_old_audit_exports: { Args: { _days?: number }; Returns: number }
       purge_old_notifications: { Args: { _days?: number }; Returns: number }
       purge_old_risk_events: { Args: { _days?: number }; Returns: number }

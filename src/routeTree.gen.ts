@@ -45,17 +45,13 @@ import { Route as AuthenticatedSettingsOperationsRouteImport } from './routes/_a
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings.notifications'
 import { Route as AuthenticatedSettingsEmailOperationsRouteImport } from './routes/_authenticated/settings.email-operations'
 import { Route as AuthenticatedConfigureNewRouteImport } from './routes/_authenticated/configure.new'
-import { Route as AuthenticatedConfigureAutomationsRouteImport } from './routes/_authenticated/configure.automations'
 import { Route as ApiPublicHooksWorkloadSnapshotRouteImport } from './routes/api/public/hooks/workload-snapshot'
 import { Route as ApiPublicHooksPlanningSuggestionsRouteImport } from './routes/api/public/hooks/planning-suggestions'
-import { Route as ApiPublicHooksNoTasksReminderRouteImport } from './routes/api/public/hooks/no-tasks-reminder'
 import { Route as ApiPublicHooksMorningDigestRouteImport } from './routes/api/public/hooks/morning-digest'
 import { Route as ApiPublicHooksGenerateNudgesRouteImport } from './routes/api/public/hooks/generate-nudges'
 import { Route as ApiPublicHooksEveningDigestRouteImport } from './routes/api/public/hooks/evening-digest'
 import { Route as ApiPublicHooksDetectRisksRouteImport } from './routes/api/public/hooks/detect-risks'
 import { Route as ApiPublicHooksCarryForwardRouteImport } from './routes/api/public/hooks/carry-forward'
-import { Route as ApiPublicHooksAutomationTickRouteImport } from './routes/api/public/hooks/automation-tick'
-import { Route as ApiPublicHooksAutomationDueEnqueueRouteImport } from './routes/api/public/hooks/automation-due-enqueue'
 import { Route as ApiPublicHooksAdoptionRollupRouteImport } from './routes/api/public/hooks/adoption-rollup'
 import { Route as ApiPublicActionsStartTaskRouteImport } from './routes/api/public/actions/start-task'
 import { Route as ApiPublicActionsPushStartTaskRouteImport } from './routes/api/public/actions/push-start-task'
@@ -250,12 +246,6 @@ const AuthenticatedConfigureNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedConfigureRoute,
   } as any)
-const AuthenticatedConfigureAutomationsRoute =
-  AuthenticatedConfigureAutomationsRouteImport.update({
-    id: '/automations',
-    path: '/automations',
-    getParentRoute: () => AuthenticatedConfigureRoute,
-  } as any)
 const ApiPublicHooksWorkloadSnapshotRoute =
   ApiPublicHooksWorkloadSnapshotRouteImport.update({
     id: '/api/public/hooks/workload-snapshot',
@@ -266,12 +256,6 @@ const ApiPublicHooksPlanningSuggestionsRoute =
   ApiPublicHooksPlanningSuggestionsRouteImport.update({
     id: '/api/public/hooks/planning-suggestions',
     path: '/api/public/hooks/planning-suggestions',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksNoTasksReminderRoute =
-  ApiPublicHooksNoTasksReminderRouteImport.update({
-    id: '/api/public/hooks/no-tasks-reminder',
-    path: '/api/public/hooks/no-tasks-reminder',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicHooksMorningDigestRoute =
@@ -302,18 +286,6 @@ const ApiPublicHooksCarryForwardRoute =
   ApiPublicHooksCarryForwardRouteImport.update({
     id: '/api/public/hooks/carry-forward',
     path: '/api/public/hooks/carry-forward',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksAutomationTickRoute =
-  ApiPublicHooksAutomationTickRouteImport.update({
-    id: '/api/public/hooks/automation-tick',
-    path: '/api/public/hooks/automation-tick',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksAutomationDueEnqueueRoute =
-  ApiPublicHooksAutomationDueEnqueueRouteImport.update({
-    id: '/api/public/hooks/automation-due-enqueue',
-    path: '/api/public/hooks/automation-due-enqueue',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicHooksAdoptionRollupRoute =
@@ -379,7 +351,6 @@ export interface FileRoutesByFullPath {
   '/today': typeof AuthenticatedTodayRoute
   '/app-storage/file': typeof AppStorageFileRoute
   '/app-storage/upload': typeof AppStorageUploadRoute
-  '/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/configure/new': typeof AuthenticatedConfigureNewRoute
   '/settings/email-operations': typeof AuthenticatedSettingsEmailOperationsRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -389,14 +360,11 @@ export interface FileRoutesByFullPath {
   '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
-  '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
-  '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
   '/api/public/hooks/carry-forward': typeof ApiPublicHooksCarryForwardRoute
   '/api/public/hooks/detect-risks': typeof ApiPublicHooksDetectRisksRoute
   '/api/public/hooks/evening-digest': typeof ApiPublicHooksEveningDigestRoute
   '/api/public/hooks/generate-nudges': typeof ApiPublicHooksGenerateNudgesRoute
   '/api/public/hooks/morning-digest': typeof ApiPublicHooksMorningDigestRoute
-  '/api/public/hooks/no-tasks-reminder': typeof ApiPublicHooksNoTasksReminderRoute
   '/api/public/hooks/planning-suggestions': typeof ApiPublicHooksPlanningSuggestionsRoute
   '/api/public/hooks/workload-snapshot': typeof ApiPublicHooksWorkloadSnapshotRoute
 }
@@ -432,7 +400,6 @@ export interface FileRoutesByTo {
   '/today': typeof AuthenticatedTodayRoute
   '/app-storage/file': typeof AppStorageFileRoute
   '/app-storage/upload': typeof AppStorageUploadRoute
-  '/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/configure/new': typeof AuthenticatedConfigureNewRoute
   '/settings/email-operations': typeof AuthenticatedSettingsEmailOperationsRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -442,14 +409,11 @@ export interface FileRoutesByTo {
   '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
-  '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
-  '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
   '/api/public/hooks/carry-forward': typeof ApiPublicHooksCarryForwardRoute
   '/api/public/hooks/detect-risks': typeof ApiPublicHooksDetectRisksRoute
   '/api/public/hooks/evening-digest': typeof ApiPublicHooksEveningDigestRoute
   '/api/public/hooks/generate-nudges': typeof ApiPublicHooksGenerateNudgesRoute
   '/api/public/hooks/morning-digest': typeof ApiPublicHooksMorningDigestRoute
-  '/api/public/hooks/no-tasks-reminder': typeof ApiPublicHooksNoTasksReminderRoute
   '/api/public/hooks/planning-suggestions': typeof ApiPublicHooksPlanningSuggestionsRoute
   '/api/public/hooks/workload-snapshot': typeof ApiPublicHooksWorkloadSnapshotRoute
 }
@@ -487,7 +451,6 @@ export interface FileRoutesById {
   '/_authenticated/today': typeof AuthenticatedTodayRoute
   '/app-storage/file': typeof AppStorageFileRoute
   '/app-storage/upload': typeof AppStorageUploadRoute
-  '/_authenticated/configure/automations': typeof AuthenticatedConfigureAutomationsRoute
   '/_authenticated/configure/new': typeof AuthenticatedConfigureNewRoute
   '/_authenticated/settings/email-operations': typeof AuthenticatedSettingsEmailOperationsRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -497,14 +460,11 @@ export interface FileRoutesById {
   '/api/public/actions/push-start-task': typeof ApiPublicActionsPushStartTaskRoute
   '/api/public/actions/start-task': typeof ApiPublicActionsStartTaskRoute
   '/api/public/hooks/adoption-rollup': typeof ApiPublicHooksAdoptionRollupRoute
-  '/api/public/hooks/automation-due-enqueue': typeof ApiPublicHooksAutomationDueEnqueueRoute
-  '/api/public/hooks/automation-tick': typeof ApiPublicHooksAutomationTickRoute
   '/api/public/hooks/carry-forward': typeof ApiPublicHooksCarryForwardRoute
   '/api/public/hooks/detect-risks': typeof ApiPublicHooksDetectRisksRoute
   '/api/public/hooks/evening-digest': typeof ApiPublicHooksEveningDigestRoute
   '/api/public/hooks/generate-nudges': typeof ApiPublicHooksGenerateNudgesRoute
   '/api/public/hooks/morning-digest': typeof ApiPublicHooksMorningDigestRoute
-  '/api/public/hooks/no-tasks-reminder': typeof ApiPublicHooksNoTasksReminderRoute
   '/api/public/hooks/planning-suggestions': typeof ApiPublicHooksPlanningSuggestionsRoute
   '/api/public/hooks/workload-snapshot': typeof ApiPublicHooksWorkloadSnapshotRoute
 }
@@ -542,7 +502,6 @@ export interface FileRouteTypes {
     | '/today'
     | '/app-storage/file'
     | '/app-storage/upload'
-    | '/configure/automations'
     | '/configure/new'
     | '/settings/email-operations'
     | '/settings/notifications'
@@ -552,14 +511,11 @@ export interface FileRouteTypes {
     | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
-    | '/api/public/hooks/automation-due-enqueue'
-    | '/api/public/hooks/automation-tick'
     | '/api/public/hooks/carry-forward'
     | '/api/public/hooks/detect-risks'
     | '/api/public/hooks/evening-digest'
     | '/api/public/hooks/generate-nudges'
     | '/api/public/hooks/morning-digest'
-    | '/api/public/hooks/no-tasks-reminder'
     | '/api/public/hooks/planning-suggestions'
     | '/api/public/hooks/workload-snapshot'
   fileRoutesByTo: FileRoutesByTo
@@ -595,7 +551,6 @@ export interface FileRouteTypes {
     | '/today'
     | '/app-storage/file'
     | '/app-storage/upload'
-    | '/configure/automations'
     | '/configure/new'
     | '/settings/email-operations'
     | '/settings/notifications'
@@ -605,14 +560,11 @@ export interface FileRouteTypes {
     | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
-    | '/api/public/hooks/automation-due-enqueue'
-    | '/api/public/hooks/automation-tick'
     | '/api/public/hooks/carry-forward'
     | '/api/public/hooks/detect-risks'
     | '/api/public/hooks/evening-digest'
     | '/api/public/hooks/generate-nudges'
     | '/api/public/hooks/morning-digest'
-    | '/api/public/hooks/no-tasks-reminder'
     | '/api/public/hooks/planning-suggestions'
     | '/api/public/hooks/workload-snapshot'
   id:
@@ -649,7 +601,6 @@ export interface FileRouteTypes {
     | '/_authenticated/today'
     | '/app-storage/file'
     | '/app-storage/upload'
-    | '/_authenticated/configure/automations'
     | '/_authenticated/configure/new'
     | '/_authenticated/settings/email-operations'
     | '/_authenticated/settings/notifications'
@@ -659,14 +610,11 @@ export interface FileRouteTypes {
     | '/api/public/actions/push-start-task'
     | '/api/public/actions/start-task'
     | '/api/public/hooks/adoption-rollup'
-    | '/api/public/hooks/automation-due-enqueue'
-    | '/api/public/hooks/automation-tick'
     | '/api/public/hooks/carry-forward'
     | '/api/public/hooks/detect-risks'
     | '/api/public/hooks/evening-digest'
     | '/api/public/hooks/generate-nudges'
     | '/api/public/hooks/morning-digest'
-    | '/api/public/hooks/no-tasks-reminder'
     | '/api/public/hooks/planning-suggestions'
     | '/api/public/hooks/workload-snapshot'
   fileRoutesById: FileRoutesById
@@ -682,14 +630,11 @@ export interface RootRouteChildren {
   ApiPublicActionsPushStartTaskRoute: typeof ApiPublicActionsPushStartTaskRoute
   ApiPublicActionsStartTaskRoute: typeof ApiPublicActionsStartTaskRoute
   ApiPublicHooksAdoptionRollupRoute: typeof ApiPublicHooksAdoptionRollupRoute
-  ApiPublicHooksAutomationDueEnqueueRoute: typeof ApiPublicHooksAutomationDueEnqueueRoute
-  ApiPublicHooksAutomationTickRoute: typeof ApiPublicHooksAutomationTickRoute
   ApiPublicHooksCarryForwardRoute: typeof ApiPublicHooksCarryForwardRoute
   ApiPublicHooksDetectRisksRoute: typeof ApiPublicHooksDetectRisksRoute
   ApiPublicHooksEveningDigestRoute: typeof ApiPublicHooksEveningDigestRoute
   ApiPublicHooksGenerateNudgesRoute: typeof ApiPublicHooksGenerateNudgesRoute
   ApiPublicHooksMorningDigestRoute: typeof ApiPublicHooksMorningDigestRoute
-  ApiPublicHooksNoTasksReminderRoute: typeof ApiPublicHooksNoTasksReminderRoute
   ApiPublicHooksPlanningSuggestionsRoute: typeof ApiPublicHooksPlanningSuggestionsRoute
   ApiPublicHooksWorkloadSnapshotRoute: typeof ApiPublicHooksWorkloadSnapshotRoute
 }
@@ -948,13 +893,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConfigureNewRouteImport
       parentRoute: typeof AuthenticatedConfigureRoute
     }
-    '/_authenticated/configure/automations': {
-      id: '/_authenticated/configure/automations'
-      path: '/automations'
-      fullPath: '/configure/automations'
-      preLoaderRoute: typeof AuthenticatedConfigureAutomationsRouteImport
-      parentRoute: typeof AuthenticatedConfigureRoute
-    }
     '/api/public/hooks/workload-snapshot': {
       id: '/api/public/hooks/workload-snapshot'
       path: '/api/public/hooks/workload-snapshot'
@@ -967,13 +905,6 @@ declare module '@tanstack/react-router' {
       path: '/api/public/hooks/planning-suggestions'
       fullPath: '/api/public/hooks/planning-suggestions'
       preLoaderRoute: typeof ApiPublicHooksPlanningSuggestionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/no-tasks-reminder': {
-      id: '/api/public/hooks/no-tasks-reminder'
-      path: '/api/public/hooks/no-tasks-reminder'
-      fullPath: '/api/public/hooks/no-tasks-reminder'
-      preLoaderRoute: typeof ApiPublicHooksNoTasksReminderRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/morning-digest': {
@@ -1009,20 +940,6 @@ declare module '@tanstack/react-router' {
       path: '/api/public/hooks/carry-forward'
       fullPath: '/api/public/hooks/carry-forward'
       preLoaderRoute: typeof ApiPublicHooksCarryForwardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/automation-tick': {
-      id: '/api/public/hooks/automation-tick'
-      path: '/api/public/hooks/automation-tick'
-      fullPath: '/api/public/hooks/automation-tick'
-      preLoaderRoute: typeof ApiPublicHooksAutomationTickRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/automation-due-enqueue': {
-      id: '/api/public/hooks/automation-due-enqueue'
-      path: '/api/public/hooks/automation-due-enqueue'
-      fullPath: '/api/public/hooks/automation-due-enqueue'
-      preLoaderRoute: typeof ApiPublicHooksAutomationDueEnqueueRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/adoption-rollup': {
@@ -1064,14 +981,11 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedConfigureRouteChildren {
-  AuthenticatedConfigureAutomationsRoute: typeof AuthenticatedConfigureAutomationsRoute
   AuthenticatedConfigureNewRoute: typeof AuthenticatedConfigureNewRoute
 }
 
 const AuthenticatedConfigureRouteChildren: AuthenticatedConfigureRouteChildren =
   {
-    AuthenticatedConfigureAutomationsRoute:
-      AuthenticatedConfigureAutomationsRoute,
     AuthenticatedConfigureNewRoute: AuthenticatedConfigureNewRoute,
   }
 
@@ -1163,15 +1077,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicActionsPushStartTaskRoute: ApiPublicActionsPushStartTaskRoute,
   ApiPublicActionsStartTaskRoute: ApiPublicActionsStartTaskRoute,
   ApiPublicHooksAdoptionRollupRoute: ApiPublicHooksAdoptionRollupRoute,
-  ApiPublicHooksAutomationDueEnqueueRoute:
-    ApiPublicHooksAutomationDueEnqueueRoute,
-  ApiPublicHooksAutomationTickRoute: ApiPublicHooksAutomationTickRoute,
   ApiPublicHooksCarryForwardRoute: ApiPublicHooksCarryForwardRoute,
   ApiPublicHooksDetectRisksRoute: ApiPublicHooksDetectRisksRoute,
   ApiPublicHooksEveningDigestRoute: ApiPublicHooksEveningDigestRoute,
   ApiPublicHooksGenerateNudgesRoute: ApiPublicHooksGenerateNudgesRoute,
   ApiPublicHooksMorningDigestRoute: ApiPublicHooksMorningDigestRoute,
-  ApiPublicHooksNoTasksReminderRoute: ApiPublicHooksNoTasksReminderRoute,
   ApiPublicHooksPlanningSuggestionsRoute:
     ApiPublicHooksPlanningSuggestionsRoute,
   ApiPublicHooksWorkloadSnapshotRoute: ApiPublicHooksWorkloadSnapshotRoute,

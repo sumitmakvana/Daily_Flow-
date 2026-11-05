@@ -17,16 +17,17 @@
  * resync, not by replaying old outbox rows.
  *
  * Reliability, all reported with a "[Realtime]" console line (never silent):
- *  - the connection uses TCP keepalive AND a `SELECT 1` heartbeat; a dead one is replaced;
+ *  - the connection uses TCP keepalive (no application-level heartbeat query): the kernel probes an
+ *    idle connection and surfaces a dead peer as a socket 'error'/'end', which replaces it;
  *  - reconnects back off 1s, 2s, ... up to 30s and the attempt number is logged;
  *  - if the outbox cannot prove nothing was lost (pruned past the cursor) `onGap` makes every
  *    connected browser refetch;
  *  - a missing outbox table or missing/disabled triggers are logged as errors at startup.
- * The only recurring statement is the heartbeat `SELECT 1`; the data is never polled.
+ * No statement is ever run on a healthy idle connection; the data is never polled.
  */
 import { Client } from "pg";
 import { READ_ONLY_PG_OPTIONS, isReadOnlyMode } from "@/lib/read-only-mode.server";
-import { ADMINS_ROOM, ALL_USERS_ROOM, EntityEventBatcher, type EntityMessage } from "@/lib/entity-events.server";
+import { ALL_USERS_ROOM, EntityEventBatcher, type EntityMessage } from "@/lib/entity-events.server";
 import { emitToRooms } from "@/lib/realtime.server";
 
 export const OUTBOX_CHANNEL = "realtime_outbox";
@@ -52,8 +53,7 @@ const ROW_TABLES = [
   "tasks", "nudges", "risk_events", "planning_suggestions", "approval_requests",
   "task_review_decisions", "task_worklogs", "leaves", "eod_checkins",
 ];
-const AUTOMATION_TABLES = ["automation_runs", "automation_rules", "automation_queue_stats"];
-export const REQUIRED_TRIGGERS: string[] = [...ROW_TABLES, ...AUTOMATION_TABLES].flatMap((t) => [
+export const REQUIRED_TRIGGERS: string[] = ROW_TABLES.flatMap((t) => [
   `trg_realtime_${t}`,
   `trg_realtime_${t}_truncate`,
 ]);
@@ -64,8 +64,6 @@ export type OutboxListenerOptions = {
   /** Nothing can prove no event was missed: make every connected browser refetch. */
   onGap: (reason: string) => void;
   readOnly?: boolean;
-  heartbeatMs?: number;
-  heartbeatTimeoutMs?: number;
   backoffBaseMs?: number;
   backoffMaxMs?: number;
   /** Ids replayed below the cursor to cover out-of-order commits. */
@@ -90,7 +88,6 @@ export type OutboxStatus = {
   deliverErrors: number;
   missingTriggers: string[];
   lastError: string | null;
-  lastHeartbeatAt: number | null;
 };
 
 const COLS = `id, table_name, op, row_id, payload`;
@@ -112,10 +109,9 @@ export class OutboxListener {
   private readonly seen = new Set<number>();
   private attempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private readonly s: OutboxStatus = {
     connected: false, degraded: null, cursor: null, delivered: 0, duplicates: 0, replayed: 0,
-    reconnects: 0, gaps: 0, deliverErrors: 0, missingTriggers: [], lastError: null, lastHeartbeatAt: null,
+    reconnects: 0, gaps: 0, deliverErrors: 0, missingTriggers: [], lastError: null,
   };
   private readonly o: Required<Omit<OutboxListenerOptions, "log" | "error">> &
     Pick<OutboxListenerOptions, "log" | "error">;
@@ -123,8 +119,6 @@ export class OutboxListener {
   constructor(opts: OutboxListenerOptions) {
     this.o = {
       readOnly: false,
-      heartbeatMs: 30_000,
-      heartbeatTimeoutMs: 5_000,
       backoffBaseMs: 1_000,
       backoffMaxMs: 30_000,
       margin: 1_000,
@@ -147,7 +141,6 @@ export class OutboxListener {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
-    this.stopHeartbeat();
     const c = this.client;
     this.client = null;
     this.s.connected = false;
@@ -189,7 +182,6 @@ export class OutboxListener {
       if (this.client !== client || this.stopped) return;
       this.attempt = 0;
       this.s.connected = true;
-      this.startHeartbeat(client);
       this.log(`listening on "${OUTBOX_CHANNEL}"${this.s.degraded ? ` (DEGRADED: ${this.s.degraded})` : ""}`);
     } catch (e) {
       this.lost(client, e);
@@ -200,7 +192,6 @@ export class OutboxListener {
 
   private lost(client: ListenClient, e: unknown): void {
     if (this.client !== client) return; // a connection we already replaced
-    this.stopHeartbeat();
     this.client = null;
     this.s.connected = false;
     client.removeAllListeners();
@@ -218,30 +209,6 @@ export class OutboxListener {
       void this.connect();
     }, delay);
     this.reconnectTimer.unref?.();
-  }
-
-  private startHeartbeat(client: ListenClient): void {
-    this.stopHeartbeat();
-    if (this.o.heartbeatMs <= 0) return;
-    this.heartbeatTimer = setInterval(() => {
-      if (this.client !== client) return;
-      let timer: ReturnType<typeof setTimeout>;
-      const timeout = new Promise<never>((_, rej) => {
-        timer = setTimeout(() => rej(new Error("heartbeat timed out")), this.o.heartbeatTimeoutMs);
-      });
-      Promise.race([client.query("SELECT 1"), timeout])
-        .then(() => {
-          this.s.lastHeartbeatAt = Date.now();
-        })
-        .catch((e) => this.lost(client, e))
-        .finally(() => clearTimeout(timer));
-    }, this.o.heartbeatMs);
-    this.heartbeatTimer.unref?.();
-  }
-
-  private stopHeartbeat(): void {
-    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-    this.heartbeatTimer = null;
   }
 
   // ---------- recovery ----------
@@ -375,7 +342,6 @@ export function emitResyncAll(emit: typeof emitToRooms = emitToRooms): void {
     const rooms = table === "risk_events" || table === "planning_suggestions" ? ["role:manager"] : [ALL_USERS_ROOM];
     emit(rooms, "entity:changed", { schema: "public", table, eventType: "UPDATE", new: {}, old: {}, bulk: true });
   }
-  emit([ADMINS_ROOM], "automation:health", { schema: "public", table: "automation_health", eventType: "UPDATE", new: {}, old: {}, bulk: true });
 }
 
 export function startOutboxListener(): OutboxListener | null {

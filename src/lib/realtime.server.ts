@@ -52,10 +52,11 @@ function eventLog(): EventLog {
 /** Which table a pushed event is about (null = not a resync-able event). */
 function tableOf(event: string, payload: unknown): string | null {
   // A read marker is part of the same resync class: a client that missed one asks "did notifications change?"
-  if (event === "notification:new" || event === "notification:read") return "notifications";
+  if (event === "notification:new" || event === "notification:read" || event === "notification:deleted") {
+    return "notifications";
+  }
   const t = (payload as { table?: unknown } | null)?.table;
   if (typeof t === "string") return t;
-  if (event === "automation:health") return "automation_health";
   return null;
 }
 
@@ -239,6 +240,13 @@ export function emitToUser(userId: string, event: string, payload: unknown) {
   if (!io) return;
   const room = `user:${userId}`;
   io.to(room).emit(event, payload, stamp(event, payload, [room]));
+}
+
+/** Is at least one socket of this user connected right now? (Lets callers skip work nobody would receive.) */
+export function hasUserSockets(userId: string): boolean {
+  const io = g.__operonIo;
+  if (!io) return false;
+  return (io.sockets.adapter.rooms.get(`user:${userId}`)?.size ?? 0) > 0;
 }
 
 /**

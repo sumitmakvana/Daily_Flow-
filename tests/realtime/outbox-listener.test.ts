@@ -20,7 +20,6 @@ class FakeDb {
   clients: FakeClient[] = [];
   connectError: Error | null = null;
   queryError: ((text: string) => Error | null) | null = null;
-  heartbeat: "ok" | "fail" | "hang" = "ok";
   commit(table: string, op = "UPDATE", keys: Record<string, unknown> = {}, rowId: string | null = "r") {
     const id = ++this.seqLast;
     this.rows.push({ id, table_name: table, op, row_id: rowId, payload: keys });
@@ -55,11 +54,6 @@ class FakeClient extends EventEmitter implements ListenClient {
     this.queries.push(text);
     const forced = this.db.queryError?.(text);
     if (forced) throw forced;
-    if (text === "SELECT 1") {
-      if (this.db.heartbeat === "fail") throw new Error("terminating connection");
-      if (this.db.heartbeat === "hang") return new Promise<never>(() => {});
-      return { rows: [{ "?column?": 1 }] };
-    }
     if (text.startsWith("LISTEN")) return { rows: [] };
     if (text.includes("COALESCE(max(id), 0) AS max")) return { rows: [{ max: Math.max(0, ...this.db.rows.map((r) => r.id)) }] };
     if (text.startsWith("DELETE FROM realtime.outbox")) return { rows: [] };
@@ -390,46 +384,14 @@ describe("reconnect and outbox recovery (nothing committed is lost)", () => {
   });
 });
 
-describe("heartbeat", () => {
-  it("a healthy connection runs ONLY `SELECT 1` after startup: the data tables are never polled", async () => {
-    const l = make({ heartbeatMs: 30_000 });
+describe("idle connection", () => {
+  it("a healthy connection runs NO query after startup: no heartbeat, no polling", async () => {
+    const l = make();
     l.start();
     await tick();
     const startupQueries = db.clients[0].queries.length;
     await tick(10 * 60_000);
-    const later = db.clients[0].queries.slice(startupQueries);
-    expect(later.length).toBe(20);
-    expect(new Set(later)).toEqual(new Set(["SELECT 1"]));
-    expect(l.status().lastHeartbeatAt).not.toBeNull();
-    await l.stop();
-  });
-
-  it("a failing heartbeat replaces the connection", async () => {
-    const l = make({ heartbeatMs: 30_000 });
-    l.start();
-    await tick();
-    db.heartbeat = "fail";
-    await tick(30_000);
-    expect(l.status().connected).toBe(false);
-    db.heartbeat = "ok";
-    await tick(1000);
-    expect(db.clients).toHaveLength(2);
-    expect(l.status().connected).toBe(true);
-    await l.stop();
-  });
-
-  it("a HUNG connection (no answer at all) is detected by the heartbeat timeout", async () => {
-    const l = make({ heartbeatMs: 30_000, heartbeatTimeoutMs: 5_000 });
-    l.start();
-    await tick();
-    db.heartbeat = "hang";
-    await tick(30_000);
-    expect(l.status().connected).toBe(true); // not yet: waiting for the answer
-    await tick(5_000);
-    expect(l.status().connected).toBe(false);
-    expect(errors.join("\n")).toMatch(/heartbeat timed out/);
-    db.heartbeat = "ok";
-    await tick(1000);
+    expect(db.clients[0].queries.slice(startupQueries)).toEqual([]);
     expect(l.status().connected).toBe(true);
     await l.stop();
   });
@@ -470,7 +432,7 @@ describe("clear error reporting", () => {
 });
 
 describe("emitResyncAll (used only when the outbox cannot prove nothing was missed)", () => {
-  it("asks each audience class to refetch each table once; admins get the health signal", () => {
+  it("asks each audience class to refetch each table once", () => {
     const emit = vi.fn();
     emitResyncAll(emit);
     const byTable = Object.fromEntries(emit.mock.calls.map((c) => [c[2].table, c[0]]));
@@ -479,8 +441,6 @@ describe("emitResyncAll (used only when the outbox cannot prove nothing was miss
     expect(byTable.task_worklogs).toEqual(["authenticated"]);
     expect(byTable.risk_events).toEqual(["role:manager"]);
     expect(byTable.planning_suggestions).toEqual(["role:manager"]);
-    expect(byTable.automation_health).toEqual(["role:admin"]);
     expect(emit.mock.calls.every((c) => c[2].bulk === true)).toBe(true);
-    expect(emit.mock.calls.find((c) => c[2].table === "automation_health")![1]).toBe("automation:health");
   });
 });

@@ -42,6 +42,7 @@ const TEST_DB = "rt_outbox_test";
 let dbUrl = "";
 const read = (p: string) => readFileSync(resolve(__dirname, "../..", p), "utf8");
 const MIGRATION = "supabase/migrations/20261031000000_realtime_outbox.sql";
+const REMOVE_AUTOMATION = "supabase/migrations/20261105020000_remove_automation.sql";
 const ROLLBACK = "supabase/rollbacks/20261031000000_realtime_outbox.down.sql";
 const FIXTURE = "tests/fixtures/realtime-schema.sql";
 
@@ -90,6 +91,7 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
     await admin.connect();
     await q(read(FIXTURE));
     await q(read(MIGRATION));
+    await q(read(REMOVE_AUTOMATION));
   });
   afterAll(async () => {
     for (const c of extra) await c.end().catch(() => {});
@@ -115,6 +117,7 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
     it("is idempotent: applying it twice changes nothing and loses no outbox rows", async () => {
       await q("INSERT INTO tasks (assigned_to) VALUES ($1)", [U.alice]);
       await q(read(MIGRATION));
+      await q(read(REMOVE_AUTOMATION));
       const { rows } = await q("SELECT count(*)::int AS n FROM pg_trigger WHERE tgname LIKE 'trg\\_realtime\\_%' AND NOT tgisinternal");
       expect(rows[0].n).toBe(REQUIRED_TRIGGERS.length);
       expect(await outbox()).toHaveLength(1);
@@ -177,17 +180,6 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
       expect(r.payload.requested_by).toBe(U.alice);
       // user step (cat) + role step (the manager) + reviewer_field (the task's reviewer); NOT bob (member) or boss (admin: routed by role)
       expect([...r.payload.approvers].sort()).toEqual([U.cat, U.mgr, U.rita].sort());
-    });
-
-    it("automation tables: ONE event per statement (not per row), as automation_health", async () => {
-      await q("INSERT INTO automation_rules (is_active) SELECT true FROM generate_series(1,50)");
-      await clearOutbox();
-      await q("UPDATE automation_rules SET is_active = false");
-      await q("UPDATE automation_queue_stats SET pending_count = pending_count + 1");
-      await q("INSERT INTO automation_runs (status) VALUES ('ok'), ('ok'), ('failed')");
-      const rows = await outbox();
-      expect(rows.map((r) => r.table_name)).toEqual(["automation_health", "automation_health", "automation_health"]);
-      expect(rows.map((r) => r.op)).toEqual(["UPDATE", "UPDATE", "INSERT"]);
     });
 
     it("the outbox and NOTIFY never contain row content: only uuids, or null (checked for every table)", async () => {
@@ -362,7 +354,6 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
         error: (m) => errs.push(m),
         log: () => {},
         backoffBaseMs: 100,
-        heartbeatMs: 200,
         ...extraOpts,
       });
       listener.start();
@@ -406,8 +397,8 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
       expect(errs).not.toContain("GAP");
     });
 
-    it("heartbeat detects a connection that was killed server-side without any error event", async () => {
-      await start({ heartbeatMs: 150 });
+    it("a connection killed server-side is detected from the socket close and recovered", async () => {
+      await start();
       await kill(listenerClients[0]);
       await until(() => listenerClients.length >= 2 && listener.status().connected, 8000, "reconnect");
       await q("INSERT INTO tasks (assigned_to) VALUES ($1)", [U.alice]);
@@ -485,14 +476,12 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
       const s = connect(base, { path: "/socket.io", auth: { token: `${sub}:${exp()}` }, transports: ["websocket"], reconnection: false });
       sockets.push(s);
       const got: Array<{ table: string; new: Record<string, unknown>; old: Record<string, unknown> }> = [];
-      const health: unknown[] = [];
       s.on("entity:changed", (p) => got.push(p));
-      s.on("automation:health", (p) => health.push(p));
       await new Promise((r) => s.once("connect", r));
-      return { got, health };
+      return { got };
     };
 
-    it("members get only their own work; managers get what they may see; admins get automation health; once each", async () => {
+    it("members get only their own work; managers get what they may see; once each", async () => {
       // user ids double as socket subjects here: the room is user:<sub>
       const alice = await person(U.alice);
       const bob = await person(U.bob);
@@ -508,7 +497,6 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
       await q("INSERT INTO task_worklogs (task_id, user_id) VALUES ($1,$2)", [t, U.alice]);
       await q("INSERT INTO nudges (user_id) VALUES ($1)", [U.bob]);
       await q("INSERT INTO risk_events (entity_type, entity_id) VALUES ('task',$1)", [t]);
-      await q("UPDATE automation_queue_stats SET pending_count = pending_count + 1");
       await wait(600);
 
       const tables = (c: { got: Array<{ table: string }> }) => [...new Set(c.got.map((g) => g.table))].sort();
@@ -517,8 +505,6 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
       expect(tables(bob)).toEqual(["nudges"]); // unrelated member: only his own nudge
       expect(tables(mgr)).toEqual(["leaves", "risk_events", "task_worklogs", "tasks"]);
       expect(tables(boss)).toEqual(["leaves", "risk_events", "task_worklogs", "tasks"]);
-      expect(boss.health).toHaveLength(1);
-      for (const c of [alice, bob, rita, mgr]) expect(c.health).toHaveLength(0);
       // each change delivered once per socket
       expect(alice.got.filter((g) => g.table === "tasks" && g.new.id === t)).toHaveLength(1);
       expect(JSON.stringify([alice.got, bob.got, mgr.got])).not.toMatch(/task_name|secret title/);
@@ -534,6 +520,7 @@ describe.skipIf(!url)("transactional outbox on a real Postgres", () => {
       await q("INSERT INTO tasks (assigned_to) VALUES ($1)", [U.alice]); // application writes are unaffected
       await q(read(ROLLBACK)); // idempotent
       await q(read(MIGRATION));
+      await q(read(REMOVE_AUTOMATION));
       await q("INSERT INTO tasks (assigned_to) VALUES ($1)", [U.alice]);
       expect(await outbox()).toHaveLength(1);
     });
