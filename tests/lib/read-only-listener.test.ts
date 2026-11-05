@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
 vi.mock("@/lib/realtime.server", () => ({
   emitToUser: (...a: unknown[]) => h.emitToUser(...a),
   emitToRooms: vi.fn(),
+  hasUserSockets: () => false,
 }));
 vi.mock("@/services/email-dispatcher", () => ({ sendEodEmail: (...a: unknown[]) => h.sendEodEmail(...a) }));
 vi.mock("@/services/email-templates", () => ({
@@ -77,8 +78,8 @@ describe("notification listener startup", () => {
   it("READ-ONLY: issues NO DDL and NO write — only LISTEN", async () => {
     setMode("1");
     await start();
-    expect(h.queries).toEqual(["LISTEN new_notification", "LISTEN entity_changed"]);
-    expect(statements()).not.toMatch(/CREATE|DROP|ALTER|INSERT|UPDATE|DELETE|TRUNCATE/i);
+    expect(h.queries).toEqual(["LISTEN new_notification", "LISTEN notification_deleted", "LISTEN entity_changed"]);
+    expect(statements()).not.toMatch(/\b(CREATE|DROP|ALTER|INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
   });
 
   it("normal mode: still installs the notification trigger (behaviour unchanged)", async () => {

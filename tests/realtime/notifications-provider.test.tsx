@@ -473,6 +473,101 @@ describe("NotificationsProvider", () => {
     expect(result.current.unreadCount).toBe(2);
   });
 
+  it("notification:unread sets the badge from the server total with no request (list opened)", async () => {
+    const { result } = await ready();
+    const heads = headCount.n;
+    act(() => ev.get("notification:unread")!({ count: 6 })); // 1 held unread + 5 older ones
+    expect(result.current.unreadCount).toBe(6);
+    act(() => ev.get("notification:unread")!({ count: 1 })); // the older ones were read elsewhere
+    expect(result.current.unreadCount).toBe(1);
+    expect(headCount.n).toBe(heads);
+    expect(fetchCount.n).toBe(1);
+  });
+
+  it("notification:unread before the list was ever opened updates the badge with no request", async () => {
+    const { result } = renderHook(() => useNotifications(), { wrapper });
+    await waitFor(() => expect(result.current.unreadCount).toBe(1));
+    act(() => ev.get("notification:unread")!({ count: 4 }));
+    expect(result.current.unreadCount).toBe(4);
+    expect(headCount.n).toBe(1);
+    expect(fetchCount.n).toBe(0);
+  });
+
+  it("notification:new immediately followed by notification:unread (same tick) counts the row once", async () => {
+    const { result } = await ready();
+    act(() => {
+      ev.get("notification:new")!(row("n1"));
+      ev.get("notification:unread")!({ count: 2 }); // the server total already includes n1
+    });
+    expect(result.current.unreadCount).toBe(2);
+  });
+
+  it("notification:read followed by notification:unread in the same tick does not double count", async () => {
+    const { result } = await ready();
+    act(() => {
+      ev.get("notification:read")!({ ids: ["old1"], read_at: "2026-11-02T10:00:00Z" });
+      ev.get("notification:unread")!({ count: 0 });
+    });
+    expect(result.current.unreadCount).toBe(0);
+  });
+
+  it("ignores a malformed notification:unread payload", async () => {
+    const { result } = await ready();
+    for (const bad of [undefined, null, {}, { count: "3" }, { count: -1 }, { count: NaN }]) {
+      act(() => ev.get("notification:unread")!(bad as never));
+    }
+    expect(result.current.unreadCount).toBe(1);
+  });
+
+  it("notification:deleted drops a held unread row and lowers the badge, then the server total confirms it", async () => {
+    const { result } = await ready();
+    act(() => ev.get("notification:deleted")!({ id: "old1" }));
+    expect(result.current.items.map((n) => n.id)).toEqual(["old2"]);
+    expect(result.current.unreadCount).toBe(0);
+    act(() => ev.get("notification:unread")!({ count: 0 }));
+    expect(result.current.unreadCount).toBe(0);
+    expect(fetchCount.n).toBe(1);
+  });
+
+  it("a deleted row that was never loaded is corrected by the pushed count alone", async () => {
+    const { result } = await ready();
+    act(() => ev.get("notification:deleted")!({ id: "not-held" }));
+    expect(result.current.items).toHaveLength(2);
+    act(() => ev.get("notification:unread")!({ count: 1 }));
+    expect(result.current.unreadCount).toBe(1);
+  });
+
+  it("a deleted row can be re-delivered later (its id is forgotten, not blocked)", async () => {
+    const { result } = await ready();
+    act(() => ev.get("notification:deleted")!({ id: "old1" }));
+    act(() => ev.get("notification:new")!(row("old1")));
+    expect(result.current.items.map((n) => n.id)).toContain("old1");
+  });
+
+  it("reconnect: one head-count resyncs the badge, then pushes keep it exact with no further requests", async () => {
+    const { result } = renderHook(() => useNotifications(), { wrapper });
+    await waitFor(() => expect(result.current.unreadCount).toBe(1)); // initial count: 1 request
+    serverRows = [row("n1"), row("n2"), ...serverRows]; // missed while disconnected
+    await act(async () => resync(["tasks"])); // reconnect: one count request
+    await waitFor(() => expect(result.current.unreadCount).toBe(3));
+    expect(headCount.n).toBe(2);
+    act(() => ev.get("notification:unread")!({ count: 5 }));
+    act(() => ev.get("notification:unread")!({ count: 4 }));
+    act(() => ev.get("notification:read")!({ ids: ["n1"], read_at: "2026-11-02T10:00:00Z" }));
+    expect(result.current.unreadCount).toBe(3);
+    expect(headCount.n).toBe(2);
+    expect(fetchCount.n).toBe(0);
+  });
+
+  it("unsubscribes the unread and deleted listeners on unmount", async () => {
+    const { unmount } = await ready();
+    expect(ev.has("notification:unread")).toBe(true);
+    expect(ev.has("notification:deleted")).toBe(true);
+    unmount();
+    expect(ev.has("notification:unread")).toBe(false);
+    expect(ev.has("notification:deleted")).toBe(false);
+  });
+
   it("cleans up listeners and disconnects on unmount", async () => {
     const { unmount } = await ready();
     unmount();

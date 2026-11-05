@@ -9,6 +9,9 @@
  * - Applies `notification:read` socket events live (a notification read in another tab or on another
  *   device): the badge and any held row update instantly. Marking read goes through the server so it can
  *   announce it (see services/notifications.functions.ts). There is no time-based refetch on tab return.
+ * - Applies `notification:unread` `{ count }`: the server pushes its authoritative unread total after every create,
+ *   read or delete (coalesced, see lib/notification-unread.server.ts), so the badge stays exact with no request.
+ *   `notification:deleted` drops a held row.
  * - After a socket reconnect the badge count is synced once; the list is reloaded only if the server
  *   reports that notifications changed (missed rows are alerted, read state is refreshed).
  * - Deduplicates by notification id, so an event and a refetch can never alert
@@ -185,6 +188,39 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     [userId, coalesce],
   );
 
+  /**
+   * Replace the held list and update the ref in the same tick. Socket events can arrive back to back (e.g.
+   * `notification:new` then `notification:unread`) before React renders, and the unread math reads the ref.
+   */
+  const commitItems = useCallback((next: (prev: AppNotification[]) => AppNotification[]) => {
+    itemsRef.current = next(itemsRef.current);
+    setItems(itemsRef.current);
+  }, []);
+
+  /**
+   * The server's authoritative unread total (24 h window), pushed as `notification:unread`. The rows the list holds
+   * are part of that total, so they are subtracted: the badge is then total = held + the rest. Same math as the
+   * head-count in loadUnreadCount.
+   */
+  const applyServerCount = useCallback((count: number) => {
+    const cutoff = Date.now() - WINDOW_MS;
+    const heldUnread = itemsRef.current.filter((n) => !n.read_at && Date.parse(n.created_at) >= cutoff).length;
+    const rest = Math.max(0, count - heldUnread);
+    if (listReadyRef.current) setOlderUnread(rest);
+    else setBaseUnread(rest);
+  }, []);
+
+  /** A notification was deleted on the server: drop it from the list. The count follows as `notification:unread`. */
+  const applyDeleted = useCallback(
+    (id: string) => {
+      pushedRows.current.delete(id);
+      readIds.current.delete(id);
+      knownIds.current.delete(id);
+      if (itemsRef.current.some((n) => n.id === id)) commitItems((prev) => prev.filter((n) => n.id !== id));
+    },
+    [commitItems],
+  );
+
   /** A notification was read (here, or announced from another tab/device). Idempotent. */
   const applyRead = useCallback((id: string, readAt: string) => {
     if (readIds.current.has(id)) return;
@@ -194,21 +230,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     if (pushed) pushedRows.current.set(id, { ...pushed, read_at: pushed.read_at ?? readAt });
     const held = itemsRef.current.find((n) => n.id === id);
     if (held) {
-      if (!held.read_at) setItems((prev) => prev.map((n) => (n.id === id && !n.read_at ? { ...n, read_at: readAt } : n)));
+      if (!held.read_at) commitItems((prev) => prev.map((n) => (n.id === id && !n.read_at ? { ...n, read_at: readAt } : n)));
       return;
     }
     // Not held (list never opened, or older than the loaded page): it is part of the counted number.
     if (listReadyRef.current) setOlderUnread((n) => Math.max(0, n - 1));
     else setBaseUnread((n) => Math.max(0, n - 1));
-  }, []);
+  }, [commitItems]);
 
   /** Everything unread became read. Idempotent. */
   const applyAllRead = useCallback((readAt: string) => {
     pushedRows.current.forEach((p, id) => pushedRows.current.set(id, { ...p, read_at: p.read_at ?? readAt }));
-    setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: readAt })));
+    commitItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: readAt })));
     setOlderUnread(0);
     setBaseUnread(0);
-  }, []);
+  }, [commitItems]);
 
   const runLoad = useCallback(
     async (alertNew: boolean) => {
@@ -373,8 +409,17 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       if (knownIds.current.has(row.id)) return; // duplicate event or already fetched
       knownIds.current.add(row.id);
       pushedRows.current.set(row.id, row);
-      setItems((prev) => [row, ...prev.filter((p) => p.id !== row.id)]);
+      commitItems((prev) => [row, ...prev.filter((p) => p.id !== row.id)]);
       announce(row);
+    });
+
+    // The server's authoritative unread total, pushed after every create / read / delete of this user's rows.
+    const offUnread = onRealtime<{ count?: number }>("notification:unread", (p) => {
+      if (typeof p?.count === "number" && Number.isFinite(p.count) && p.count >= 0) applyServerCount(p.count);
+    });
+
+    const offDeleted = onRealtime<{ id?: string }>("notification:deleted", (p) => {
+      if (p?.id) applyDeleted(p.id);
     });
 
     // A notification was read in another tab or on another device (or in this tab: the echo is ignored).
@@ -399,11 +444,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return () => {
       offEvent();
       offRead();
+      offUnread();
+      offDeleted();
       offResync();
       offSafety();
       stopRealtime();
     };
-  }, [userId, loadUnreadCount, resync, announce, applyRead, applyAllRead]);
+  }, [userId, loadUnreadCount, resync, announce, applyRead, applyAllRead, applyServerCount, applyDeleted, commitItems]);
 
   const refresh = useCallback(() => load(false), [load]);
 

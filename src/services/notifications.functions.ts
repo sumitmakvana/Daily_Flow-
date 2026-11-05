@@ -21,6 +21,9 @@ async function announce(userId: string, payload: Record<string, unknown>) {
   // Imported on use so this server-only module never reaches the client bundle.
   const { emitToUser } = await import("@/lib/realtime.server");
   emitToUser(userId, "notification:read", payload);
+  // Also push the authoritative unread count, so the badge is exact even if a tab missed or mis-applied the delta.
+  const { scheduleUnreadPush } = await import("@/lib/notification-unread.server");
+  scheduleUnreadPush(userId);
 }
 
 export const markNotificationReadFn = createServerFn({ method: "POST" })

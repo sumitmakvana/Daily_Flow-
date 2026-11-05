@@ -2,6 +2,7 @@ import { getPool } from "@/integrations/postgres/client.server";
 import { emitToRooms, emitToUser } from "@/lib/realtime.server";
 import { EntityEventBatcher } from "@/lib/entity-events.server";
 import { isReadOnlyMode } from "@/lib/read-only-mode.server";
+import { scheduleUnreadPush } from "@/lib/notification-unread.server";
 import { sendEodEmail } from "@/services/email-dispatcher";
 import { sendPushToUser, isPushConfigured } from "@/lib/fcm.server";
 import { pushTaskAssigned } from "@/lib/task-push.server";
@@ -149,11 +150,26 @@ export function startNotificationListener() {
           CREATE TRIGGER trg_notification_inserted
           AFTER INSERT ON public.notifications
           FOR EACH ROW EXECUTE FUNCTION public.notify_notification_inserted();
+
+          CREATE OR REPLACE FUNCTION public.notify_notification_deleted()
+          RETURNS TRIGGER AS $$
+          BEGIN
+            PERFORM pg_notify('notification_deleted', json_build_object('id', OLD.id, 'user_id', OLD.user_id)::text);
+            RETURN OLD;
+          END;
+          $$ LANGUAGE plpgsql;
+
+          DROP TRIGGER IF EXISTS trg_notification_deleted ON public.notifications;
+          CREATE TRIGGER trg_notification_deleted
+          AFTER DELETE ON public.notifications
+          FOR EACH ROW EXECUTE FUNCTION public.notify_notification_deleted();
         `);
       }
 
       await client.query("LISTEN new_notification");
       console.log("[NotificationListener] Listening on DB channel: new_notification");
+      await client.query("LISTEN notification_deleted");
+      console.log("[NotificationListener] Listening on DB channel: notification_deleted");
       // Row-change signals from the notify_entity_changed() trigger. Harmless if
       // that trigger has not been installed yet: no messages simply arrive.
       await client.query("LISTEN entity_changed");
@@ -166,6 +182,10 @@ export function startNotificationListener() {
           const payload = JSON.parse(msg.payload);
           if (msg.channel === "entity_changed") {
             getEntityBatcher().push(payload);
+            return;
+          }
+          if (msg.channel === "notification_deleted") {
+            handleNotificationDeleted(payload);
             return;
           }
           enqueueNotificationPayload(payload);
@@ -214,12 +234,24 @@ async function sendPushForPayload(payload: NotificationPayload) {
   });
 }
 
+/** A row was deleted: tell the owner's tabs to drop it, then push the corrected unread count. */
+function handleNotificationDeleted(payload: { id?: string; user_id?: string }) {
+  if (!payload.id || !payload.user_id) return;
+  try {
+    emitToUser(payload.user_id, "notification:deleted", { id: payload.id });
+    scheduleUnreadPush(payload.user_id);
+  } catch (err) {
+    console.warn("[NotificationListener] realtime emit failed:", (err as Error).message);
+  }
+}
+
 function enqueueNotificationPayload(payload: NotificationPayload) {
   // Push the in-app event first and independently of the email batching and
   // dedupe below, which exist only to avoid duplicate emails. Never let a
   // socket failure block email dispatch.
   try {
     emitToUser(payload.user_id, "notification:new", payload);
+    scheduleUnreadPush(payload.user_id);
   } catch (err) {
     console.warn("[NotificationListener] realtime emit failed:", (err as Error).message);
   }
