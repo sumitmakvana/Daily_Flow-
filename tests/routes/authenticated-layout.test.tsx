@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The /_authenticated layout is the role gate for every signed-in page. These tests pin two things:
 //  1. it shares ONE role read with the components below it (it used to bypass the shared cache,
 //     so every page load made 3-4 identical user_roles requests), and
-//  2. that did not weaken the gate: a new path is always checked against FRESH roles, and members
-//     are still turned away from manager/admin pages.
+//  2. roles are session-cached: navigating between pages costs no further read, a role edit
+//     (invalidateRoles) or the TTL makes the next navigation re-check, and members are still turned
+//     away from manager/admin pages.
 
 let loc = { pathname: "/my-day", search: "" };
 vi.mock("@tanstack/react-router", () => ({
@@ -77,14 +78,16 @@ describe("authenticated layout: role reads", () => {
     expect(getMyRoles).toHaveBeenCalledTimes(1);
   });
 
-  it("navigating to a different path always re-checks roles with a fresh read", async () => {
+  it("navigating to a different path reuses the session-cached roles", async () => {
     const { rerender } = render(<Layout />);
     await flush();
     expect(getMyRoles).toHaveBeenCalledTimes(1);
-    loc = { pathname: "/tasks", search: "" };
-    rerender(<Layout />);
-    await flush();
-    expect(getMyRoles).toHaveBeenCalledTimes(2);
+    for (const pathname of ["/tasks", "/my-day", "/executive"]) {
+      loc = { pathname, search: "" };
+      rerender(<Layout />);
+      await flush();
+    }
+    expect(getMyRoles).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -112,10 +115,11 @@ describe("authenticated layout: the gate still works", () => {
     expect(replace).toHaveBeenCalledWith("/my-day");
   });
 
-  it("a manager demoted between two navigations is stopped on the very next path (no stale roles)", async () => {
+  it("a manager demoted (role cache invalidated) is stopped on the very next path", async () => {
     const { rerender } = render(<Layout />);
     await flush(); // on /my-day as a manager
     getMyRoles.mockResolvedValue(["member"]); // demoted
+    invalidateRoles(); // what the admin screen / sign-out / user switch does
     loc = { pathname: "/executive", search: "" };
     rerender(<Layout />);
     await flush();

@@ -17,7 +17,7 @@
  * `invalidatePeople()` after changing a profile (the admin screen does).
  */
 import { supabase } from "@/integrations/supabase/client";
-import { auth } from "@/integrations/backend/auth";
+import { registerSessionReset } from "@/lib/session-cache";
 import type { Profile } from "@/lib/types";
 
 export const PEOPLE_TTL_MS = 4 * 60_000;
@@ -35,23 +35,6 @@ export function invalidatePeople() {
   lastGood.detailed = null;
 }
 
-let authHooked = false;
-let knownUserId: string | null | undefined;
-function hookAuth() {
-  if (authHooked || typeof window === "undefined") return;
-  authHooked = true;
-  try {
-    auth.onAuthStateChange((event, s) => {
-      const id = s?.user?.id ?? null;
-      // The auth wrapper fires "signed in" for every new subscriber: only a real change drops the cache.
-      if (event === "SIGNED_OUT" || id === null || (knownUserId !== undefined && knownUserId !== id)) invalidatePeople();
-      knownUserId = id;
-    });
-  } catch {
-    /* no auth available (e.g. a test); the TTL still bounds staleness */
-  }
-}
-
 const fresh = (e: Entry | null): e is Entry => !!e && Date.now() - e.at < PEOPLE_TTL_MS;
 
 async function fetchPeople(variant: Variant): Promise<Profile[]> {
@@ -67,7 +50,7 @@ async function fetchPeople(variant: Variant): Promise<Profile[]> {
 function load(variant: Variant): Promise<Profile[]> {
   // Never share state across requests on the server.
   if (typeof window === "undefined") return fetchPeople(variant);
-  hookAuth();
+  registerSessionReset(invalidatePeople);
 
   // A fresh detailed list already contains the basic columns.
   if (variant === "basic" && fresh(entries.detailed) && entries.detailed.value) {
@@ -81,8 +64,11 @@ function load(variant: Variant): Promise<Profile[]> {
     at: Date.now(),
     promise: fetchPeople(variant).then(
       (rows) => {
-        entry.value = rows;
-        lastGood[variant] = rows;
+        // A request that finished after sign-out / user switch / invalidation must not repopulate the cache.
+        if (entries[variant] === entry) {
+          entry.value = rows;
+          lastGood[variant] = rows;
+        }
         return rows;
       },
       (err) => {

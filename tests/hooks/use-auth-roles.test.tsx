@@ -73,8 +73,8 @@ describe("useAuth role loading is shared", () => {
     // Same user, fresh object each time (this is what getSessionSync() produces).
     await emit("TOKEN_REFRESHED", "u1");
     await emit("TOKEN_REFRESHED", "u1");
-    // At most one shared refetch per event (roles are re-read on refresh), never 40.
-    expect(getMyRoles.mock.calls.length).toBeLessThanOrEqual(2);
+    // Same user, same roles: a token refresh costs no request at all.
+    expect(getMyRoles).not.toHaveBeenCalled();
     expect(seen.at(-1)!.isManager).toBe(true);
   });
 
@@ -207,14 +207,14 @@ describe("the wrapper's immediate SIGNED_IN for every new subscriber (K1 root ca
     expect(getMyRoles).not.toHaveBeenCalled();
   });
 
-  it("sign-out and token refresh still drop the cache (authorization is not weakened)", async () => {
+  it("sign-out drops the cache; a token refresh does not", async () => {
     mountMany(3);
     await flush();
     await flush();
     getMyRoles.mockClear();
     await emit("TOKEN_REFRESHED", "u1");
     await flush();
-    expect(getMyRoles.mock.calls.length).toBe(1); // one shared refetch for all instances
+    expect(getMyRoles).not.toHaveBeenCalled();
     await emit("SIGNED_OUT", null);
     expect(seen.at(-1)!.roles).toEqual([]);
   });
@@ -230,6 +230,21 @@ describe("getRolesShared (used by the route layout gate)", () => {
     expect(await a).toEqual(["manager"]);
     expect(await b).toEqual(["manager"]);
     expect(getMyRoles).toHaveBeenCalledTimes(1);
+  });
+
+  it("a default read reuses the session cache across navigations (guards cost no request)", async () => {
+    await getRolesShared("u1");
+    await getRolesShared("u1");
+    await getRolesShared("u1");
+    expect(getMyRoles).toHaveBeenCalledTimes(1);
+  });
+
+  it("invalidateRoles() (a role edit) makes the next read fetch again", async () => {
+    await getRolesShared("u1");
+    invalidateRoles();
+    getMyRoles.mockResolvedValue(["admin"]);
+    expect(await getRolesShared("u1")).toEqual(["admin"]);
+    expect(getMyRoles).toHaveBeenCalledTimes(2);
   });
 
   it("maxAge 0 always reads fresh once the previous read has finished (a gate re-checks every navigation)", async () => {

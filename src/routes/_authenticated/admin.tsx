@@ -2,7 +2,8 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import React, { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/use-auth";
+import { getRolesShared, invalidateRoles, useAuth } from "@/hooks/use-auth";
+import { invalidateMyProfile } from "@/lib/my-profile";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -32,8 +33,8 @@ export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw redirect({ to: "/login" });
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id).eq("role", "admin");
-    if (!data?.length) throw redirect({ to: "/today" });
+    const roles = await getRolesShared(session.user.id);
+    if (!roles.includes("admin")) throw redirect({ to: "/today" });
   },
   component: AdminPage,
 });
@@ -138,6 +139,9 @@ function AdminPage() {
       }
 
       invalidatePeople();
+      // The edited user may be me (role / manager change): re-read roles and my profile next time.
+      invalidateRoles();
+      invalidateMyProfile();
       toast.success("Changes saved successfully");
       load();
     } catch (e) {
@@ -153,6 +157,8 @@ function AdminPage() {
     try {
       await deleteUserFn({ data: userToDelete.id });
       invalidatePeople();
+      invalidateRoles();
+      invalidateMyProfile();
       toast.success(`User "${userToDelete.display_name}" has been deleted.`);
       setUserToDelete(null);
       load();

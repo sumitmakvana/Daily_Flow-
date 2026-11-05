@@ -64,9 +64,9 @@ function AuthenticatedLayout() {
       }
       if (rolesPathRef.current !== location.pathname) {
         try {
-          // Always a fresh read for a new path (maxAge 0), but it joins a request that is already
-          // in flight and its result is shared with every `useAuth()` below, so a page load is one request.
-          const rs = await getRolesShared(sess.session.user.id, 0);
+          // Session-cached: only the first navigation (or one after the TTL / a role edit) hits the
+          // server; the result is shared with every `useAuth()` below.
+          const rs = await getRolesShared(sess.session.user.id);
           if (cancelled) return;
           rolesPathRef.current = location.pathname;
           setRoles(rs as string[]);

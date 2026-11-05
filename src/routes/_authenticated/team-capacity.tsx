@@ -86,9 +86,8 @@ export const Route = createFileRoute("/_authenticated/team-capacity")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (!data.user) return;
-    // Fresh read for this navigation (maxAge 0), but it joins the layout's in-flight request, so the
-    // guard and the layout cost one user_roles request instead of two.
-    const roles = await getRolesShared(data.user.id, 0);
+    // Same session cache as the layout and useAuth(): no extra user_roles request per navigation.
+    const roles = await getRolesShared(data.user.id);
     const set = new Set<string>(roles);
     if (!set.has("admin") && !set.has("manager")) {
       throw redirect({ to: "/today" });

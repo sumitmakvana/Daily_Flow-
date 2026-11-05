@@ -4,6 +4,7 @@ import { auth } from "@/integrations/backend/auth";
 import { getMyRoles } from "@/services/auth.functions";
 import { stopRealtime } from "@/integrations/realtime/socket";
 import type { AppRole } from "@/lib/types";
+import { registerSessionReset, resetSessionCaches } from "@/lib/session-cache";
 
 /**
  * Roles are shared by every `useAuth()` caller (there are dozens, one per task card among
@@ -11,16 +12,16 @@ import type { AppRole } from "@/lib/types";
  * session's `user` object changed identity, i.e. hundreds of identical requests per page.
  *
  * The cache is keyed by user id, de-duplicates in-flight requests, expires after
- * ROLES_TTL_MS (so a role change is picked up by the next mount), and is dropped on sign-out,
- * token refresh, or when the signed-in user changes. A plain "signed in" event for the user
- * already cached does NOT drop it: the Keycloak wrapper fires one for every new subscriber
- * (an "initial session" callback), and treating those as changes made each late-mounting
- * component refetch. Server functions do their own role checks and are unaffected.
+ * ROLES_TTL_MS, and is dropped on sign-out, when the signed-in user changes, and by
+ * `invalidateRoles()` after a role edit. It is NOT dropped on a token refresh (same user, same
+ * roles) nor on the plain "signed in" the Keycloak wrapper replays to every new subscriber:
+ * treating those as changes made every mounted component refetch. Server functions and RLS do
+ * their own role checks, so a role change reaching this browser late only delays UI gating.
  *
- * The route layout shares the same loader (`getRolesShared`) with a freshness limit, so one
- * page load costs one `user_roles` request instead of one per caller.
+ * The route layout and route guards use the same loader (`getRolesShared`), so a session costs
+ * one `user_roles` request per TTL instead of one per caller per navigation.
  */
-export const ROLES_TTL_MS = 60_000;
+export const ROLES_TTL_MS = 5 * 60_000;
 
 type RolesEntry = { userId: string; at: number; promise: Promise<AppRole[]>; value?: AppRole[] };
 let rolesEntry: RolesEntry | null = null;
@@ -29,6 +30,7 @@ let rolesEntry: RolesEntry | null = null;
 export function invalidateRoles() {
   rolesEntry = null;
 }
+registerSessionReset(invalidateRoles);
 
 /**
  * The signed-in user's roles, shared with every other caller.
@@ -81,12 +83,11 @@ export function useAuth() {
 
   useEffect(() => {
     const { data: { subscription } } = auth.onAuthStateChange((event, s) => {
-      // Drop the shared roles only when something really changed: sign-out, a token refresh, or a
-      // different user than the cached one. (Every new subscriber gets an immediate "SIGNED_IN"
-      // for the current session; that must not wipe the cache.)
+      // Drop the shared roles only when the identity really changed: sign-out or a different user
+      // than the cached one. A token refresh or the replayed "SIGNED_IN" must not wipe the cache.
       const id = s?.user?.id ?? null;
       const identityChanged = rolesEntry !== null && rolesEntry.userId !== id;
-      if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" || id === null || identityChanged) {
+      if (event === "SIGNED_OUT" || id === null || identityChanged) {
         invalidateRoles();
         setAuthTick((n) => n + 1);
       }
@@ -121,7 +122,7 @@ export function useAuth() {
 }
 
 export async function signOut() {
-  invalidateRoles();
+  resetSessionCaches();
   stopRealtime();
   return await auth.signOut();
 }

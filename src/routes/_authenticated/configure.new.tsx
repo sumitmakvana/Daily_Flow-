@@ -14,6 +14,7 @@ import { TypePreviewSheet } from "@/components/configure/TypePreviewSheet";
 import { ConfigHealthBadge } from "@/components/configure/ConfigHealthBadge";
 import { toKey } from "@/lib/slug";
 import { supabase } from "@/integrations/supabase/client";
+import { getRolesShared } from "@/hooks/use-auth";
 import { workItemTypesService } from "@/services/work-item-types";
 import { analyze } from "@/services/config-health";
 import type { WorkItemFieldDef, FieldDataType } from "@/services/dynamic-fields";
@@ -27,8 +28,8 @@ export const Route = createFileRoute("/_authenticated/configure/new")({
   beforeLoad: async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw redirect({ to: "/login" });
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id).eq("role", "admin");
-    if (!data?.length) throw redirect({ to: "/today" });
+    const roles = await getRolesShared(session.user.id);
+    if (!roles.includes("admin")) throw redirect({ to: "/today" });
   },
   component: NewTypeWizard,
 });

@@ -5,12 +5,13 @@
  * different column list, so one page load made three requests for the same row. They now
  * share ONE read of the superset of those columns.
  *
- * Sharing is deliberately short-lived: concurrent callers join the in-flight request and a
- * finished result is reused for SHARE_MS only, which is enough to cover a page load but means a
- * renamed profile shows up on the next mount, never minutes later. Failures and "no row" are not
- * remembered, so the next caller simply retries (callers already fall back to the auth metadata).
+ * Concurrent callers join the in-flight request and a finished result is reused for the whole
+ * session, up to PROFILE_SHARE_MS. It is dropped on sign-out / user switch (session-cache.ts) and by
+ * `invalidateMyProfile()` after a profile edit. Failures and "no row" are not remembered, so the next
+ * caller simply retries (callers already fall back to the auth metadata).
  */
 import { supabase } from "@/integrations/supabase/client";
+import { registerSessionReset } from "@/lib/session-cache";
 
 export type MyProfile = {
   display_name: string | null;
@@ -18,7 +19,7 @@ export type MyProfile = {
   avatar_url: string | null;
 };
 
-export const PROFILE_SHARE_MS = 3000;
+export const PROFILE_SHARE_MS = 5 * 60_000;
 
 type Entry = { userId: string; at: number; promise: Promise<MyProfile | null> };
 let entry: Entry | null = null;
@@ -36,6 +37,7 @@ async function fetchMyProfile(userId: string): Promise<MyProfile | null> {
 export function loadMyProfile(userId: string): Promise<MyProfile | null> {
   // Never share state across requests on the server.
   if (typeof window === "undefined") return fetchMyProfile(userId);
+  registerSessionReset(invalidateMyProfile);
   const e = entry;
   if (e && e.userId === userId && Date.now() - e.at < PROFILE_SHARE_MS) return e.promise;
   const mine: Entry = { userId, at: Date.now(), promise: fetchMyProfile(userId) };
