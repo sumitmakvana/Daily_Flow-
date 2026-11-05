@@ -74,7 +74,7 @@ let lastPromoteRunAt = 0;
  * tentative, so each leave is promoted (and its tasks paused / notifications sent) exactly once.
  * Anything edited to a later date before then simply stays tentative until that new date.
  */
-export async function promoteDueTentativeLeaves(todayStr?: string, opts: { throttle?: boolean } = {}) {
+export async function promoteDueTentativeLeaves(todayStr?: string, opts: { throttle?: boolean; throwOnError?: boolean } = {}) {
   if (opts.throttle && Date.now() - lastPromoteRunAt < 60_000) return 0;
   lastPromoteRunAt = Date.now();
   try {
@@ -141,6 +141,7 @@ export async function promoteDueTentativeLeaves(todayStr?: string, opts: { throt
     return res.rows.length;
   } catch (err) {
     console.warn("[leaves] promoteDueTentativeLeaves error:", (err as Error).message);
+    if (opts.throwOnError) throw err;
     return 0;
   }
 }

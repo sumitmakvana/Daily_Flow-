@@ -6,7 +6,8 @@ import { leavesService } from "@/services/leaves";
 import { useAuth } from "@/hooks/use-auth";
 import { LEAVE_TYPES } from "@/components/LeaveDialog";
 import { cn } from "@/lib/utils";
-import { Palmtree, RefreshCw } from "lucide-react";
+import { Download, Palmtree, RefreshCw } from "lucide-react";
+import { exportLeaveCalendarToExcel } from "@/services/exports";
 import type { Leave } from "@/lib/types";
 
 interface MyLeaveReportDialogProps {
@@ -153,7 +154,21 @@ export function MyLeaveReportDialog({ open, onOpenChange }: MyLeaveReportDialogP
           </div>
         )}
 
-        <div className="flex justify-end pt-1">
+        <div className="flex justify-end gap-2 pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7.5 text-xs gap-1"
+            disabled={loading}
+            onClick={() => {
+              const name = leaves[0]?.user_name || user?.email || "Me";
+              exportLeaveCalendarToExcel(year, leaves, name, `Leave_Calendar_${year}.xlsx`);
+            }}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export Excel
+          </Button>
           <Button type="button" variant="outline" size="sm" className="h-7.5 text-xs" onClick={() => onOpenChange(false)}>
             Close
           </Button>

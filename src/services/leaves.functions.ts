@@ -528,7 +528,7 @@ export const checkAndNotifyTomorrowLeavesFn = createServerFn({ method: "POST" })
       `SELECT l.id, l.user_id, l.leave_type, p.display_name as user_name
        FROM public.leaves l
        JOIN public.profiles p ON p.id = l.user_id
-       WHERE l.status = 'approved' AND $1::date BETWEEN l.start_date AND l.end_date`,
+       WHERE l.status = 'approved' AND l.start_date = $1::date`,
       [tomorrowStr]
     );
 
@@ -553,17 +553,14 @@ export const checkAndNotifyTomorrowLeavesFn = createServerFn({ method: "POST" })
       for (const mId of managerIds) {
         if (mId === leave.user_id) continue;
         try {
-          await pool.query(
-            `INSERT INTO public.notifications (user_id, type, title, body)
-             VALUES ($1, $2, $3, $4)`,
-            [
-              mId,
-              notifType,
-              notifTitle,
-              notifBody,
-            ]
+          // Same per-event key as the morning cron alert, so the two paths never both notify a manager
+          const ins = await pool.query(
+            `INSERT INTO public.notifications (user_id, type, title, body, dedupe_key)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (dedupe_key) DO NOTHING`,
+            [mId, notifType, notifTitle, notifBody, `LEAVE_ADVANCE_${leave.id}_${mId}`]
           );
-          sentCount++;
+          sentCount += ins.rowCount ?? 0;
         } catch {
           // ignore duplicate notifications
         }
