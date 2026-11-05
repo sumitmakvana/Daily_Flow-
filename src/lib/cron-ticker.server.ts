@@ -8,16 +8,14 @@ import { pushOverdueTasks } from "@/lib/task-push.server";
 import { promoteDueTentativeLeaves } from "@/services/leaves.server";
 import { runMorningDigest } from "@/lib/digests/morning-digest.server";
 import { runEveningDigest } from "@/lib/digests/evening-digest.server";
-import { runNoTasksReminder } from "@/lib/digests/no-tasks-reminder.server";
 
 /**
  * The ONLY scheduler for the digests (the pg_cron digest jobs are removed): morning digest, evening digest (member
- * EOD + manager team report), no-tasks reminder, advance leave alerts and overdue pushes. Each minute it only
+ * EOD + manager team report), advance leave alerts and overdue pushes. Each minute it only
  * compares the clock with cached settings; the digests read their data only at their configured minute.
  */
-const PROMOTE_EVERY_MS = 5 * 60_000;
+const PROMOTE_RETRY_MS = 5 * 60_000;
 const SETTINGS_TTL_MS = 5 * 60_000;
-const NO_TASKS_REMINDER_EVERY_MIN = 20;
 /** How long after its configured minute a job may still start (covers a tick that skipped the exact minute). */
 const DUE_WINDOW_MIN = 5;
 /**
@@ -36,6 +34,7 @@ const globalCronState = globalThis as unknown as {
   __tickerSettings?: TickerSettings;
   __lastPromoteDate?: string;
   __lastPromoteAt?: number;
+  __promoting?: boolean;
 };
 
 if (!globalCronState.__cronFiredKeys) {
@@ -61,12 +60,25 @@ export function startBackgroundCronTicker() {
         for (const k of globalCronState.__cronFiredKeys!) if (!k.startsWith(todayStr)) globalCronState.__cronFiredKeys!.delete(k);
       }
 
-      // Promote due tentative leaves to approved Planned Leave (idempotent; runs before the working-day
-      // check so a missed day is caught up). Every 5 minutes, and at once when the date changes.
-      if (globalCronState.__lastPromoteDate !== todayStr || now - (globalCronState.__lastPromoteAt ?? 0) >= PROMOTE_EVERY_MS) {
-        globalCronState.__lastPromoteDate = todayStr;
+      // Promote due tentative leaves to approved Planned Leave once per IST day: the first tick after midnight IST
+      // (or after a server start, which also catches up a missed day). The date is recorded only on success, so a
+      // failure is retried (at most every PROMOTE_RETRY_MS) and never blocks the digests below. The UPDATE only
+      // matches rows still tentative, so a repeat run can't promote or notify twice.
+      if (
+        globalCronState.__lastPromoteDate !== todayStr &&
+        !globalCronState.__promoting &&
+        now - (globalCronState.__lastPromoteAt ?? 0) >= PROMOTE_RETRY_MS
+      ) {
+        globalCronState.__promoting = true;
         globalCronState.__lastPromoteAt = now;
-        await promoteDueTentativeLeaves(todayStr);
+        try {
+          await promoteDueTentativeLeaves(todayStr, { throwOnError: true });
+          globalCronState.__lastPromoteDate = todayStr;
+        } catch (err) {
+          console.error("[CronTicker] Tentative leave promotion failed, will retry:", (err as Error).message);
+        } finally {
+          globalCronState.__promoting = false;
+        }
       }
 
       // Working day + configured times change rarely: read them once per SETTINGS_TTL_MS (and when the date
@@ -130,9 +142,9 @@ export function startBackgroundCronTicker() {
           console.error("[CronTicker] Error running morning digest:", err);
         }
 
-        // Dispatch advance alerts for leaves starting tomorrow morning
+        // Advance alerts for leaves/WFH starting tomorrow (morning only, once per event)
         await sleep(GAP_BEFORE_LEAVE_ALERTS_MS);
-        await dispatchAdvanceLeaveAlerts("morning", todayStr);
+        await dispatchAdvanceLeaveAlerts();
 
         // Push alerts for tasks that just became overdue (no-op unless FCM is configured)
         await pushOverdueTasks(todayStr);
@@ -140,12 +152,12 @@ export function startBackgroundCronTicker() {
 
       // -------------------------------------------------------------
       // STEP B: At Configured Evening Time (UI Setting) -> Member EOD digest + Manager EOD team report
-      // (both sent by the evening digest, idempotent per day) & Handover Alerts
+      // (both sent by the evening digest, idempotent per day)
       // -------------------------------------------------------------
       if (isDue(tick.eveningTime) && !globalCronState.__cronFiredKeys!.has(eveningFireKey)) {
         globalCronState.__cronFiredKeys!.add(eveningFireKey);
         console.log(
-          `[CronTicker] Evening Digest due (${currentLocalTime}, configured ${tick.eveningTime})! Triggering Member EOD, Manager Report & Leave Alerts...`,
+          `[CronTicker] Evening Digest due (${currentLocalTime}, configured ${tick.eveningTime})! Triggering Member EOD & Manager Report...`,
         );
 
         try {
@@ -154,23 +166,6 @@ export function startBackgroundCronTicker() {
           console.error("[CronTicker] Error running evening digest:", err);
         }
 
-        // Dispatch advance handover alerts for leaves starting tomorrow evening
-        await sleep(GAP_BEFORE_LEAVE_ALERTS_MS);
-        await dispatchAdvanceLeaveAlerts("evening", todayStr);
-      }
-
-      // -------------------------------------------------------------
-      // STEP C: No-tasks reminder, every 20 minutes (:00 / :20 / :40) like the former pg_cron job. The reminder
-      // itself skips outside working hours or when it is disabled in settings.
-      // -------------------------------------------------------------
-      const reminderFireKey = `${todayStr}_reminder_${currentLocalTime.slice(0, 2)}_${Math.floor(currentMinute / NO_TASKS_REMINDER_EVERY_MIN)}`;
-      if (currentMinute % NO_TASKS_REMINDER_EVERY_MIN < DUE_WINDOW_MIN && !globalCronState.__cronFiredKeys!.has(reminderFireKey)) {
-        globalCronState.__cronFiredKeys!.add(reminderFireKey);
-        try {
-          await runNoTasksReminder("scheduled");
-        } catch (err) {
-          console.error("[CronTicker] Error running no-tasks reminder:", err);
-        }
       }
     } catch (err) {
       console.error("[CronTicker] Error in background EOD cron loop:", err);
@@ -179,9 +174,10 @@ export function startBackgroundCronTicker() {
 }
 
 /**
- * Scans active leaves starting tomorrow and dispatches advance notifications to managers
+ * Scans approved leaves/WFH that START tomorrow and notifies managers once per event (morning only, after the
+ * morning digest). Idempotent via the unique notifications.dedupe_key, so a restart or re-run cannot duplicate.
  */
-async function dispatchAdvanceLeaveAlerts(timeSlot: "morning" | "evening", todayStr: string) {
+async function dispatchAdvanceLeaveAlerts() {
   try {
     const pool = getPool();
     const tomorrowRes = await pool.query<{ tomorrow: string }>(
@@ -213,7 +209,7 @@ async function dispatchAdvanceLeaveAlerts(timeSlot: "morning" | "evening", today
       FROM public.leaves l
       JOIN public.profiles p ON p.id = l.user_id
       WHERE l.status = 'approved'
-        AND $1::date BETWEEN l.start_date AND l.end_date`,
+        AND l.start_date = $1::date`,
       [tomorrowStr]
     );
 
@@ -227,35 +223,24 @@ async function dispatchAdvanceLeaveAlerts(timeSlot: "morning" | "evening", today
 
     for (const leave of leavesRes.rows) {
       const isWfh = leave.leave_type === "wfh";
-      const dedupeKey = `LEAVE_ADVANCE_${timeSlot.toUpperCase()}_${todayStr}_${leave.id}`;
-
       const title = isWfh
         ? `🏠 Tomorrow WFH Notice: ${leave.user_name}`
         : `📅 Tomorrow Leave Alert: ${leave.user_name}`;
 
-      const body =
-        timeSlot === "morning"
-          ? `Reminder: ${leave.user_name} will be on ${isWfh ? "WFH" : "Leave"} tomorrow (${tomorrowStr}). Reason: "${leave.reason}". Please plan tasks accordingly and avoid assigning urgent work.`
-          : `Evening Handover Reminder: ${leave.user_name} is on ${isWfh ? "WFH" : "Leave"} tomorrow (${tomorrowStr}). Ensure all pending items are handed over today.`;
+      const body = `Reminder: ${leave.user_name} will be on ${isWfh ? "WFH" : "Leave"} tomorrow (${tomorrowStr}). Reason: "${leave.reason}". Please plan tasks accordingly and avoid assigning urgent work.`;
 
       const targetManagers = new Set<string>(allManagerIds);
       if (leave.manager_id) targetManagers.add(leave.manager_id);
       targetManagers.delete(leave.user_id); // Don't notify the employee themselves
 
       for (const mId of targetManagers) {
-        // Check idempotency
-        const existing = await pool.query(
-          `SELECT 1 FROM public.notifications WHERE title = $1 AND user_id = $2 AND created_at >= CURRENT_DATE`,
-          [title, mId]
+        const notifType = isWfh ? "wfh_advance_alert" : "leave_advance_alert";
+        await pool.query(
+          `INSERT INTO public.notifications (user_id, type, title, body, dedupe_key)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (dedupe_key) DO NOTHING`,
+          [mId, notifType, title, body, `LEAVE_ADVANCE_${leave.id}_${mId}`]
         );
-        if (existing.rows.length === 0) {
-          const notifType = isWfh ? "wfh_advance_alert" : "leave_advance_alert";
-          await pool.query(
-            `INSERT INTO public.notifications (user_id, type, title, body)
-             VALUES ($1, $2, $3, $4)`,
-            [mId, notifType, title, body]
-          );
-        }
       }
     }
   } catch (err) {

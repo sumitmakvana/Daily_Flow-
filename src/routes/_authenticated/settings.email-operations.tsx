@@ -143,7 +143,6 @@ function EmailOperationsPage() {
           workdays: workSettings.workdays,
           morning_digest_time: workSettings.morning_digest_time ?? "10:00",
           evening_digest_time: workSettings.evening_digest_time ?? "18:00",
-          no_tasks_reminder_interval: workSettings.no_tasks_reminder_interval ?? 20,
         }),
         notifPrefsService.save(prefs),
       ]);
@@ -223,26 +222,6 @@ function EmailOperationsPage() {
               onChange={(val) => setWorkSettings({ ...workSettings, evening_digest_time: val })}
             />
           </div>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">No Tasks / Unstarted Tasks Nudge Interval</Label>
-          <Select
-            value={String(workSettings.no_tasks_reminder_interval ?? 20)}
-            onValueChange={(val) =>
-              setWorkSettings({ ...workSettings, no_tasks_reminder_interval: Number(val) })
-            }
-          >
-            <SelectTrigger className="w-full bg-background text-foreground [color-scheme:dark] mt-1">
-              <SelectValue placeholder="Select interval" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="0">Disabled</SelectItem>
-              <SelectItem value="10">Every 10 minutes</SelectItem>
-              <SelectItem value="20">Every 20 minutes</SelectItem>
-              <SelectItem value="30">Every 30 minutes</SelectItem>
-              <SelectItem value="60">Every hour</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </Card>
 
