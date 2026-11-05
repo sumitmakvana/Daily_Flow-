@@ -72,15 +72,9 @@ describe("routeEntityMessage: who is told (audience rules)", () => {
     const r = rooms({ table: "task_review_decisions", op: "UPDATE", id: "d", task_id: "t", reviewer_id: "r1", decided_by: "m", assigned_to: "a", reviewers: ["r1", "r2"] });
     expect(r).toEqual([MANAGERS_ROOM, "user:a", "user:m", "user:r1", "user:r2"].sort());
   });
-  it("automation_health → admins only, on its own event name", () => {
-    const d = routeEntityMessage({ table: "automation_health", op: "UPDATE", id: null })!;
-    expect(d.rooms).toEqual([ADMINS_ROOM]);
-    expect(d.eventName).toBe("automation:health");
-  });
   it("TRUNCATE has no owner: it goes to the table's whole audience class as one bulk refetch signal", () => {
     expect(routeEntityMessage({ table: "tasks", op: "TRUNCATE", id: null })).toMatchObject({ rooms: [ALL_USERS_ROOM], event: { bulk: true, new: {}, old: {} } });
     expect(routeEntityMessage({ table: "risk_events", op: "TRUNCATE" })!.rooms).toEqual([MANAGERS_ROOM]);
-    expect(routeEntityMessage({ table: "automation_health", op: "TRUNCATE" })!.rooms).toEqual([ADMINS_ROOM]);
     expect(routeEntityMessage({ table: "profiles", op: "TRUNCATE" })).toBeNull();
   });
   it("rejects unknown tables, bad ops and missing ids", () => {
@@ -267,9 +261,7 @@ describe("entity events over a real Socket.IO server", () => {
   it("every watched entity reaches exactly its audience over real sockets (members, managers, admins)", async () => {
     const watch = async (sub: string) => {
       const c = await client(sub);
-      const health: unknown[] = [];
-      c.s.on("automation:health", (p) => health.push(p));
-      return { ...c, health };
+      return c;
     };
     const alice = await watch("alice"); // assignee / leave owner / logger
     const bob = await watch("bob"); // unrelated member
@@ -288,7 +280,6 @@ describe("entity events over a real Socket.IO server", () => {
     batcher.push({ table: "planning_suggestions", op: "INSERT", id: "p1", task_id: "t1", from_user_id: "alice", to_user_id: "bob" });
     batcher.push({ table: "approval_requests", op: "UPDATE", id: "a1", requested_by: "alice", approvers: ["rita"] });
     batcher.push({ table: "task_review_decisions", op: "UPDATE", id: "d1", task_id: "t1", reviewer_id: "rita", assigned_to: "alice", reviewers: ["rita"] });
-    batcher.push({ table: "automation_health", op: "UPDATE", id: null });
     await settle();
 
     const tables = (c: typeof alice) => c.got.map((g) => g.table).sort();
@@ -298,9 +289,6 @@ describe("entity events over a real Socket.IO server", () => {
     // manager: everything except nudges, and NOT approval requests (only requester, approvers, admins may read those)
     expect(tables(mgr)).toEqual(["eod_checkins", "leaves", "planning_suggestions", "risk_events", "task_review_decisions", "task_worklogs", "tasks"]);
     expect(tables(boss)).toEqual(["approval_requests", "eod_checkins", "leaves", "planning_suggestions", "risk_events", "task_review_decisions", "task_worklogs", "tasks"]);
-    // automation health: admins only
-    expect([alice, bob, rita, mgr].map((c) => c.health.length)).toEqual([0, 0, 0, 0]);
-    expect(boss.health).toHaveLength(1);
   });
 
   it("an assignee who is also a manager gets ONE copy, not two", async () => {

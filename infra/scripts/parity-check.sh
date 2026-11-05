@@ -8,7 +8,7 @@ source .env
 : "${SUPABASE_DB_URL:?}"
 
 TABLES=(tasks comments attachments notifications task_history
-        approval_requests automation_runs profiles user_roles)
+        approval_requests profiles user_roles)
 
 dst() { docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "$1"; }
 src() { psql "$SUPABASE_DB_URL" -At -c "$1"; }

@@ -17,7 +17,6 @@ const USERS = Number(process.env.USERS ?? 100);
 const ITEMS = Number(process.env.ITEMS ?? 10_000);
 const ATTACHMENTS = Number(process.env.ATTACHMENTS ?? 1_000);
 const WORKFLOWS = Number(process.env.WORKFLOWS ?? 50);
-const RULES = Number(process.env.RULES ?? 500);
 const TAG = "loadtest";
 const TAG = "loadtest";
 
@@ -117,59 +116,3 @@ time("notifications feed", () => sql(`
 `));
 
 console.log("\nDone. Re-run with PURGE=1 to clean up.");
-
-/* -------------------------- automation track --------------------------- */
-// Phase D hardening: seed N inert rules, fire one batch of events, measure
-// queue depth and worker-tick throughput.
-
-console.log("\n[automation seed]");
-if (process.env.PURGE === "1") {
-  sql(`DELETE FROM public.automation_runs WHERE rule_id IN (SELECT id FROM public.automation_rules WHERE name LIKE '${TAG}-%')`);
-  sql(`DELETE FROM public.automation_events WHERE event_kind = '${TAG}.synthetic'`);
-  sql(`DELETE FROM public.automation_rules WHERE name LIKE '${TAG}-%'`);
-}
-
-time(`automation_rules (${RULES})`, () => sql(`
-  INSERT INTO public.automation_rules
-    (name, trigger_kind, condition_expr, actions, is_active, dedupe_window_minutes, max_runs_per_minute, allow_self_retrigger)
-  SELECT
-    '${TAG}-rule-' || g,
-    '${TAG}.synthetic',
-    '{}'::jsonb,
-    '[{"kind":"notify_user","params":{"user_id":"00000000-0000-0000-0000-000000000000","title":"noop"}}]'::jsonb,
-    false,                       -- inert: avoids real notification fan-out
-    60,
-    60,
-    false
-  FROM generate_series(1, ${RULES}) g
-  ON CONFLICT DO NOTHING;
-`));
-
-console.log("\n[automation read benchmarks]");
-time("active-rule lookup by trigger", () => sql(`
-  EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-  SELECT id FROM public.automation_rules
-   WHERE trigger_kind = '${TAG}.synthetic' AND is_active = true AND auto_disabled_at IS NULL;
-`));
-time("pending-event drain scan", () => sql(`
-  EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-  SELECT id FROM public.automation_events
-   WHERE processed_at IS NULL AND dropped = false AND available_at <= now()
-   ORDER BY available_at LIMIT 100;
-`));
-time("runs feed (last 24h)", () => sql(`
-  EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-  SELECT id FROM public.automation_runs
-   WHERE started_at > now() - interval '24 hours'
-   ORDER BY started_at DESC LIMIT 100;
-`));
-time("queue depth (stats counter)", () => sql(`
-  EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-  SELECT pending_count FROM public.automation_queue_stats WHERE id = 1;
-`));
-time("dead-run lookup for replay", () => sql(`
-  EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-  SELECT id FROM public.automation_runs WHERE status = 'dead' ORDER BY started_at DESC LIMIT 50;
-`));
-
-console.log("\nAutomation harness done. Re-run with PURGE=1 to remove seeded rules.");

@@ -174,7 +174,6 @@ const BANNER_LAYOUTS: Array<[string, string, string]> = [
   ["/sync", "max-w-2xl", "px-3 md:px-4"],
   ["/settings/notifications", "max-w-xl", "px-3 md:px-4"],
   ["/settings", "max-w-3xl", "px-3 md:px-4"],
-  ["/configure/automations", "max-w-5xl", "px-3 md:px-4"],
   ["/configure/new", "max-w-3xl", "px-3 md:px-4"],
   ["/configure", "max-w-5xl", "px-3 md:px-4"],
   ["/blockers", "max-w-3xl", "px-3 md:px-4"],

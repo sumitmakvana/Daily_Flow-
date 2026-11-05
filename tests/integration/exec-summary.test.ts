@@ -39,7 +39,6 @@ const EXPECTED_KEYS = [
   "risk",
   "workload",
   "discipline",
-  "automation",
   "adoption",
   "team_health",
   "manager_effectiveness",

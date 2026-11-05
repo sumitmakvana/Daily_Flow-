@@ -20,7 +20,6 @@
  *   risk_events           managers
  *   planning_suggestions  managers
  *   approval_requests     the requester, the chain's approvers, admins (same as the ar_read policy)
- *   automation_health     admins (event `automation:health`)
  * Managers are admins' superset room: admin sockets also join role:manager (realtime.server.ts).
  * TRUNCATE has no owner to name, so it is the one case sent to every signed-in user (or the table's
  * whole audience class): a destructive, rare operation where "everyone refetch" is the safe answer.
@@ -54,7 +53,6 @@ export type Delivery = { rooms: string[]; event: ChangeEvent; eventName: string 
 
 const OPS = new Set<string>(["INSERT", "UPDATE", "DELETE", "TRUNCATE"]);
 const ENTITY_EVENT = "entity:changed";
-const HEALTH_EVENT = "automation:health";
 
 const uuidish = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 const userRoom = (id: unknown) => {
@@ -79,8 +77,6 @@ function truncateRooms(table: string): string[] | null {
     case "risk_events":
     case "planning_suggestions":
       return [MANAGERS_ROOM];
-    case "automation_health":
-      return [ADMINS_ROOM];
     case "tasks":
     case "nudges":
     case "approval_requests":
@@ -99,11 +95,11 @@ export function routeEntityMessage(msg: EntityMessage): Delivery | null {
   if (typeof msg?.table !== "string" || typeof msg.op !== "string" || !OPS.has(msg.op)) return null;
   const table = msg.table;
 
-  if (msg.op === "TRUNCATE" || table === "automation_health") {
-    const rooms = table === "automation_health" ? [ADMINS_ROOM] : truncateRooms(table);
+  if (msg.op === "TRUNCATE") {
+    const rooms = truncateRooms(table);
     if (!rooms) return null;
     const event: ChangeEvent = { schema: "public", table, eventType: "UPDATE", new: {}, old: {}, bulk: true };
-    return { rooms, event, eventName: table === "automation_health" ? HEALTH_EVENT : ENTITY_EVENT };
+    return { rooms, event, eventName: ENTITY_EVENT };
   }
 
   const op = msg.op as EntityOp;

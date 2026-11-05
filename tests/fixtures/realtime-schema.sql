@@ -18,9 +18,5 @@ CREATE TABLE public.user_roles (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), u
 CREATE TABLE public.approval_chains (id uuid PRIMARY KEY DEFAULT gen_random_uuid());
 CREATE TABLE public.approval_steps (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), chain_id uuid NOT NULL, step_order int NOT NULL, approver_mode text NOT NULL, approver_role public.app_role, approver_user_id uuid);
 CREATE TABLE public.approval_requests (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), work_item_id uuid NOT NULL, chain_id uuid NOT NULL, requested_by uuid, status text DEFAULT 'pending');
-CREATE TABLE public.automation_runs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), status text DEFAULT 'ok');
-CREATE TABLE public.automation_rules (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), is_active boolean DEFAULT true);
-CREATE TABLE public.automation_queue_stats (id smallint PRIMARY KEY DEFAULT 1, pending_count bigint DEFAULT 0);
-INSERT INTO public.automation_queue_stats (id) VALUES (1);
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;

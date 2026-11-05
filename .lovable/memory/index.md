@@ -12,4 +12,3 @@
 - Industry templates: catalog lives in `industry_templates`/`template_components`. Install via `install_template(uuid)` RPC (admin only). Five seeded definitions (it, pharma, adhesives, manufacturing, consulting) are not auto-installed.
 
 ## Memories
-- [Automation engine](mem://features/automation) — Phase D rules/events/runs, worker, save-time guards, circuit breaker, cron

@@ -129,20 +129,6 @@ export interface ExecSummary {
     blocked_3d: number;
     cf_trend: Array<{ d: string; n: number }>;
   };
-  automation: {
-    total_runs: number;
-    today_runs: number;
-    success_rate: number | null;
-    failed_24h: number;
-    dead_24h: number;
-    pending: number;
-    active_rules: number;
-    auto_disabled_rules: number;
-    follow_ups: number;
-    approvals_auto: number;
-    escalations: number;
-    trend: Array<{ d: string; n: number }>;
-  };
   adoption: {
     dau: number;
     wau: number;

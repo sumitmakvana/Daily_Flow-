@@ -16,7 +16,6 @@ must stay green.
 Side-table volumes seeded proportionally:
 - `risk_events` / `approval_requests` = tasks / 10
 - `carry_forward_events` = tasks / 5
-- `automation_runs` = tasks / 2
 - `adoption_daily` = 100 users × 60 days (static)
 
 ## Variants measured at every stage
@@ -54,8 +53,6 @@ before publishing for external pilot.
 - `profiles.id` has FK to `auth.users`, so seed-from-psql uses a single admin
   profile. Production benchmarks should seed via the admin API and spread
   `assigned_to` across ≥ 100 users for accurate workload bucketing.
-- `automation_rules.trigger_kind` is constrained; reuse an existing rule
-  ID instead of inserting a synthetic rule.
 - The pooler does not grant `ANALYZE` privilege — rely on autovacuum or
   trigger a manual stats refresh from the admin role outside the pooler.
 
