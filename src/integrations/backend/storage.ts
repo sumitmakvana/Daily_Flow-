@@ -24,13 +24,9 @@ const getDownloadUrlFn = createServerFn({ method: "POST" })
     const mode = process.env.BACKEND_MODE ?? "supabase";
 
     if (mode === "self") {
-      const { createHmac } = await import("crypto");
-      
       const expires = Date.now() + data.expiresIn * 1000;
-      const secret = process.env.CRON_SECRET || "default-fallback-storage-secret";
-      const token = createHmac("sha256", secret)
-        .update(`${data.path}:${expires}`)
-        .digest("hex");
+      const { signStoragePath } = await import("@/lib/storage-signing.server");
+      const token = signStoragePath(data.path, expires);
 
       // Return relative URL pointing to our local storage proxy endpoint
       return `/app-storage/file?path=${encodeURIComponent(data.path)}&token=${token}&expires=${expires}`;

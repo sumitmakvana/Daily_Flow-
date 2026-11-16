@@ -1,22 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { adminQuery } from "@/integrations/postgres/query.server";
-import { createHmac } from "crypto";
-
-const getSecret = () => {
-  return process.env.CRON_SECRET || "default-fallback-storage-secret";
-};
-
-const verifySignedToken = (path: string, expires: number, token: string) => {
-  if (Date.now() > expires) {
-    console.error(`Token expired. Current time: ${Date.now()}, Expiry: ${expires}`);
-    return false;
-  }
-  const secret = getSecret();
-  const expected = createHmac("sha256", secret)
-    .update(`${path}:${expires}`)
-    .digest("hex");
-  return token === expected;
-};
+import { verifyStoragePath } from "@/lib/storage-signing.server";
 
 export const Route = createFileRoute("/app-storage/file")({
   server: {
@@ -33,7 +17,7 @@ export const Route = createFileRoute("/app-storage/file")({
           }
 
           // Verify the HMAC token
-          if (!verifySignedToken(path, Number(expires), token)) {
+          if (!verifyStoragePath(path, Number(expires), token)) {
             return new Response("Unauthorized or expired access token", { status: 403 });
           }
 

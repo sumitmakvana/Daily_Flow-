@@ -10,7 +10,8 @@ import { runMorningDigest } from "@/lib/digests/morning-digest.server";
 import { runEveningDigest } from "@/lib/digests/evening-digest.server";
 
 /**
- * The ONLY scheduler for the digests (the pg_cron digest jobs are removed): morning digest, evening digest (member
+ * The ONLY scheduler for the digests (the former pg_cron jobs that curled the hooks every minute are unscheduled by
+ * supabase/migrations/20261116000000_remove_pg_cron_http_hooks.sql): morning digest, evening digest (member
  * EOD + manager team report), advance leave alerts and overdue pushes. Each minute it only
  * compares the clock with cached settings; the digests read their data only at their configured minute.
  */

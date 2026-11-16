@@ -1,7 +1,7 @@
 /**
  * Cron auth, rate-limit, and replay protection.
  *
- * Required request headers from pg_cron:
+ * Required request headers (manual or external callers):
  *   x-cron-secret    — shared CRON_SECRET
  *   x-cron-timestamp — ISO timestamp (now())
  *   x-cron-nonce     — gen_random_uuid() per invocation

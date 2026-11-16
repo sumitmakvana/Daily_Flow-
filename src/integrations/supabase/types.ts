@@ -1827,7 +1827,6 @@ export type Database = {
       }
     }
     Functions: {
-      _cron_secret: { Args: never; Returns: string }
       adoption_rollup: { Args: { _for_date?: string }; Returns: number }
       bump_user_streak: { Args: { _user_id: string }; Returns: undefined }
       capture_config_payload: { Args: never; Returns: Json }
