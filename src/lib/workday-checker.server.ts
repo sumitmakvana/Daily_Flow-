@@ -1,4 +1,3 @@
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getPool } from "@/integrations/postgres/client.server";
 import { getLocalHoliday } from "@/lib/format";
 import { getTodayDateStr } from "@/lib/task-date-utils";
@@ -10,28 +9,49 @@ export interface WorkingDayCheckResult {
   label: string;
 }
 
+export interface WorkSettingsRow {
+  workdays: number[] | null;
+  morning_digest_time: string | null;
+  evening_digest_time: string | null;
+}
+
+/**
+ * The work_settings row (workdays + digest times) in ONE query over the direct DB pool. It used to be two
+ * separate PostgREST HTTP requests for the same row. Returns null when the read fails (callers keep their defaults).
+ */
+export async function readWorkSettingsServer(): Promise<WorkSettingsRow | null> {
+  try {
+    const { rows } = await getPool().query<WorkSettingsRow>(
+      "SELECT workdays, morning_digest_time, evening_digest_time FROM public.work_settings WHERE id = 1",
+    );
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Checks whether a given target date (defaults to today in IST) is a valid working day.
  * Returns false if the date is a weekend (according to work_settings.workdays) or
  * an official company holiday or public holiday.
+ * Pass `knownWorkdays` when the caller already read work_settings, to skip reading it again.
  */
-export async function checkIsWorkingDayServer(dateStr?: string): Promise<WorkingDayCheckResult> {
+export async function checkIsWorkingDayServer(
+  dateStr?: string,
+  knownWorkdays?: number[] | null,
+): Promise<WorkingDayCheckResult> {
   const targetDateStr = dateStr || getTodayDateStr("Asia/Kolkata");
   const [y, m, d] = targetDateStr.split("-").map(Number);
   const dateObj = new Date(y, m - 1, d);
   const jsDay = dateObj.getDay(); // 0 = Sunday, 1 = Monday ... 6 = Saturday
   const isoDay = jsDay === 0 ? 7 : jsDay; // 1 = Monday ... 7 = Sunday
 
-  // 1. Fetch workdays configuration from work_settings
-  const { data: settings } = await supabaseAdmin
-    .from("work_settings")
-    .select("workdays")
-    .eq("id", 1)
-    .maybeSingle();
+  // 1. Workdays configuration from work_settings
+  const configured = knownWorkdays !== undefined ? knownWorkdays : (await readWorkSettingsServer())?.workdays;
 
   const workdays: number[] =
-    settings?.workdays && Array.isArray(settings.workdays) && settings.workdays.length > 0
-      ? settings.workdays
+    configured && Array.isArray(configured) && configured.length > 0
+      ? configured
       : [1, 2, 3, 4, 5]; // Default Mon-Fri
 
   // Check if today is a weekend / non-working day according to workdays setting

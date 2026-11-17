@@ -1,9 +1,8 @@
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getPool } from "@/integrations/postgres/client.server";
 
 import { getTodayDateStr } from "@/lib/task-date-utils";
 
-import { checkIsWorkingDayServer } from "@/lib/workday-checker.server";
+import { checkIsWorkingDayServer, readWorkSettingsServer } from "@/lib/workday-checker.server";
 import { pushOverdueTasks } from "@/lib/task-push.server";
 import { promoteDueTentativeLeaves } from "@/services/leaves.server";
 import { runMorningDigest } from "@/lib/digests/morning-digest.server";
@@ -89,12 +88,10 @@ export function startBackgroundCronTicker() {
       const tick = settingsFresh
         ? cached
         : await (async () => {
-            const workStatus = await checkIsWorkingDayServer(todayStr);
-            const { data: settings } = await supabaseAdmin
-              .from("work_settings")
-              .select("morning_digest_time, evening_digest_time")
-              .eq("id", 1)
-              .maybeSingle();
+            // One read of work_settings (workdays + both digest times) over the DB pool, shared with the
+            // working-day check, instead of two PostgREST HTTP requests for the same row.
+            const settings = await readWorkSettingsServer();
+            const workStatus = await checkIsWorkingDayServer(todayStr, settings?.workdays ?? null);
             const fresh = {
               date: todayStr,
               at: now,
