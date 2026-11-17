@@ -3,6 +3,7 @@ import { getPool } from "@/integrations/postgres/client.server";
 import { getTodayDateStr } from "@/lib/task-date-utils";
 
 import { checkIsWorkingDayServer, readWorkSettingsServer } from "@/lib/workday-checker.server";
+import { markTickerSettingsStale, takeTickerSettingsStale } from "@/lib/ticker-settings-cache.server";
 import { pushOverdueTasks } from "@/lib/task-push.server";
 import { promoteDueTentativeLeaves } from "@/services/leaves.server";
 import { runMorningDigest } from "@/lib/digests/morning-digest.server";
@@ -15,7 +16,6 @@ import { runEveningDigest } from "@/lib/digests/evening-digest.server";
  * compares the clock with cached settings; the digests read their data only at their configured minute.
  */
 const PROMOTE_RETRY_MS = 5 * 60_000;
-const SETTINGS_TTL_MS = 5 * 60_000;
 /** How long after its configured minute a job may still start (covers a tick that skipped the exact minute). */
 const DUE_WINDOW_MIN = 5;
 /**
@@ -81,12 +81,14 @@ export function startBackgroundCronTicker() {
         }
       }
 
-      // Working day + configured times change rarely: read them once per SETTINGS_TTL_MS (and when the date
-      // changes) instead of every minute.
+      // Working day + configured times only change when the IST date changes or an admin edits them: read them
+      // once per IST day (the first tick of the day, or after a server start), and again on the next tick after
+      // an in-app edit of work_settings or holiday_calendar (markTickerSettingsStale).
       const cached = globalCronState.__tickerSettings;
       const cachedToday = cached && cached.date === todayStr ? cached : undefined;
+      const stale = takeTickerSettingsStale();
       let tick: TickerSettings;
-      if (cachedToday && now - cachedToday.at < SETTINGS_TTL_MS) {
+      if (cachedToday && !stale) {
         tick = cachedToday;
       } else {
         try {
@@ -105,9 +107,10 @@ export function startBackgroundCronTicker() {
           };
           globalCronState.__tickerSettings = tick;
         } catch (err) {
-          // Not cached, so the next tick retries. Keep today's last good values if there are any; otherwise skip
-          // this minute rather than guess (a job stays due for DUE_WINDOW_MIN minutes, so one failed minute
-          // does not lose it).
+          // Not cached, so the next tick retries. Keep today's last good values if there are any (and keep the
+          // stale mark, so the edit is still picked up); otherwise skip this minute rather than guess (a job stays
+          // due for DUE_WINDOW_MIN minutes, so one failed minute does not lose it).
+          if (stale) markTickerSettingsStale();
           if (!cachedToday) {
             console.error("[CronTicker] Settings unavailable, skipping this minute:", (err as Error).message);
             return;

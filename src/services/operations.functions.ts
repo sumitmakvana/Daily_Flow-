@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { withUser } from "@/integrations/postgres/query.server";
+import { markTickerSettingsStale } from "@/lib/ticker-settings-cache.server";
 
 // ----- work_settings --------------------------------------------------------
 
@@ -54,6 +55,7 @@ export const updateWorkSettingsFn = createServerFn({ method: "POST" })
         params,
       );
     });
+    markTickerSettingsStale(); // digest times / workdays apply on the next CronTicker minute
     return { ok: true };
   });
 
@@ -233,6 +235,7 @@ export const addHolidayFn = createServerFn({ method: "POST" })
         [data.calendar_date, data.label],
       );
     });
+    markTickerSettingsStale(); // a holiday added for today stops today's digests from the next minute
     return { ok: true };
   });
 
@@ -248,5 +251,6 @@ export const removeHolidayFn = createServerFn({ method: "POST" })
         [data.id],
       );
     });
+    markTickerSettingsStale();
     return { ok: true };
   });
