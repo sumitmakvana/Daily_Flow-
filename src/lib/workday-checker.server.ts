@@ -44,28 +44,22 @@ export async function checkIsWorkingDayServer(dateStr?: string): Promise<Working
     };
   }
 
-  // 2. Fetch custom company holidays from database
+  // 2. Company holidays (added in Settings > Operations, stored in holiday_calendar)
   try {
-    const pool = getPool();
-    const { rows: customHolidays } = await pool.query<{ calendar_date: string; label: string }>(
-      "SELECT calendar_date::text AS calendar_date, label FROM public.holidays"
+    const { rows } = await getPool().query<{ label: string | null }>(
+      "SELECT label FROM public.holiday_calendar WHERE calendar_date = $1::date LIMIT 1",
+      [targetDateStr],
     );
-
-    if (customHolidays && customHolidays.length > 0) {
-      const match = customHolidays.find((h) => {
-        const raw: unknown = h.calendar_date;
-        const str = typeof raw === "string" ? raw : (raw instanceof Date ? raw.toISOString() : String(raw || ""));
-        return str.slice(0, 10) === targetDateStr;
-      });
-      if (match) {
-        return {
-          isWorkingDay: false,
-          reason: "company_holiday",
-          label: `Official Company Holiday: ${match.label || "Office Holiday"}`,
-        };
-      }
+    if (rows.length > 0) {
+      return {
+        isWorkingDay: false,
+        reason: "company_holiday",
+        label: `Official Company Holiday: ${rows[0].label || "Office Holiday"}`,
+      };
     }
-  } catch (err) {}
+  } catch (err) {
+    console.error("[workday] company holiday lookup failed, treating the day as a working day:", (err as Error).message);
+  }
 
   // 3. Check public holidays
   const publicHoliday = getLocalHoliday(targetDateStr);

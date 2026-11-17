@@ -147,14 +147,15 @@ export async function promoteDueTentativeLeaves(todayStr?: string, opts: { throt
 }
 
 
-/** Company holidays (same `holidays` table the leave dialog uses), for working-day calculations. */
+/** Company holidays (the `holiday_calendar` table the leave dialog uses), for working-day calculations. */
 export async function fetchCompanyHolidays(): Promise<Array<{ calendar_date: string; label: string }>> {
   try {
     const res = await getPool().query<{ calendar_date: string; label: string }>(
-      "SELECT calendar_date::text AS calendar_date, label FROM public.holidays"
+      "SELECT calendar_date::text AS calendar_date, label FROM public.holiday_calendar"
     );
     return res.rows;
-  } catch {
+  } catch (err) {
+    console.error("[leaves] company holiday lookup failed:", (err as Error).message);
     return [];
   }
 }
