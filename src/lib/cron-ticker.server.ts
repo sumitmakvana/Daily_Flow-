@@ -84,24 +84,38 @@ export function startBackgroundCronTicker() {
       // Working day + configured times change rarely: read them once per SETTINGS_TTL_MS (and when the date
       // changes) instead of every minute.
       const cached = globalCronState.__tickerSettings;
-      const settingsFresh = cached && cached.date === todayStr && now - cached.at < SETTINGS_TTL_MS;
-      const tick = settingsFresh
-        ? cached
-        : await (async () => {
-            // One read of work_settings (workdays + both digest times) over the DB pool, shared with the
-            // working-day check, instead of two PostgREST HTTP requests for the same row.
-            const settings = await readWorkSettingsServer();
-            const workStatus = await checkIsWorkingDayServer(todayStr, settings?.workdays ?? null);
-            const fresh = {
-              date: todayStr,
-              at: now,
-              isWorkingDay: workStatus.isWorkingDay,
-              morningTime: settings?.morning_digest_time ?? "10:30", // Dynamic from UI
-              eveningTime: settings?.evening_digest_time ?? "18:00", // Dynamic from UI
-            };
-            globalCronState.__tickerSettings = fresh;
-            return fresh;
-          })();
+      const cachedToday = cached && cached.date === todayStr ? cached : undefined;
+      let tick: TickerSettings;
+      if (cachedToday && now - cachedToday.at < SETTINGS_TTL_MS) {
+        tick = cachedToday;
+      } else {
+        try {
+          // One read of work_settings (workdays + both digest times) over the DB pool, shared with the
+          // working-day check, instead of two PostgREST HTTP requests for the same row. A failed read throws
+          // (never replaced by defaults), so a wrong day or time is never cached.
+          const settings = await readWorkSettingsServer({ throwOnError: true });
+          const workStatus = await checkIsWorkingDayServer(todayStr, settings?.workdays ?? null, { throwOnError: true });
+          tick = {
+            date: todayStr,
+            at: now,
+            isWorkingDay: workStatus.isWorkingDay,
+            // Defaults only when the row or column is absent, never because a read failed.
+            morningTime: settings?.morning_digest_time ?? "10:30", // Dynamic from UI
+            eveningTime: settings?.evening_digest_time ?? "18:00", // Dynamic from UI
+          };
+          globalCronState.__tickerSettings = tick;
+        } catch (err) {
+          // Not cached, so the next tick retries. Keep today's last good values if there are any; otherwise skip
+          // this minute rather than guess (a job stays due for DUE_WINDOW_MIN minutes, so one failed minute
+          // does not lose it).
+          if (!cachedToday) {
+            console.error("[CronTicker] Settings unavailable, skipping this minute:", (err as Error).message);
+            return;
+          }
+          console.error("[CronTicker] Settings refresh failed, using today's last good values:", (err as Error).message);
+          tick = cachedToday;
+        }
+      }
       if (!tick.isWorkingDay) {
         // Skip automated digests and notifications on non-working days & holidays
         return;

@@ -37,13 +37,20 @@ describe("readWorkSettingsServer", () => {
     expect(calls[0][0]).toMatch(/SELECT workdays, morning_digest_time, evening_digest_time FROM public\.work_settings WHERE id = 1/);
   });
 
-  it("returns null when the row is missing or the read fails", async () => {
+  it("returns null when the row is missing", async () => {
     settingsImpl = async () => ({ rows: [] });
     expect(await readWorkSettingsServer()).toBeNull();
+  });
+
+  it("logs a failed read and returns null, or throws with throwOnError", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
     settingsImpl = async () => {
       throw new Error("connection refused");
     };
     expect(await readWorkSettingsServer()).toBeNull();
+    expect(err).toHaveBeenCalledWith(expect.stringContaining("[workday] work_settings read failed"), "connection refused");
+    await expect(readWorkSettingsServer({ throwOnError: true })).rejects.toThrow("connection refused");
+    err.mockRestore();
   });
 });
 
@@ -97,11 +104,29 @@ describe("checkIsWorkingDayServer", () => {
   });
 
   it("falls back to Mon-Fri when work_settings cannot be read", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
     settingsImpl = async () => {
       throw new Error("connection refused");
     };
     expect(await checkIsWorkingDayServer(WEDNESDAY)).toMatchObject({ isWorkingDay: true });
     expect(await checkIsWorkingDayServer(SUNDAY)).toMatchObject({ isWorkingDay: false, reason: "weekend" });
+    err.mockRestore();
+  });
+
+  it("with throwOnError, a failed work_settings or holiday read throws instead of guessing", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    settingsImpl = async () => {
+      throw new Error("connection refused");
+    };
+    await expect(checkIsWorkingDayServer(WEDNESDAY, undefined, { throwOnError: true })).rejects.toThrow("connection refused");
+
+    holidayImpl = async () => {
+      throw new Error("statement timeout");
+    };
+    await expect(checkIsWorkingDayServer(WEDNESDAY, [1, 2, 3, 4, 5], { throwOnError: true })).rejects.toThrow(
+      "statement timeout",
+    );
+    err.mockRestore();
   });
 
   it("falls back to Mon-Fri when the caller passes null or empty workdays", async () => {
