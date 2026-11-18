@@ -67,7 +67,7 @@ afterEach(() => {
 const start = async () => {
   const { startNotificationListener } = await import("@/lib/notification-listener.server");
   startNotificationListener();
-  await vi.waitFor(() => expect(h.queries.some((q) => q.includes("LISTEN entity_changed"))).toBe(true));
+  await vi.waitFor(() => expect(h.queries.some((q) => q.includes("LISTEN ticker_settings_changed"))).toBe(true));
 };
 const statements = () => h.queries.join("\n");
 const notify = (n: Record<string, unknown>) =>
@@ -78,7 +78,12 @@ describe("notification listener startup", () => {
   it("READ-ONLY: issues NO DDL and NO write — only LISTEN", async () => {
     setMode("1");
     await start();
-    expect(h.queries).toEqual(["LISTEN new_notification", "LISTEN notification_deleted", "LISTEN entity_changed"]);
+    expect(h.queries).toEqual([
+      "LISTEN new_notification",
+      "LISTEN notification_deleted",
+      "LISTEN entity_changed",
+      "LISTEN ticker_settings_changed",
+    ]);
     expect(statements()).not.toMatch(/\b(CREATE|DROP|ALTER|INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
   });
 

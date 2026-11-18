@@ -6,6 +6,7 @@ import { scheduleUnreadPush } from "@/lib/notification-unread.server";
 import { sendEodEmail } from "@/services/email-dispatcher";
 import { sendPushToUser, isPushConfigured } from "@/lib/fcm.server";
 import { pushTaskAssigned } from "@/lib/task-push.server";
+import { markTickerSettingsStale } from "@/lib/ticker-settings-cache.server";
 import {
   getZeroTasksNudgeHtml,
   getUnstartedTasksNudgeHtml,
@@ -24,6 +25,9 @@ interface NotificationPayload {
   body: string | null;
   task_id: string | null;
 }
+
+/** NOTIFY channel of the work_settings / holiday_calendar triggers (CronTicker settings cache). */
+export const TICKER_SETTINGS_CHANNEL = "ticker_settings_changed";
 
 // Global singleton to prevent duplicate listeners during Vite HMR module re-evaluations
 const globalListenerState = globalThis as unknown as {
@@ -174,9 +178,23 @@ export function startNotificationListener() {
       // that trigger has not been installed yet: no messages simply arrive.
       await client.query("LISTEN entity_changed");
       console.log("[NotificationListener] Listening on DB channel: entity_changed");
+      // Any write to work_settings / holiday_calendar (app, DBeaver, psql, migration, pg_restore) sends this, from
+      // the triggers in supabase/migrations/20261118000000_ticker_settings_notify.sql.
+      await client.query(`LISTEN ${TICKER_SETTINGS_CHANNEL}`);
+      console.log(`[NotificationListener] Listening on DB channel: ${TICKER_SETTINGS_CHANNEL}`);
+      // NOTIFY only reaches a connected listener, so a change made while this connection was down was missed:
+      // after every (re)connect, have the CronTicker re-read its settings once. Done after LISTEN, so any change
+      // from here on is also announced.
+      markTickerSettingsStale();
 
       client.on("notification", (msg: any) => {
         if (!isCurrent()) return;
+        if (msg.channel === TICKER_SETTINGS_CHANNEL) {
+          // Payload is the table name (plain text, not JSON).
+          console.log(`[CronTicker] Settings changed in ${msg.payload || "?"}; re-reading on the next minute`);
+          markTickerSettingsStale();
+          return;
+        }
         try {
           if (!msg.payload) return;
           const payload = JSON.parse(msg.payload);
