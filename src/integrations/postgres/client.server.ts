@@ -26,6 +26,12 @@ function createPool(): Pool {
     max: Number(process.env.PG_POOL_MAX ?? 10),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    // TCP keepalive (no SQL is sent): the kernel probes a connection that has been idle for 10 s, so a peer
+    // that vanished without closing the socket surfaces as an error instead of a silently dead connection.
+    // Matters most for the long-lived LISTEN connection the notification listener takes from this pool
+    // (CronTicker settings changes, notifications); same values as the realtime outbox listener.
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
     // Self-hosted Postgres behind Caddy/Docker on the same VM — TLS is
     // typically terminated at the proxy. Override via PG_SSL=true for
     // managed providers that require SSL.

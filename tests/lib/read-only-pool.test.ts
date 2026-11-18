@@ -39,5 +39,15 @@ describe("Postgres pool", () => {
     expect(poolCfg.last).not.toHaveProperty("options");
     expect(poolCfg.last).not.toHaveProperty("application_name");
   });
+
+  it("enables TCP keepalive (10 s), so a silently dead LISTEN connection is detected", async () => {
+    for (const mode of [undefined, "1"]) {
+      setMode(mode);
+      vi.resetModules();
+      const { getPool } = await import("@/integrations/postgres/client.server");
+      getPool();
+      expect(poolCfg.last).toMatchObject({ keepAlive: true, keepAliveInitialDelayMillis: 10_000 });
+    }
+  });
 });
 
