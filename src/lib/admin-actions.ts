@@ -267,11 +267,14 @@ export const updateUserAdminSettings = createServerFn({ method: "POST" })
     managerId?: string | null;
     role?: "admin" | "manager" | "member" | null;
     isActive?: boolean;
+    /** Move the target's open (not Completed) tasks to this member. */
+    reassignTo?: string;
   }) => z.object({
     targetUserId: z.string(),
     managerId: z.string().nullable().optional(),
     role: z.enum(["admin", "manager", "member"]).nullable().optional(),
     isActive: z.boolean().optional(),
+    reassignTo: z.string().uuid().optional(),
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { getPool } = await import("@/integrations/postgres/client.server");
@@ -309,6 +312,45 @@ export const updateUserAdminSettings = createServerFn({ method: "POST" })
         );
       }
 
+      // Reassign open tasks (e.g. of a member who left). Completed tasks and all history stay with them.
+      let reassignedCount = 0;
+      if (data.reassignTo) {
+        if (data.reassignTo === data.targetUserId) {
+          throw new Error("Choose a different member to reassign the tasks to.");
+        }
+        const toRes = await client.query<{ display_name: string; is_active: boolean | null }>(
+          `SELECT display_name, is_active FROM public.profiles WHERE id = $1`,
+          [data.reassignTo]
+        );
+        const to = toRes.rows[0];
+        if (!to || to.is_active === false) {
+          throw new Error("Choose an active member to reassign the tasks to.");
+        }
+        const moved = await client.query(
+          `UPDATE public.tasks SET assigned_to = $1, updated_by = $2
+            WHERE assigned_to = $3 AND status::text <> 'Completed'`,
+          [data.reassignTo, context.userId, data.targetUserId]
+        );
+        reassignedCount = moved.rowCount ?? 0;
+
+        // One summary notification (one email / push) instead of one per task.
+        if (reassignedCount > 0) {
+          const namesRes = await client.query<{ id: string; display_name: string }>(
+            `SELECT id, display_name FROM public.profiles WHERE id = ANY($1::uuid[])`,
+            [[data.targetUserId, context.userId]]
+          );
+          const nameOf = (id: string) => namesRes.rows.find((r) => r.id === id)?.display_name ?? "a team member";
+          await client.query(
+            `INSERT INTO public.notifications (user_id, type, title, body) VALUES ($1, 'task_assigned', $2, $3)`,
+            [
+              data.reassignTo,
+              `${reassignedCount} task${reassignedCount === 1 ? "" : "s"} reassigned to you`,
+              `${nameOf(context.userId)} reassigned the open tasks of ${nameOf(data.targetUserId)} to you.`,
+            ]
+          );
+        }
+      }
+
       // Update role if provided
       if (data.role !== undefined && data.role !== null) {
         // Delete existing roles
@@ -324,7 +366,7 @@ export const updateUserAdminSettings = createServerFn({ method: "POST" })
       }
 
       await client.query("COMMIT");
-      return { success: true };
+      return { success: true, reassignedCount };
     } catch (err) {
       await client.query("ROLLBACK");
       throw err;

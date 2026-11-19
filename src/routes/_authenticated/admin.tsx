@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Search, Trash2, RefreshCw, Megaphone, Calendar, UserX, UserCheck } from "lucide-react";
+import { Search, Trash2, RefreshCw, Megaphone, Calendar, UserX, UserCheck, ArrowRightLeft } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +49,11 @@ function AdminPage() {
   const [deleting, setDeleting] = useState(false);
   const [userToToggle, setUserToToggle] = useState<Profile | null>(null);
   const [toggling, setToggling] = useState(false);
+  // Reassign open tasks: chosen member ("" = keep), whether the dialog only reassigns (inactive member),
+  // and the member's open task count (null while loading).
+  const [reassignTo, setReassignTo] = useState("");
+  const [reassignOnly, setReassignOnly] = useState(false);
+  const [openTaskCount, setOpenTaskCount] = useState<number | null>(null);
 
   // Custom Banner states
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -172,14 +177,45 @@ function AdminPage() {
   };
 
   /** Deactivate (member left: no login, emails or pushes; all data kept) or reactivate. */
+  /** Open the deactivate / reactivate / reassign dialog and load the member's open task count. */
+  const openUserDialog = (p: Profile, onlyReassign = false) => {
+    setUserToToggle(p);
+    setReassignOnly(onlyReassign);
+    setReassignTo("");
+    setOpenTaskCount(null);
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("assigned_to", p.id)
+      .neq("status", "Completed")
+      .then(({ count }) => setOpenTaskCount(count ?? 0));
+  };
+
   const handleToggleActive = async () => {
     if (!userToToggle) return;
-    const activate = userToToggle.is_active === false;
+    const activate = userToToggle.is_active === false && !reassignOnly;
+    if (reassignOnly && !reassignTo) {
+      toast.error("Choose a member to reassign the tasks to.");
+      return;
+    }
     setToggling(true);
     try {
-      await updateUserAdminSettingsFn({ data: { targetUserId: userToToggle.id, isActive: activate } });
+      const res = await updateUserAdminSettingsFn({
+        data: {
+          targetUserId: userToToggle.id,
+          ...(reassignOnly ? {} : { isActive: activate }),
+          ...(reassignTo && !activate ? { reassignTo } : {}),
+        },
+      });
       invalidatePeople();
-      toast.success(`"${userToToggle.display_name}" has been ${activate ? "reactivated" : "deactivated"}.`);
+      const moved = (res as { reassignedCount?: number })?.reassignedCount ?? 0;
+      const toName = profiles.find((x) => x.id === reassignTo)?.display_name;
+      const movedText = moved > 0 && toName ? ` ${moved} open task${moved === 1 ? "" : "s"} moved to ${toName}.` : "";
+      toast.success(
+        reassignOnly
+          ? `Reassigned ${moved} open task${moved === 1 ? "" : "s"} of "${userToToggle.display_name}"${toName ? ` to ${toName}` : ""}.`
+          : `"${userToToggle.display_name}" has been ${activate ? "reactivated" : "deactivated"}.${movedText}`,
+      );
       setUserToToggle(null);
       load();
     } catch (e) {
@@ -277,7 +313,7 @@ function AdminPage() {
           <Card className="p-4 border-border/50 bg-card/60 backdrop-blur-sm shadow-md">
             {/* Table Header */}
             {filteredProfiles.length > 0 && (
-              <div className="hidden md:grid grid-cols-[1fr_200px_160px_120px] gap-4 px-3 py-2 border-b border-border/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              <div className="hidden md:grid grid-cols-[1fr_200px_160px_150px] gap-4 px-3 py-2 border-b border-border/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 <div>User / Email</div>
                 <div>Manager</div>
                 <div>Role</div>
@@ -298,7 +334,7 @@ function AdminPage() {
                                       (editedRoles[p.id] !== undefined && editedRoles[p.id] !== (rolesMap[p.id] ?? "member"));
 
                   return (
-                    <div key={p.id} className={`${p.is_active === false ? "opacity-60 " : ""}grid grid-cols-1 md:grid-cols-[1fr_200px_160px_120px] items-center gap-2 md:gap-4 py-3 border-b border-border/40 last:border-0 last:pb-0`}>
+                    <div key={p.id} className={`${p.is_active === false ? "opacity-60 " : ""}grid grid-cols-1 md:grid-cols-[1fr_200px_160px_150px] items-center gap-2 md:gap-4 py-3 border-b border-border/40 last:border-0 last:pb-0`}>
                       {/* User/Email Column */}
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
@@ -371,9 +407,20 @@ function AdminPage() {
                             size="icon"
                             title={p.is_active === false ? "Reactivate user" : "Deactivate user"}
                             className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ml-auto md:ml-0 cursor-pointer"
-                            onClick={() => setUserToToggle(p)}
+                            onClick={() => openUserDialog(p)}
                           >
                             {p.is_active === false ? <UserCheck className="h-4 w-4" /> : <UserX className="h-4 w-4" />}
+                          </Button>
+                        )}
+                        {p.is_active === false && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Reassign open tasks"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                            onClick={() => openUserDialog(p, true)}
+                          >
+                            <ArrowRightLeft className="h-4 w-4" />
                           </Button>
                         )}
                         {p.id !== user?.id && (
@@ -621,10 +668,15 @@ function AdminPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {userToToggle?.is_active === false ? "Reactivate user?" : "Deactivate user?"}
+              {reassignOnly ? "Reassign open tasks" : userToToggle?.is_active === false ? "Reactivate user?" : "Deactivate user?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {userToToggle?.is_active === false ? (
+              {reassignOnly ? (
+                <>
+                  Move the open tasks of <strong>{userToToggle?.display_name}</strong> to another active member.
+                  Completed tasks, worklogs, comments and history stay with them.
+                </>
+              ) : userToToggle?.is_active === false ? (
                 <>
                   <strong>{userToToggle?.display_name}</strong> ({userToToggle?.email}) will be able to sign in again
                   and will receive emails and notifications. If they were also disabled in Keycloak, enable them there too.
@@ -633,18 +685,43 @@ function AdminPage() {
                 <>
                   <strong>{userToToggle?.display_name}</strong> ({userToToggle?.email}) will no longer be able to sign in
                   and will stop receiving emails and notifications. All their tasks, worklogs, comments and history are kept.
-                  You can reactivate them at any time. Reassign their open tasks to someone else.
+                  You can reactivate them at any time.
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {userToToggle && (reassignOnly || userToToggle.is_active !== false) && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Reassign open tasks{" "}
+                <span className="font-normal text-muted-foreground">
+                  ({openTaskCount === null ? "counting…" : `${openTaskCount} open`})
+                </span>
+              </label>
+              <Select value={reassignTo || "__keep"} onValueChange={(v) => setReassignTo(v === "__keep" ? "" : v)}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Choose a member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {!reassignOnly && <SelectItem value="__keep">Keep them assigned (reassign later)</SelectItem>}
+                  {assignable(profiles)
+                    .filter((m) => m.id !== userToToggle.id)
+                    .map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.display_name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={toggling}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => { e.preventDefault(); handleToggleActive(); }}
               disabled={toggling}
             >
-              {toggling ? "Saving…" : userToToggle?.is_active === false ? "Reactivate" : "Deactivate"}
+              {toggling ? "Saving…" : reassignOnly ? "Reassign" : userToToggle?.is_active === false ? "Reactivate" : "Deactivate"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

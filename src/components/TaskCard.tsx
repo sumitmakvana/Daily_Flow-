@@ -666,7 +666,7 @@ export function TaskCard({
                                 </Avatar>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="bg-[#1e1f24] text-slate-100 border border-slate-700 text-[11px] font-medium py-1 px-2 z-50">
-                                Assignee: {assignee?.display_name || "Unassigned"}
+                                Assignee: {assignee?.display_name || "Unassigned"}{assignee?.is_active === false ? " (Deactivated)" : ""}
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -682,6 +682,9 @@ export function TaskCard({
                           )}
                         </Avatar>
                       )}
+                      {assignee?.is_active === false && (
+                        <span className="shrink-0 rounded border border-rose-500/40 bg-rose-500/10 px-1 text-[9px] font-semibold uppercase tracking-wide text-rose-300">Deactivated</span>
+                      )}
                       <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-1 ring-[#1e1f23]" />
                     </button>
                   </PopoverTrigger>
@@ -693,6 +696,9 @@ export function TaskCard({
                           <div className="text-sm font-bold text-slate-100">
                             {assignee?.display_name || "Unassigned"}
                           </div>
+                          {assignee?.is_active === false && (
+                            <div className="mt-1"><span className="shrink-0 rounded border border-rose-500/40 bg-rose-500/10 px-1 text-[9px] font-semibold uppercase tracking-wide text-rose-300">Deactivated</span></div>
+                          )}
                         </div>
                         <Avatar className="h-8 w-8 border border-slate-700 bg-slate-800 text-slate-100 text-xs font-bold shrink-0">
                           {assignee?.avatar_url ? (

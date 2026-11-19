@@ -590,6 +590,9 @@ export function TaskDetailModal({
                             )}
                           </Avatar>
                           <span className="font-semibold text-foreground">{currentAssignedProfile.display_name}</span>
+                          {currentAssignedProfile.is_active === false && (
+                            <span className="shrink-0 rounded border border-rose-500/40 bg-rose-500/10 px-1 text-[9px] font-semibold uppercase tracking-wide text-rose-300">Deactivated</span>
+                          )}
                         </>
                       ) : (
                         <span className="text-muted-foreground italic">Unassigned</span>
