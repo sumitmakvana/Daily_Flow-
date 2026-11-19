@@ -49,11 +49,20 @@ function AdminPage() {
   const [deleting, setDeleting] = useState(false);
   const [userToToggle, setUserToToggle] = useState<Profile | null>(null);
   const [toggling, setToggling] = useState(false);
-  // Reassign open tasks: chosen member ("" = keep), whether the dialog only reassigns (inactive member),
-  // and the member's open task count (null while loading).
-  const [reassignTo, setReassignTo] = useState("");
+  // Reassign open tasks, one task at a time: whether the dialog only reassigns (inactive member), the
+  // member's open tasks (null while loading), the chosen member per task ("" = keep) and the list filters.
   const [reassignOnly, setReassignOnly] = useState(false);
-  const [openTaskCount, setOpenTaskCount] = useState<number | null>(null);
+  const [openTasks, setOpenTasks] = useState<Array<{
+    id: string;
+    task_code: string | null;
+    task_name: string;
+    status: string;
+    due_date: string | null;
+    project_name: string | null;
+  }> | null>(null);
+  const [taskAssign, setTaskAssign] = useState<Record<string, string>>({});
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskStatus, setTaskStatus] = useState("all");
 
   // Custom Banner states
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -176,26 +185,36 @@ function AdminPage() {
     }
   };
 
-  /** Deactivate (member left: no login, emails or pushes; all data kept) or reactivate. */
-  /** Open the deactivate / reactivate / reassign dialog and load the member's open task count. */
+  /** Open the deactivate / reactivate / reassign dialog and load the member's open tasks. */
   const openUserDialog = (p: Profile, onlyReassign = false) => {
     setUserToToggle(p);
     setReassignOnly(onlyReassign);
-    setReassignTo("");
-    setOpenTaskCount(null);
+    setOpenTasks(null);
+    setTaskAssign({});
+    setTaskSearch("");
+    setTaskStatus("all");
     supabase
       .from("tasks")
-      .select("id", { count: "exact", head: true })
+      .select("id,task_code,task_name,status,due_date,project_name")
       .eq("assigned_to", p.id)
       .neq("status", "Completed")
-      .then(({ count }) => setOpenTaskCount(count ?? 0));
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .then(({ data, error }) => {
+        if (error) toast.error("Could not load open tasks");
+        setOpenTasks((data ?? []) as NonNullable<typeof openTasks>);
+      });
   };
 
   const handleToggleActive = async () => {
     if (!userToToggle) return;
     const activate = userToToggle.is_active === false && !reassignOnly;
-    if (reassignOnly && !reassignTo) {
-      toast.error("Choose a member to reassign the tasks to.");
+    const reassignments = activate
+      ? []
+      : Object.entries(taskAssign)
+          .filter(([, toUserId]) => !!toUserId)
+          .map(([taskId, toUserId]) => ({ taskId, toUserId }));
+    if (reassignOnly && reassignments.length === 0) {
+      toast.error("Choose a member for at least one task.");
       return;
     }
     setToggling(true);
@@ -204,16 +223,15 @@ function AdminPage() {
         data: {
           targetUserId: userToToggle.id,
           ...(reassignOnly ? {} : { isActive: activate }),
-          ...(reassignTo && !activate ? { reassignTo } : {}),
+          ...(reassignments.length > 0 ? { reassignments } : {}),
         },
       });
       invalidatePeople();
       const moved = (res as { reassignedCount?: number })?.reassignedCount ?? 0;
-      const toName = profiles.find((x) => x.id === reassignTo)?.display_name;
-      const movedText = moved > 0 && toName ? ` ${moved} open task${moved === 1 ? "" : "s"} moved to ${toName}.` : "";
+      const movedText = moved > 0 ? ` ${moved} open task${moved === 1 ? "" : "s"} reassigned.` : "";
       toast.success(
         reassignOnly
-          ? `Reassigned ${moved} open task${moved === 1 ? "" : "s"} of "${userToToggle.display_name}"${toName ? ` to ${toName}` : ""}.`
+          ? `Reassigned ${moved} open task${moved === 1 ? "" : "s"} of "${userToToggle.display_name}".`
           : `"${userToToggle.display_name}" has been ${activate ? "reactivated" : "deactivated"}.${movedText}`,
       );
       setUserToToggle(null);
@@ -281,6 +299,17 @@ function AdminPage() {
     const emailMatch = p.email?.toLowerCase().includes(q) ?? false;
     return nameMatch || emailMatch;
   });
+
+  // Reassign dialog: members who can take tasks, task filters, and how many tasks have a new member chosen.
+  const reassignMembers = assignable(profiles).filter((m) => m.id !== userToToggle?.id);
+  const openTaskStatuses = Array.from(new Set((openTasks ?? []).map((t) => t.status)));
+  const shownTasks = (openTasks ?? []).filter((t) => {
+    if (taskStatus !== "all" && t.status !== taskStatus) return false;
+    const q = taskSearch.trim().toLowerCase();
+    if (!q) return true;
+    return [t.task_name, t.task_code, t.project_name].some((v) => v?.toLowerCase().includes(q));
+  });
+  const chosenCount = Object.values(taskAssign).filter(Boolean).length;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -665,7 +694,7 @@ function AdminPage() {
       </Tabs>
 
       <AlertDialog open={!!userToToggle} onOpenChange={(open) => !open && setUserToToggle(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>
               {reassignOnly ? "Reassign open tasks" : userToToggle?.is_active === false ? "Reactivate user?" : "Deactivate user?"}
@@ -673,8 +702,8 @@ function AdminPage() {
             <AlertDialogDescription>
               {reassignOnly ? (
                 <>
-                  Move the open tasks of <strong>{userToToggle?.display_name}</strong> to another active member.
-                  Completed tasks, worklogs, comments and history stay with them.
+                  Choose a new member for each open task of <strong>{userToToggle?.display_name}</strong>. Tasks left
+                  on "Keep" stay with them. Completed tasks, worklogs, comments and history stay with them.
                 </>
               ) : userToToggle?.is_active === false ? (
                 <>
@@ -691,28 +720,86 @@ function AdminPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           {userToToggle && (reassignOnly || userToToggle.is_active !== false) && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                Reassign open tasks{" "}
-                <span className="font-normal text-muted-foreground">
-                  ({openTaskCount === null ? "counting…" : `${openTaskCount} open`})
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-foreground">
+                  Open tasks ({openTasks === null ? "loading…" : openTasks.length})
                 </span>
-              </label>
-              <Select value={reassignTo || "__keep"} onValueChange={(v) => setReassignTo(v === "__keep" ? "" : v)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Choose a member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {!reassignOnly && <SelectItem value="__keep">Keep them assigned (reassign later)</SelectItem>}
-                  {assignable(profiles)
-                    .filter((m) => m.id !== userToToggle.id)
-                    .map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.display_name}
-                      </SelectItem>
+                {chosenCount > 0 && <span className="text-muted-foreground">{chosenCount} to reassign</span>}
+              </div>
+              {openTasks !== null && openTasks.length === 0 && (
+                <p className="text-xs text-muted-foreground">No open tasks to reassign.</p>
+              )}
+              {openTasks !== null && openTasks.length > 0 && (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      placeholder="Filter by task, code or project…"
+                      value={taskSearch}
+                      onChange={(e) => setTaskSearch(e.target.value)}
+                      className="h-8 min-w-40 flex-1 text-xs"
+                    />
+                    <Select value={taskStatus} onValueChange={setTaskStatus}>
+                      <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        {openTaskStatuses.map((st) => (
+                          <SelectItem key={st} value={st}>{st}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value=""
+                      onValueChange={(v) =>
+                        setTaskAssign((prev) => {
+                          const next = { ...prev };
+                          shownTasks.forEach((t) => { next[t.id] = v === "__keep" ? "" : v; });
+                          return next;
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Set all shown to…" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__keep">Keep (clear choice)</SelectItem>
+                        {reassignMembers.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto rounded-md border border-border/60 divide-y divide-border/40">
+                    {shownTasks.map((t) => (
+                      <div key={t.id} className="flex items-center gap-2 px-2.5 py-1.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-medium text-foreground">
+                            {t.task_code ? `[${t.task_code}] ` : ""}{t.task_name}
+                          </div>
+                          <div className="truncate text-[10px] text-muted-foreground">
+                            {t.status}
+                            {t.project_name ? ` · ${t.project_name}` : ""}
+                            {t.due_date ? ` · due ${t.due_date.slice(0, 10)}` : ""}
+                          </div>
+                        </div>
+                        <Select
+                          value={taskAssign[t.id] || "__keep"}
+                          onValueChange={(v) => setTaskAssign((prev) => ({ ...prev, [t.id]: v === "__keep" ? "" : v }))}
+                        >
+                          <SelectTrigger className="h-7 w-40 shrink-0 text-[11px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__keep">Keep</SelectItem>
+                            {reassignMembers.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     ))}
-                </SelectContent>
-              </Select>
+                    {shownTasks.length === 0 && (
+                      <p className="p-3 text-xs text-muted-foreground">No tasks match the filter.</p>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
           <AlertDialogFooter>

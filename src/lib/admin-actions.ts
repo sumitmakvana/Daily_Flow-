@@ -267,14 +267,17 @@ export const updateUserAdminSettings = createServerFn({ method: "POST" })
     managerId?: string | null;
     role?: "admin" | "manager" | "member" | null;
     isActive?: boolean;
-    /** Move the target's open (not Completed) tasks to this member. */
-    reassignTo?: string;
+    /** Move some of the target's open (not Completed) tasks, each to its own member. */
+    reassignments?: Array<{ taskId: string; toUserId: string }>;
   }) => z.object({
     targetUserId: z.string(),
     managerId: z.string().nullable().optional(),
     role: z.enum(["admin", "manager", "member"]).nullable().optional(),
     isActive: z.boolean().optional(),
-    reassignTo: z.string().uuid().optional(),
+    reassignments: z
+      .array(z.object({ taskId: z.string().uuid(), toUserId: z.string().uuid() }))
+      .max(1000)
+      .optional(),
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { getPool } = await import("@/integrations/postgres/client.server");
@@ -314,40 +317,48 @@ export const updateUserAdminSettings = createServerFn({ method: "POST" })
 
       // Reassign open tasks (e.g. of a member who left). Completed tasks and all history stay with them.
       let reassignedCount = 0;
-      if (data.reassignTo) {
-        if (data.reassignTo === data.targetUserId) {
+      const pairs = data.reassignments ?? [];
+      if (pairs.length > 0) {
+        const toIds = [...new Set(pairs.map((r) => r.toUserId))];
+        if (toIds.includes(data.targetUserId)) {
           throw new Error("Choose a different member to reassign the tasks to.");
         }
-        const toRes = await client.query<{ display_name: string; is_active: boolean | null }>(
-          `SELECT display_name, is_active FROM public.profiles WHERE id = $1`,
-          [data.reassignTo]
+        const okRes = await client.query(
+          `SELECT id FROM public.profiles WHERE id = ANY($1::uuid[]) AND is_active IS DISTINCT FROM false`,
+          [toIds]
         );
-        const to = toRes.rows[0];
-        if (!to || to.is_active === false) {
-          throw new Error("Choose an active member to reassign the tasks to.");
+        if (okRes.rowCount !== toIds.length) {
+          throw new Error("Tasks can only be reassigned to active members.");
         }
-        const moved = await client.query(
-          `UPDATE public.tasks SET assigned_to = $1, updated_by = $2
-            WHERE assigned_to = $3 AND status::text <> 'Completed'`,
-          [data.reassignTo, context.userId, data.targetUserId]
+        // Only the target's own open tasks move; anything else in the list is ignored.
+        const moved = await client.query<{ assigned_to: string }>(
+          `UPDATE public.tasks t SET assigned_to = r.to_id, updated_by = $3
+             FROM unnest($1::uuid[], $2::uuid[]) AS r(task_id, to_id)
+            WHERE t.id = r.task_id AND t.assigned_to = $4 AND t.status::text <> 'Completed'
+          RETURNING t.assigned_to`,
+          [pairs.map((r) => r.taskId), pairs.map((r) => r.toUserId), context.userId, data.targetUserId]
         );
         reassignedCount = moved.rowCount ?? 0;
 
-        // One summary notification (one email / push) instead of one per task.
-        if (reassignedCount > 0) {
+        // One summary notification (one email / push) per receiving member, not one per task.
+        const perMember = new Map<string, number>();
+        for (const r of moved.rows) perMember.set(r.assigned_to, (perMember.get(r.assigned_to) ?? 0) + 1);
+        if (perMember.size > 0) {
           const namesRes = await client.query<{ id: string; display_name: string }>(
             `SELECT id, display_name FROM public.profiles WHERE id = ANY($1::uuid[])`,
             [[data.targetUserId, context.userId]]
           );
           const nameOf = (id: string) => namesRes.rows.find((r) => r.id === id)?.display_name ?? "a team member";
-          await client.query(
-            `INSERT INTO public.notifications (user_id, type, title, body) VALUES ($1, 'task_assigned', $2, $3)`,
-            [
-              data.reassignTo,
-              `${reassignedCount} task${reassignedCount === 1 ? "" : "s"} reassigned to you`,
-              `${nameOf(context.userId)} reassigned the open tasks of ${nameOf(data.targetUserId)} to you.`,
-            ]
-          );
+          for (const [toId, n] of perMember) {
+            await client.query(
+              `INSERT INTO public.notifications (user_id, type, title, body) VALUES ($1, 'task_assigned', $2, $3)`,
+              [
+                toId,
+                `${n} task${n === 1 ? "" : "s"} reassigned to you`,
+                `${nameOf(context.userId)} reassigned ${n === 1 ? "an open task" : `${n} open tasks`} of ${nameOf(data.targetUserId)} to you.`,
+              ]
+            );
+          }
         }
       }
 
