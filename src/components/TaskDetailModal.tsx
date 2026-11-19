@@ -52,6 +52,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import type { Task, Profile, TaskStatus, TaskPriority, Attachment } from "@/lib/types";
+import { assignable } from "@/lib/people";
 import { TASK_STATUSES, TASK_PRIORITIES } from "@/lib/types";
 import { TaskHoursBadges } from "./TaskHoursBadges";
 import { formatHoursMins, formatDate, isOverdue } from "@/lib/format";
@@ -600,7 +601,7 @@ export function TaskDetailModal({
                     <DropdownMenuContent align="start" className="w-56 max-h-64 overflow-y-auto">
                       <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase">Reassign Task</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      {profiles.map((p) => (
+                      {assignable(profiles, [task.assigned_to]).map((p) => (
                         <DropdownMenuItem
                           key={p.id}
                           onClick={() => handleAssigneeChange(p.id)}

@@ -266,10 +266,12 @@ export const updateUserAdminSettings = createServerFn({ method: "POST" })
     targetUserId: string;
     managerId?: string | null;
     role?: "admin" | "manager" | "member" | null;
+    isActive?: boolean;
   }) => z.object({
     targetUserId: z.string(),
     managerId: z.string().nullable().optional(),
     role: z.enum(["admin", "manager", "member"]).nullable().optional(),
+    isActive: z.boolean().optional(),
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { getPool } = await import("@/integrations/postgres/client.server");
@@ -293,6 +295,17 @@ export const updateUserAdminSettings = createServerFn({ method: "POST" })
         await client.query(
           `UPDATE public.profiles SET manager_id = $1 WHERE id = $2`,
           [data.managerId, data.targetUserId]
+        );
+      }
+
+      // Deactivate / reactivate (members who left). Data is kept; only is_active changes.
+      if (data.isActive !== undefined) {
+        if (data.isActive === false && data.targetUserId === context.userId) {
+          throw new Error("Conflict: You cannot deactivate your own admin account.");
+        }
+        await client.query(
+          `UPDATE public.profiles SET is_active = $1 WHERE id = $2`,
+          [data.isActive, data.targetUserId]
         );
       }
 

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Search, Trash2, RefreshCw, Megaphone, Calendar } from "lucide-react";
+import { Search, Trash2, RefreshCw, Megaphone, Calendar, UserX, UserCheck } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +25,7 @@ import type { AppRole, Profile } from "@/lib/types";
 import { toast } from "sonner";
 import { deleteUser, updateUserAdminSettings } from "@/lib/admin-actions";
 import { todayISO } from "@/lib/format";
-import { invalidatePeople } from "@/lib/people";
+import { assignable, invalidatePeople } from "@/lib/people";
 import { fetchAllAnnouncements, createAnnouncement, deleteAnnouncement } from "@/services/announcements.functions";
 import { DemoFeedbackDashboard } from "@/components/DemoFeedbackDashboard";
 
@@ -47,6 +47,8 @@ function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [userToDelete, setUserToDelete] = useState<Profile | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [userToToggle, setUserToToggle] = useState<Profile | null>(null);
+  const [toggling, setToggling] = useState(false);
 
   // Custom Banner states
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -76,7 +78,7 @@ function AdminPage() {
     setLoading(true);
     try {
       const [{ data: p }, { data: r }] = await Promise.all([
-        supabase.from("profiles").select("id,display_name,email,avatar_url,manager_id"),
+        supabase.from("profiles").select("id,display_name,email,avatar_url,manager_id,is_active"),
         supabase.from("user_roles").select("user_id,role"),
       ]);
       setProfiles((p ?? []) as Profile[]);
@@ -169,6 +171,24 @@ function AdminPage() {
     }
   };
 
+  /** Deactivate (member left: no login, emails or pushes; all data kept) or reactivate. */
+  const handleToggleActive = async () => {
+    if (!userToToggle) return;
+    const activate = userToToggle.is_active === false;
+    setToggling(true);
+    try {
+      await updateUserAdminSettingsFn({ data: { targetUserId: userToToggle.id, isActive: activate } });
+      invalidatePeople();
+      toast.success(`"${userToToggle.display_name}" has been ${activate ? "reactivated" : "deactivated"}.`);
+      setUserToToggle(null);
+      load();
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to update user");
+    } finally {
+      setToggling(false);
+    }
+  };
+
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!annTitle.trim() || !annMessage.trim() || !annStartDate || !annEndDate) {
@@ -257,7 +277,7 @@ function AdminPage() {
           <Card className="p-4 border-border/50 bg-card/60 backdrop-blur-sm shadow-md">
             {/* Table Header */}
             {filteredProfiles.length > 0 && (
-              <div className="hidden md:grid grid-cols-[1fr_200px_160px_100px] gap-4 px-3 py-2 border-b border-border/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              <div className="hidden md:grid grid-cols-[1fr_200px_160px_120px] gap-4 px-3 py-2 border-b border-border/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 <div>User / Email</div>
                 <div>Manager</div>
                 <div>Role</div>
@@ -278,10 +298,15 @@ function AdminPage() {
                                       (editedRoles[p.id] !== undefined && editedRoles[p.id] !== (rolesMap[p.id] ?? "member"));
 
                   return (
-                    <div key={p.id} className="grid grid-cols-1 md:grid-cols-[1fr_200px_160px_100px] items-center gap-2 md:gap-4 py-3 border-b border-border/40 last:border-0 last:pb-0">
+                    <div key={p.id} className={`${p.is_active === false ? "opacity-60 " : ""}grid grid-cols-1 md:grid-cols-[1fr_200px_160px_120px] items-center gap-2 md:gap-4 py-3 border-b border-border/40 last:border-0 last:pb-0`}>
                       {/* User/Email Column */}
                       <div className="min-w-0">
-                        <div className="font-semibold text-sm text-foreground truncate">{p.display_name}</div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-sm text-foreground truncate">{p.display_name}</span>
+                          {p.is_active === false && (
+                            <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0">Inactive</Badge>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground truncate">{p.email}</div>
                       </div>
 
@@ -299,7 +324,7 @@ function AdminPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none">No Manager</SelectItem>
-                            {profiles
+                            {assignable(profiles, [currentManager])
                               .filter((m) => m.id !== p.id)
                               .map((m) => (
                                 <SelectItem key={m.id} value={m.id}>
@@ -344,7 +369,19 @@ function AdminPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors ml-auto md:ml-0 cursor-pointer"
+                            title={p.is_active === false ? "Reactivate user" : "Deactivate user"}
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ml-auto md:ml-0 cursor-pointer"
+                            onClick={() => setUserToToggle(p)}
+                          >
+                            {p.is_active === false ? <UserCheck className="h-4 w-4" /> : <UserX className="h-4 w-4" />}
+                          </Button>
+                        )}
+                        {p.id !== user?.id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Delete user permanently"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                             onClick={() => setUserToDelete(p)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -579,6 +616,39 @@ function AdminPage() {
           <DemoFeedbackDashboard />
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!userToToggle} onOpenChange={(open) => !open && setUserToToggle(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {userToToggle?.is_active === false ? "Reactivate user?" : "Deactivate user?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {userToToggle?.is_active === false ? (
+                <>
+                  <strong>{userToToggle?.display_name}</strong> ({userToToggle?.email}) will be able to sign in again
+                  and will receive emails and notifications. If they were also disabled in Keycloak, enable them there too.
+                </>
+              ) : (
+                <>
+                  <strong>{userToToggle?.display_name}</strong> ({userToToggle?.email}) will no longer be able to sign in
+                  and will stop receiving emails and notifications. All their tasks, worklogs, comments and history are kept.
+                  You can reactivate them at any time. Reassign their open tasks to someone else.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={toggling}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleToggleActive(); }}
+              disabled={toggling}
+            >
+              {toggling ? "Saving…" : userToToggle?.is_active === false ? "Reactivate" : "Deactivate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
         <AlertDialogContent>

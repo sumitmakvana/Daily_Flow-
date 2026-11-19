@@ -1,4 +1,4 @@
-import { loadPeopleSafe } from "@/lib/people";
+import { assignable, loadPeopleSafe } from "@/lib/people";
 import {
   loadMasterProjects,
   loadTaskNameHints,
@@ -559,7 +559,7 @@ export function TaskFormDialog({
   };
 
   const selectAllAssignees = () => {
-    setSelectedAssignees(profiles.map((p) => p.id));
+    setSelectedAssignees(assignable(profiles).map((p) => p.id));
   };
 
   const clearAllAssignees = () => {
@@ -619,7 +619,7 @@ export function TaskFormDialog({
   const clearGridRows = () => {
     const defaultStart = getDefaultStartDate(null, apiHolidays, holidayCalendar);
     if (profiles.length > 0) {
-      const rows = profiles.map((p) => {
+      const rows = assignable(profiles).map((p) => {
         const lastInfo = profileLastTasks[p.id] || { client: "", project_name: "" };
         return {
           id: p.id,
@@ -1089,7 +1089,7 @@ export function TaskFormDialog({
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value={NONE}>Unassigned</SelectItem>
-                              {profiles.map((p) => (
+                              {assignable(profiles, [row.assigned_to]).map((p) => (
                                 <SelectItem key={p.id} value={p.id}>
                                   {p.display_name}
                                 </SelectItem>
@@ -1475,7 +1475,7 @@ export function TaskFormDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NONE}>Unassigned</SelectItem>
-                        {profiles.map((p) => (
+                        {assignable(profiles, [form.assigned_to]).map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.display_name}
                           </SelectItem>
@@ -1509,7 +1509,7 @@ export function TaskFormDialog({
                           </div>
                         </div>
                         <div className="max-h-48 overflow-y-auto space-y-1" onWheel={(e) => e.stopPropagation()}>
-                          {profiles.map((p) => {
+                          {assignable(profiles, selectedAssignees).map((p) => {
                             const checked = selectedAssignees.includes(p.id);
                             return (
                               <div

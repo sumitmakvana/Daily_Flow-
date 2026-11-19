@@ -19,7 +19,7 @@ import { workloadService, utilTone } from "@/services/workload";
 import { toast } from "sonner";
 import { Calendar, User as UserIcon, Flag, ArrowRightCircle, X } from "lucide-react";
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks";
-import { loadPeopleSafe } from "@/lib/people";
+import { assignable, loadPeopleSafe } from "@/lib/people";
 
 export const Route = createFileRoute("/_authenticated/planning")({
   component: PlanningPage,
@@ -183,7 +183,7 @@ function PlanningPage() {
             <Select onValueChange={bulkReassign}>
               <SelectTrigger className="h-8 w-36 text-xs"><UserIcon className="h-3 w-3 mr-1" /><SelectValue placeholder="Reassign" /></SelectTrigger>
               <SelectContent>
-                {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}
+                {assignable(profiles).map((p) => <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select onValueChange={(v) => bulkPriority(v as TaskPriority)}>

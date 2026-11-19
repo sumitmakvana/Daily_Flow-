@@ -41,8 +41,8 @@ async function fetchPeople(variant: Variant): Promise<Profile[]> {
   // Literal column lists keep the query result typed.
   const { data, error } =
     variant === "basic"
-      ? await supabase.from("profiles").select("id,display_name,avatar_url")
-      : await supabase.from("profiles").select("id,display_name,email,avatar_url,team_id,manager_id");
+      ? await supabase.from("profiles").select("id,display_name,avatar_url,is_active")
+      : await supabase.from("profiles").select("id,display_name,email,avatar_url,team_id,manager_id,is_active");
   if (error) throw error;
   return (data ?? []) as Profile[];
 }
@@ -54,7 +54,9 @@ function load(variant: Variant): Promise<Profile[]> {
 
   // A fresh detailed list already contains the basic columns.
   if (variant === "basic" && fresh(entries.detailed) && entries.detailed.value) {
-    return Promise.resolve(entries.detailed.value.map(({ id, display_name, avatar_url }) => ({ id, display_name, avatar_url })));
+    return Promise.resolve(
+      entries.detailed.value.map(({ id, display_name, avatar_url, is_active }) => ({ id, display_name, avatar_url, is_active })),
+    );
   }
 
   const e = entries[variant];
@@ -94,6 +96,18 @@ export function loadPeople(): Promise<Profile[]> {
 /** Like `loadPeople()` plus email, team_id and manager_id (for manager pages). */
 export function loadPeopleDetailed(): Promise<Profile[]> {
   return copy(load("detailed"));
+}
+
+/**
+ * People who can be picked for new work (assignee, reviewer, manager, transfer…): active members only,
+ * plus any id in `keep` (already selected), so an existing assignment still shows its name.
+ * The people list itself keeps everyone, so old tasks and history keep showing deactivated members.
+ */
+export function assignable<T extends { id: string; is_active?: boolean | null }>(
+  people: T[],
+  keep: Array<string | null | undefined> = [],
+): T[] {
+  return people.filter((p) => p.is_active !== false || keep.includes(p.id));
 }
 
 /** Same as `loadPeople()` but resolves to `[]` on failure, like the pages' previous `data ?? []`. */

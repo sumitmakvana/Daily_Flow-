@@ -1,4 +1,4 @@
-import { loadPeopleSafe } from "@/lib/people";
+import { assignable, loadPeopleSafe } from "@/lib/people";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -1186,7 +1186,7 @@ function TasksPage() {
               </SelectTrigger>
               <SelectContent className="bg-[#0B1220] border-slate-800 text-slate-200">
                 <SelectItem value="unassigned">Unassigned</SelectItem>
-                {profiles.map((p) => (
+                {assignable(profiles).map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.display_name}
                   </SelectItem>

@@ -1,4 +1,4 @@
-import { loadPeopleSafe } from "@/lib/people";
+import { assignable, loadPeopleSafe } from "@/lib/people";
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,7 +23,7 @@ export function UserPicker({
     <Select value={value ?? ""} onValueChange={(v) => onChange(v || null)}>
       <SelectTrigger><SelectValue placeholder={placeholder} /></SelectTrigger>
       <SelectContent>
-        {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}
+        {assignable(profiles, [value]).map((p) => <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}
       </SelectContent>
     </Select>
   );

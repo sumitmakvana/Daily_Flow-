@@ -73,6 +73,7 @@ import { inlineCompleteStore } from "@/services/inline-complete-store";
 import { TaskHoursBadges } from "./TaskHoursBadges";
 import { formatHoursMins, parseHoursOrMins, formatDate, isOverdue, getDefaultStartDate, parseLocalYYYYMMDD, toLocalISO } from "@/lib/format";
 import type { Profile, Task, TaskStatus, WorkItemType } from "@/lib/types";
+import { assignable } from "@/lib/people";
 import { cn } from "@/lib/utils";
 import { tasksService, TaskConflictError } from "@/services/tasks";
 import { taskEodService } from "@/services/task-eod";
@@ -472,7 +473,7 @@ export function TaskCard({
                     </DropdownMenuSubTrigger>
                     <DropdownMenuPortal>
                       <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
-                        {profiles
+                        {assignable(profiles)
                           .filter((p) => p.id !== task.assigned_to)
                           .map((p) => (
                             <DropdownMenuItem key={p.id} onClick={() => transfer(p.id)}>

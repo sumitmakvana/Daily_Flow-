@@ -5,8 +5,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { MAX_REVIEWERS, cleanReviewerList } from "@/lib/review";
 import type { Profile } from "@/lib/types";
+import { assignable } from "@/lib/people";
 
-type NamedProfile = Pick<Profile, "id" | "display_name">;
+type NamedProfile = Pick<Profile, "id" | "display_name" | "is_active">;
 
 /**
  * Pick any number of reviewers for a task. Every selected reviewer reviews independently and the
@@ -29,7 +30,8 @@ export function ReviewerPicker({
   disabledReason?: string;
 }) {
   const selected = useMemo(() => cleanReviewerList(value, assigneeId), [value, assigneeId]);
-  const options = profiles.filter((p) => p.id !== assigneeId);
+  // Deactivated members are not offered, except reviewers already on the task.
+  const options = assignable(profiles, selected).filter((p) => p.id !== assigneeId);
   const nameOf = (id: string) => profiles.find((p) => p.id === id)?.display_name ?? "Unknown";
 
   const toggle = (id: string) => {
