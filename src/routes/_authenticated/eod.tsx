@@ -173,9 +173,13 @@ function EodBoardPage() {
   const utils = workloadService.computeToday(tasks);
   const submittedMap = useMemo(() => new Map(checkins.map((c) => [c.user_id, c])), [checkins]);
 
+  // Members expected to submit EOD: deactivated members (is_active = false) are left out. Their tasks and
+  // history are untouched, and `profiles` (everyone) is still used for name lookups.
+  const activeProfiles = useMemo(() => profiles.filter((p) => p.is_active !== false), [profiles]);
+
   // Derived KPIs
   const kpis = useMemo(() => {
-    const totalMembers = profiles.length;
+    const totalMembers = activeProfiles.length;
     const submittedCount = checkins.length;
     const pendingSubmissionCount = Math.max(0, totalMembers - submittedCount);
     const submissionRate = totalMembers > 0 ? Math.round((submittedCount / totalMembers) * 100) : 0;
@@ -199,14 +203,14 @@ function EodBoardPage() {
       totalActiveTasks,
       totalBlockers,
     };
-  }, [profiles, checkins, tasks, todayStr]);
+  }, [activeProfiles, checkins, tasks, todayStr]);
 
   // Split into Submitted vs Pending lists
   const { submittedMembers, pendingMembers } = useMemo(() => {
     const submitted: Profile[] = [];
     const pending: Profile[] = [];
 
-    profiles.forEach((p) => {
+    activeProfiles.forEach((p) => {
       const matchSearch =
         !search.trim() ||
         (p.display_name && p.display_name.toLowerCase().includes(search.toLowerCase())) ||
@@ -222,7 +226,7 @@ function EodBoardPage() {
     });
 
     return { submittedMembers: submitted, pendingMembers: pending };
-  }, [profiles, submittedMap, search]);
+  }, [activeProfiles, submittedMap, search]);
 
   // Bulk carry forward all members
   const runCarryForwardAll = async () => {
@@ -230,7 +234,7 @@ function EodBoardPage() {
     setBusy(true);
     let total = 0;
     let failed = 0;
-    for (const p of profiles) {
+    for (const p of activeProfiles) {
       const res = await carryForwardService.carryAllOverdue(user.id, p.id);
       total += res.ok;
       failed += res.failed;
@@ -651,7 +655,7 @@ function EodBoardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {profiles
+                {activeProfiles
                   .filter(
                     (p) =>
                       !search.trim() ||

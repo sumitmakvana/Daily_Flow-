@@ -1,4 +1,4 @@
-import { loadPeopleDetailedSafe } from "@/lib/people";
+import { assignable, loadPeopleDetailedSafe } from "@/lib/people";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -408,7 +408,8 @@ function ExecutivePage() {
     const today = new Date().toISOString().slice(0, 10);
     const overdueTotal = allTasks.filter((t) => t.status !== "Completed" && t.due_date && t.due_date.slice(0, 10) < today).length;
 
-    const memberSummaries = eodProfiles.map((p) => {
+    const assigneeIds = new Set(allTasks.map((t) => t.assigned_to));
+    const memberSummaries = eodProfiles.filter((p) => p.is_active !== false || assigneeIds.has(p.id)).map((p) => {
       const pTasks = allTasks.filter((t) => t.assigned_to === p.id);
       const cCount = pTasks.filter((t) => t.status === "Completed").length;
       const ipCount = pTasks.filter((t) => t.status === "In Progress").length;
@@ -544,7 +545,7 @@ function ExecutivePage() {
           />
           <MultiSelectFilterPopover
             label="Member"
-            options={scopedProfiles.map((p) => ({ id: p.id, label: p.display_name }))}
+            options={assignable(scopedProfiles, selectedMembers).map((p) => ({ id: p.id, label: p.display_name }))}
             selectedValues={selectedMembers}
             onChange={setSelectedMembers}
           />
@@ -744,6 +745,13 @@ function ExecutiveRealDashboard({
     return result;
   }, [tasks, scope, selectedProjects, selectedMembers, selectedTypes, range, profiles, projects]);
 
+  // Members shown in the workload list and member charts: everyone active, plus deactivated members
+  // (is_active = false) only when they have tasks in the selected range, so past work still adds up.
+  const listedProfiles = useMemo(() => {
+    const assigneeIds = new Set(filteredTasks.map((t) => t.assigned_to));
+    return filteredProfiles.filter((p) => p.is_active !== false || assigneeIds.has(p.id));
+  }, [filteredProfiles, filteredTasks]);
+
   // 3. Dynamic Metrics derived from filteredTasks
   const metrics = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -770,7 +778,7 @@ function ExecutiveRealDashboard({
 
   // 4. Team Workload List
   const memberWorkloadList = useMemo(() => {
-    const targetProfiles = filteredProfiles;
+    const targetProfiles = listedProfiles;
     const today = new Date().toISOString().slice(0, 10);
     const list = targetProfiles.map((p) => {
       const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
@@ -830,11 +838,11 @@ function ExecutiveRealDashboard({
       );
     }
     return filtered;
-  }, [filteredProfiles, filteredTasks, showOnlyActiveMembers, memberSearch, range]);
+  }, [listedProfiles, filteredTasks, showOnlyActiveMembers, memberSearch, range]);
 
   // 5. Memberwise Bar Chart Data
   const memberBarChartData = useMemo(() => {
-    const targetProfiles = filteredProfiles;
+    const targetProfiles = listedProfiles;
     const today = new Date().toISOString().slice(0, 10);
     const list = targetProfiles.map((p) => {
       const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
@@ -873,11 +881,11 @@ function ExecutiveRealDashboard({
       return list.filter((m) => m.total > 0);
     }
     return list;
-  }, [filteredProfiles, filteredTasks, showOnlyActiveMembers, range]);
+  }, [listedProfiles, filteredTasks, showOnlyActiveMembers, range]);
 
   // 6. Planned vs Actual vs Auto Hours BarChart Data
   const planVsActualData = useMemo(() => {
-    const targetProfiles = filteredProfiles;
+    const targetProfiles = listedProfiles;
     const list = targetProfiles.map((p) => {
       const pTasks = filteredTasks.filter((t) => t.assigned_to === p.id);
       const planned = pTasks.reduce((s, t) => s + Number(t.planned_hours ?? 0), 0);
@@ -902,7 +910,7 @@ function ExecutiveRealDashboard({
       return list.filter((m) => m.planned > 0 || m.actual > 0 || m.auto > 0);
     }
     return list;
-  }, [filteredProfiles, filteredTasks, showOnlyActiveMembers]);
+  }, [listedProfiles, filteredTasks, showOnlyActiveMembers]);
 
   // 7. Task Aging Data
   const taskAgingData = useMemo(() => {

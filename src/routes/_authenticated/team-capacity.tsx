@@ -339,9 +339,13 @@ function TeamCapacityPage() {
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
   }, [projects, tasks]);
 
+  // People counted in capacity: deactivated members (is_active = false) are left out. Their tasks and
+  // history are untouched, and `profiles` (everyone) is still used for name lookups.
+  const activeProfiles = useMemo(() => profiles.filter((p) => p.is_active !== false), [profiles]);
+
   // Member Data Aggregation
   const memberData = useMemo(() => {
-    return profiles.map((p) => {
+    return activeProfiles.map((p) => {
       const memberTasks = tasks.filter((t) => t.assigned_to === p.id);
       const activeTasks = memberTasks.filter((t) => t.status === "In Progress");
       const upcomingTasks = memberTasks.filter(
@@ -563,7 +567,7 @@ function TeamCapacityPage() {
         completedYesterdayCount,
       };
     });
-  }, [profiles, tasks, teams, todayStr, yesterdayStr, olderByMember]);
+  }, [activeProfiles, tasks, teams, todayStr, yesterdayStr, olderByMember]);
 
   // Filtered Members
   const filteredMembers = useMemo(() => {
@@ -835,7 +839,7 @@ function TeamCapacityPage() {
     }).length;
     const overduePct = totalTasksCount > 0 ? Math.round((overdueCount / totalTasksCount) * 100) : 0;
 
-    const totalMembersCount = profiles.length;
+    const totalMembersCount = activeProfiles.length;
     const lowQueueCount = memberData.filter((m) => m.isLowQueue).length;
 
     return {
@@ -853,7 +857,7 @@ function TeamCapacityPage() {
       totalMembersCount,
       lowQueueCount,
     };
-  }, [tasks, olderCompletedCount, profiles, memberData, todayStr]);
+  }, [tasks, olderCompletedCount, activeProfiles, memberData, todayStr]);
 
   // Load the full completed history of the member whose dialog is open (always refreshed on open).
   const historyMemberId = completedTodayModalItem?.member.id;
