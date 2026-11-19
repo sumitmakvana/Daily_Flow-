@@ -52,6 +52,26 @@ export async function ensureProfileOnce(userId: string, email: string, name: str
   }
 }
 
+/** True when the user's profile is deactivated (profiles.is_active = false). Errors count as active. */
+async function isProfileDeactivated(userId: string): Promise<boolean> {
+  try {
+    const { supabase } = await import("@/integrations/supabase/client");
+    const { data } = await supabase.from("profiles").select("is_active").eq("id", userId).maybeSingle();
+    return (data as { is_active?: boolean } | null)?.is_active === false;
+  } catch {
+    return false;
+  }
+}
+
+/** Drop the local Keycloak session (no redirect). */
+function clearLocalSession() {
+  window.localStorage.removeItem("kc_token");
+  window.localStorage.removeItem("kc_refresh_token");
+  keycloak?.clearToken();
+}
+
+export const DEACTIVATED_MESSAGE = "Your account has been deactivated. Please contact your administrator.";
+
 // Keep track of auth listeners
 const listeners = new Set<(event: string, session: any) => void | Promise<void>>();
 
@@ -92,6 +112,14 @@ export function initKeycloak(): Promise<boolean> {
           }
         } catch (err) {
           console.error("Failed to auto-provision user profile:", err);
+        }
+
+        // Deactivated members may not sign in.
+        const sub = keycloak.tokenParsed?.sub;
+        if (sub && (await isProfileDeactivated(sub))) {
+          clearLocalSession();
+          listeners.forEach((cb) => cb("SIGNED_OUT", null));
+          return false;
         }
 
         // Trigger listeners
@@ -238,6 +266,13 @@ export const auth = {
           (keycloak!.tokenParsed as any)?.name || keycloak!.tokenParsed?.preferred_username;
         if (userId && email && !isClientReadOnly()) {
           await ensureProfileOnce(userId, email, name);
+        }
+
+        // Deactivated members may not sign in.
+        if (userId && (await isProfileDeactivated(userId))) {
+          clearLocalSession();
+          keycloak!.authenticated = false;
+          throw new Error(DEACTIVATED_MESSAGE);
         }
 
         const session = getSessionSync();

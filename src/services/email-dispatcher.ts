@@ -122,14 +122,43 @@ const globalSentTimestamps: number[] = [];
 const recipientLastSentMap = new Map<string, number>();
 const dailyDigestLockMap = new Map<string, boolean>();
 
+/**
+ * Drop recipients whose profile is deactivated (profiles.is_active = false). Addresses with no profile
+ * (e.g. an extra digest recipient) are kept. If the lookup fails, everyone is kept so email for active
+ * members never stops because of this check.
+ */
+async function withoutInactiveRecipients(to: string[]): Promise<string[]> {
+  try {
+    const { getPool } = await import("@/integrations/postgres/client.server");
+    const { rows } = await getPool().query<{ email: string }>(
+      `SELECT lower(trim(email)) AS email FROM public.profiles
+        WHERE is_active = false AND lower(trim(email)) = ANY($1::text[])`,
+      [to.map((e) => e.trim().toLowerCase())],
+    );
+    if (rows.length === 0) return to;
+    const inactive = new Set(rows.map((r) => r.email));
+    console.log(`[EmailDispatcher] Skipping inactive recipient(s): ${[...inactive].join(", ")}`);
+    return to.filter((e) => !inactive.has(e.trim().toLowerCase()));
+  } catch (err) {
+    console.warn("[EmailDispatcher] Inactive-recipient check failed, sending to all:", (err as Error).message);
+    return to;
+  }
+}
+
 export async function sendEodEmail(
   options: SendEmailOptions,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { to, subject, html } = options;
-
-  if (!to || to.length === 0) {
+  if (!options.to || options.to.length === 0) {
     return { success: false, error: "No recipient emails specified" };
   }
+
+  // Never email deactivated members (members who left the company).
+  options = { ...options, to: await withoutInactiveRecipients(options.to) };
+  if (options.to.length === 0) {
+    return { success: true, messageId: `suppressed-inactive-recipient-${Date.now()}` };
+  }
+
+  const { to, subject, html } = options;
 
   const now = Date.now();
   const normalizedRecipients = to.map((e) => e.trim().toLowerCase()).sort();

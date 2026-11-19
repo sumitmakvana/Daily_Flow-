@@ -4,7 +4,28 @@ import { getRequest } from '@tanstack/react-start/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
 
+// userId -> { deactivated, checkedAt }. Short cache so each request does not add a DB round trip.
+const deactivatedCache = new Map<string, { deactivated: boolean; at: number }>();
+const DEACTIVATED_TTL_MS = 60_000;
 
+async function isDeactivated(userId: string): Promise<boolean> {
+  const hit = deactivatedCache.get(userId);
+  if (hit && Date.now() - hit.at < DEACTIVATED_TTL_MS) return hit.deactivated;
+  try {
+    const { getPool } = await import('@/integrations/postgres/client.server');
+    const { rows } = await getPool().query<{ is_active: boolean }>(
+      'SELECT is_active FROM public.profiles WHERE id::text = $1',
+      [userId],
+    );
+    // No profile yet (first login) counts as active.
+    const deactivated = rows[0]?.is_active === false;
+    deactivatedCache.set(userId, { deactivated, at: Date.now() });
+    return deactivated;
+  } catch (err) {
+    console.warn('[auth] is_active check failed, allowing request:', (err as Error).message);
+    return false;
+  }
+}
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
@@ -71,6 +92,11 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
 
     if (!claims.sub) {
       throw new Error('Unauthorized: No user ID found in token');
+    }
+
+    // Deactivated members (profiles.is_active = false) may not use the app.
+    if (await isDeactivated(claims.sub)) {
+      throw new Error('Unauthorized: Your account has been deactivated');
     }
 
     return next({

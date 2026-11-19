@@ -108,7 +108,10 @@ export async function sendPushToUser(userId: string, msg: PushMessage): Promise<
     await ensureDeviceTokensTable();
     const pool = getPool();
     const { rows } = await pool.query<{ token: string }>(
-      "SELECT token FROM public.device_tokens WHERE user_id = $1",
+      // Deactivated members (profiles.is_active = false) get no push.
+      `SELECT d.token FROM public.device_tokens d
+         JOIN public.profiles p ON p.id = d.user_id AND p.is_active
+        WHERE d.user_id = $1`,
       [userId],
     );
     if (rows.length === 0) {
