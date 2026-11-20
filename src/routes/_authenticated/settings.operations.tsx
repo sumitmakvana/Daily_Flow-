@@ -293,21 +293,7 @@ function OpsSettings() {
         <ProjectCreator teams={teams} defaultSla={settings.sla_default_days} onCreated={load} />
         <ul className="text-sm divide-y divide-border">
           {projects.map((p) => (
-            <li key={p.id} className="py-2 flex justify-between text-xs items-center">
-              <span><span className="font-medium text-sm">{p.name}</span> · {p.client ?? "—"} · SLA {p.sla_days}d</span>
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground">{teams.find((t) => t.id === p.team_id)?.name ?? "—"}</span>
-                <button
-                  onClick={async () => {
-                    await projectsService.delete(p.id);
-                    load();
-                  }}
-                  className="text-xs text-muted-foreground hover:text-red-500 transition-colors"
-                >
-                  Remove
-                </button>
-              </div>
-            </li>
+            <ProjectRow key={p.id} project={p} teams={teams} onChanged={load} />
           ))}
           {projects.length === 0 && <li className="py-2 text-xs italic text-muted-foreground">No projects yet.</li>}
         </ul>
@@ -465,6 +451,71 @@ function TeamCreator({ teams, onCreated }: { teams: Team[]; onCreated: () => voi
         setName(""); setParent(""); onCreated();
       }}>Add</Button>
     </div>
+  );
+}
+
+function ProjectRow({ project: p, teams, onChanged }: { project: Project; teams: Team[]; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState(p.name);
+  const [client, setClient] = useState(p.client ?? "");
+  const [teamId, setTeamId] = useState(p.team_id ?? "");
+  const [sla, setSla] = useState(p.sla_days);
+
+  const startEdit = () => {
+    setName(p.name); setClient(p.client ?? ""); setTeamId(p.team_id ?? ""); setSla(p.sla_days);
+    setEditing(true);
+  };
+  const save = async () => {
+    if (!name.trim()) return toast.error("Project name is required");
+    if (!Number.isFinite(sla) || sla < 1) return toast.error("SLA must be at least 1 day");
+    setSaving(true);
+    try {
+      await projectsService.update(p.id, { name: name.trim(), client: client.trim() || null, team_id: teamId || null, sla_days: sla });
+      toast.success("Project updated");
+      setEditing(false);
+      onChanged();
+    } catch (e) {
+      const msg = (e as Error).message ?? "";
+      toast.error(/unique|duplicate/i.test(msg) ? "A project with this name already exists" : "Could not update project");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <li className="py-2 grid grid-cols-2 md:grid-cols-6 gap-2 items-center text-xs">
+        <Input placeholder="Project name" value={name} onChange={(e) => setName(e.target.value)} className="md:col-span-1" />
+        <Input placeholder="Client" value={client} onChange={(e) => setClient(e.target.value)} />
+        <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="h-9 rounded-md border bg-background px-2 text-sm">
+          <option value="">No team</option>
+          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <Input type="number" min={1} value={sla} onChange={(e) => setSla(Number(e.target.value))} />
+        <Button size="sm" disabled={saving} onClick={save}>Save</Button>
+        <Button size="sm" variant="outline" disabled={saving} onClick={() => setEditing(false)}>Cancel</Button>
+      </li>
+    );
+  }
+
+  return (
+    <li className="py-2 flex justify-between text-xs items-center">
+      <span><span className="font-medium text-sm">{p.name}</span> · {p.client ?? "—"} · SLA {p.sla_days}d</span>
+      <div className="flex items-center gap-3">
+        <span className="text-muted-foreground">{teams.find((t) => t.id === p.team_id)?.name ?? "—"}</span>
+        <button onClick={startEdit} className="text-xs text-muted-foreground hover:text-primary transition-colors">Edit</button>
+        <button
+          onClick={async () => {
+            await projectsService.delete(p.id);
+            onChanged();
+          }}
+          className="text-xs text-muted-foreground hover:text-red-500 transition-colors"
+        >
+          Remove
+        </button>
+      </div>
+    </li>
   );
 }
 

@@ -143,6 +143,12 @@ export const deleteTeamFn = createServerFn({ method: "POST" })
 // ----- projects -------------------------------------------------------------
 
 const PROJECT_COLS = `id, name, client, team_id, sla_days, status, created_at`;
+// Only these may be written; keys come from the client and are used as column names.
+const PROJECT_WRITABLE = new Set(["name", "client", "team_id", "sla_days", "status"]);
+function writableProject(p: Record<string, unknown>): [string[], unknown[]] {
+  const keys = Object.keys(p).filter((k) => PROJECT_WRITABLE.has(k));
+  return [keys, keys.map((k) => p[k])];
+}
 
 export const listProjectsFn = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -163,8 +169,8 @@ export const createProjectFn = createServerFn({ method: "POST" })
     z.object({ project: z.record(z.string(), z.unknown()) }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    const cols = Object.keys(data.project);
-    const params = Object.values(data.project);
+    const [cols, params] = writableProject(data.project);
+    if (cols.length === 0) throw new Error("No project fields to save");
     const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
     await withUser(context.userId, async (client) => {
       await client.query(
@@ -181,8 +187,8 @@ export const updateProjectFn = createServerFn({ method: "POST" })
     z.object({ id: z.string(), project: z.record(z.string(), z.unknown()) }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    const keys = Object.keys(data.project);
-    const values = Object.values(data.project);
+    const [keys, values] = writableProject(data.project);
+    if (keys.length === 0) throw new Error("No project fields to save");
     const setClause = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
     await withUser(context.userId, async (client) => {
       await client.query(

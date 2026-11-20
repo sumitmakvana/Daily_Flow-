@@ -5,9 +5,7 @@ import {
   loadWorkItemTypes,
   loadHolidayCalendars,
   loadActiveLeaves,
-  invalidateTaskFormOptions,
   type MasterProject,
-  type TaskNameHints,
 } from "@/lib/task-form-options";
 import { useEffect, useMemo, useState, useRef } from "react";
 import {
@@ -92,9 +90,7 @@ interface GridRow {
   assigned_to: string | null;
   type_id: string | null;
   client: string;
-  isCustomClient?: boolean;
   project_name: string;
-  isCustomProj?: boolean;
   priority: Task["priority"];
   start_date: string | null;
   due_date: string | null;
@@ -210,8 +206,6 @@ export function TaskFormDialog({
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [isCustomProject, setIsCustomProject] = useState(false);
-  const [isCustomClient, setIsCustomClient] = useState(false);
   const [isCustomSingleHours, setIsCustomSingleHours] = useState(false);
   const [singleHoursText, setSingleHoursText] = useState("");
 
@@ -433,46 +427,17 @@ export function TaskFormDialog({
     loadWorkItemTypes().then(setTypes).catch(() => setTypes([]));
     loadHolidayCalendars().then(setHolidayCalendar).catch(() => {});
 
-    // Projects table AND distinct project/client names found on recent tasks (both cached, see task-form-options.ts)
-    Promise.all([
-      loadMasterProjects().catch(() => [] as MasterProject[]),
-      loadTaskNameHints().then((h) => h.pairs).catch(() => [] as TaskNameHints["pairs"]),
-    ]).then(([projRows, taskRows]) => {
-      const map = new Map<string, { id: string; name: string; client: string | null }>();
-
-      // 1. Add entries from projects table (case-insensitive keys)
-      projRows.forEach((p) => {
-        if (p.name?.trim()) {
-          const key = p.name.trim().toLowerCase();
-          map.set(key, { id: p.id, name: p.name.trim(), client: p.client?.trim() || null });
-        }
-      });
-
-      // 2. Add entries directly typed by members in tasks table (deduplicating case-insensitively and splitting merged names)
-      taskRows.forEach((t) => {
-        if (t.project_name?.trim()) {
-          const parts = t.project_name.trim().split("|");
-          parts.forEach((part) => {
-            const pName = part.trim();
-            if (pName) {
-              const key = pName.toLowerCase();
-              const existing = map.get(key);
-              if (!existing) {
-                map.set(key, {
-                  id: "",
-                  name: pName,
-                  client: t.client?.trim() || null,
-                });
-              } else if (!existing.client && t.client?.trim()) {
-                existing.client = t.client.trim();
-              }
-            }
-          });
-        }
-      });
-
-      setProjects(Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)));
-    });
+    // Single source of truth: the master projects table only (cached, see task-form-options.ts)
+    loadMasterProjects()
+      .catch(() => [] as MasterProject[])
+      .then((rows) =>
+        setProjects(
+          rows
+            .filter((p) => p.name?.trim())
+            .map((p) => ({ id: p.id, name: p.name.trim(), client: p.client?.trim() || null }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        ),
+      );
 
     loadActiveLeaves().then(setActiveLeaves).catch(() => {});
   }, [open]);
@@ -510,6 +475,13 @@ export function TaskFormDialog({
         setTaskHistoryItems((data ?? []) as TaskHistory[]);
       });
   }, [open, form.id]);
+
+  /** The client is the selected project's client: locked while that project has one. */
+  const rowClientLocked = (projectName?: string | null) =>
+    !!projectName && !!projects.find((p) => p.name === projectName)?.client;
+  /** Master clients, plus a task's current (older) value so it is never shown blank. */
+  const clientOptions = (current?: string | null) =>
+    current && !uniqueClients.includes(current) ? [...uniqueClients, current].sort() : uniqueClients;
 
   const uniqueClients = useMemo(() => {
 
@@ -680,33 +652,6 @@ export function TaskFormDialog({
     toast.info(`Task marked as ${nextStatus}`);
   };
 
-  const ensureMasterProject = async (projectName?: string | null, clientName?: string | null) => {
-    if (!projectName || !projectName.trim()) return;
-    const parts = projectName.trim().split("|").map((s) => s.trim()).filter(Boolean);
-    for (const name of parts) {
-      try {
-        const { data } = await supabase
-          .from("projects")
-          .select("id, name")
-          .ilike("name", name)
-          .maybeSingle();
-
-        if (!data) {
-          await supabase.from("projects").insert({
-            name: name,
-            client: clientName?.trim() || null,
-            status: "active",
-            sla_days: 3,
-          });
-        }
-      } catch (err) {
-        console.warn("Auto project master creation skipped:", err);
-      }
-    }
-    // The saved task may use a new project / client and is now this person's latest: the next open must see it.
-    invalidateTaskFormOptions();
-  };
-
   const uploadPendingFilesToTask = async (taskId: string) => {
     if (!taskId || pendingFiles.length === 0) return;
     for (const item of pendingFiles) {
@@ -720,14 +665,20 @@ export function TaskFormDialog({
     setPendingFiles([]);
   };
 
+  // Tasks store only project_id (the database fills project_name from it). The picker is name-based because
+  // project names are unique; a name that is not in the master list is saved as no project.
+  const withProjectId = <T extends { project_name?: string | null; project_id?: string | null }>(o: T) => {
+    const name = o.project_name?.trim().toLowerCase();
+    const id = o.project_id || (name ? projects.find((p) => p.name.toLowerCase() === name)?.id : undefined) || null;
+    const { project_name: _drop, ...rest } = o;
+    return { ...rest, project_id: id };
+  };
+
   // Main Save Handler
   const handleSave = async () => {
     if (creationMode !== "grid" && form.start_date && form.due_date && form.due_date < form.start_date) {
       toast.error("Due Date cannot be earlier than Start Date. Please adjust the dates.");
       return;
-    }
-    if (form.project_name?.trim()) {
-      await ensureMasterProject(form.project_name, form.client);
     }
     // 1. Edit existing task
     if (form.id) {
@@ -746,7 +697,7 @@ export function TaskFormDialog({
       setSaving(true);
       try {
         try {
-          await tasksService.update({ ...(initial ?? {}), id: form.id } as Task, form, userId);
+          await tasksService.update({ ...(initial ?? {}), id: form.id } as Task, withProjectId(form), userId);
         } catch (e) {
           if (e instanceof TaskConflictError) {
             const { data: freshRows } = await supabase
@@ -755,7 +706,7 @@ export function TaskFormDialog({
               .eq("id", form.id)
               .single();
             if (freshRows) {
-              await tasksService.update(freshRows as any, form, userId);
+              await tasksService.update(freshRows as any, withProjectId(form), userId);
             } else {
               throw e;
             }
@@ -797,7 +748,7 @@ export function TaskFormDialog({
                 assigned_to: row.assigned_to,
                 type_id: row.type_id || form.type_id || null,
                 client: row.client || form.client || null,
-                project_name: row.project_name || form.project_name || null,
+                ...withProjectId({ project_name: row.project_name || form.project_name || null }),
                 priority: row.priority,
                 start_date: row.start_date || form.start_date || getDefaultStartDate(null, apiHolidays, holidayCalendar),
                 due_date: row.due_date,
@@ -846,7 +797,7 @@ export function TaskFormDialog({
             selectedAssignees.map((assigneeId) =>
               tasksService.create(
                 {
-                  ...form,
+                  ...withProjectId(form),
                   assigned_to: assigneeId,
                   // a person cannot review the task they are assigned
                   reviewers: cleanReviewerList(form.reviewers ?? [], assigneeId),
@@ -860,7 +811,7 @@ export function TaskFormDialog({
           }
           toast.success(`Created ${selectedAssignees.length} tasks for team members!`);
         } else {
-          const createdTask = await tasksService.create({ ...form, assigned_to: null }, userId);
+          const createdTask = await tasksService.create({ ...withProjectId(form), assigned_to: null }, userId);
           if (createdTask?.id) await uploadPendingFilesToTask(createdTask.id);
           toast.success("Task created (Unassigned)");
         }
@@ -890,7 +841,7 @@ export function TaskFormDialog({
 
     setSaving(true);
     try {
-      const createdTask = await tasksService.create(form, userId);
+      const createdTask = await tasksService.create(withProjectId(form), userId);
       if (createdTask?.id) {
         await uploadPendingFilesToTask(createdTask.id);
       }
@@ -1118,127 +1069,46 @@ export function TaskFormDialog({
                           </Select>
                         </td>
                         <td className="py-1.5 px-1.5 border-r border-border/40">
-                          {row.isCustomClient ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                className="h-7 text-[11px] px-1.5 bg-background border-border flex-1"
-                                placeholder="Custom client..."
-                                value={row.client || ""}
-                                onChange={(e) => updateGridRow(row.id, "client", e.target.value)}
-                                autoFocus
-                              />
-                              <button
-                                type="button"
-                                title="Select from list"
-                                onClick={() => updateGridRow(row.id, "isCustomClient", false)}
-                                className="h-7 w-7 flex items-center justify-center text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
-                              >
-                                <List className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              <Select
-                                value={row.client || NONE}
-                                onValueChange={(v) => {
-                                  if (v === "__CUSTOM__") {
-                                    updateGridRow(row.id, "isCustomClient", true);
-                                  } else {
-                                    updateGridRow(row.id, "client", v === NONE ? "" : v);
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border flex-1">
-                                  <SelectValue placeholder="Client..." />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-60 overflow-y-auto">
-                                  <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
-                                    <span className="flex items-center gap-1.5">
-                                      <Pencil className="h-3 w-3 text-primary" /> Type custom client name...
-                                    </span>
-                                  </SelectItem>
-                                  <SelectItem value={NONE}>None</SelectItem>
-                                  {uniqueClients.map((c: string, idx: number) => (
-                                    <SelectItem key={`gc-${row.id}-${c || 'blank'}-${idx}`} value={c || NONE}>
-                                      {c}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <button
-                                type="button"
-                                title="Type custom client"
-                                onClick={() => updateGridRow(row.id, "isCustomClient", true)}
-                                className="h-7 w-7 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          )}
+                          <Select
+                            value={row.client || NONE}
+                            disabled={rowClientLocked(row.project_name)}
+                            onValueChange={(v) => updateGridRow(row.id, "client", v === NONE ? "" : v)}
+                          >
+                            <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
+                              <SelectValue placeholder="Client..." />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-60 overflow-y-auto">
+                              <SelectItem value={NONE}>None</SelectItem>
+                              {clientOptions(row.client).map((c) => (
+                                <SelectItem key={c} value={c}>
+                                  {c}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="py-1.5 px-1.5 border-r border-border/40">
-                          {row.isCustomProj ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                className="h-7 text-[11px] px-1.5 bg-background border-border flex-1"
-                                placeholder="Custom project..."
-                                value={row.project_name || ""}
-                                onChange={(e) => updateGridRow(row.id, "project_name", e.target.value)}
-                                autoFocus
-                              />
-                              <button
-                                type="button"
-                                title="Select from list"
-                                onClick={() => updateGridRow(row.id, "isCustomProj", false)}
-                                className="h-7 w-7 flex items-center justify-center text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
-                              >
-                                <List className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              <Select
-                                value={row.project_name || NONE}
-                                onValueChange={(v) => {
-                                  if (v === "__CUSTOM__") {
-                                    updateGridRow(row.id, "isCustomProj", true);
-                                  } else {
-                                    const projName = v === NONE ? "" : v;
-                                    const match = projects.find((p) => p.name === projName);
-                                    updateGridRow(row.id, "project_name", projName);
-                                    if (match?.client) {
-                                      updateGridRow(row.id, "client", match.client);
-                                    }
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border flex-1">
-                                  <SelectValue placeholder="Project..." />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-60 overflow-y-auto">
-                                  <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
-                                    <span className="flex items-center gap-1.5">
-                                      <Pencil className="h-3 w-3 text-primary" /> Type custom project name...
-                                    </span>
-                                  </SelectItem>
-                                  <SelectItem value={NONE}>None</SelectItem>
-                                  {projects.map((p, idx) => (
-                                    <SelectItem key={`gp-${row.id}-${p.id || 'typed'}-${p.name}-${idx}`} value={p.name}>
-                                      {p.client ? `${p.name} (${p.client})` : p.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <button
-                                type="button"
-                                title="Type custom project"
-                                onClick={() => updateGridRow(row.id, "isCustomProj", true)}
-                                className="h-7 w-7 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted border border-border rounded-md shrink-0 transition-colors"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          )}
+                          <Select
+                            value={row.project_name || NONE}
+                            onValueChange={(v) => {
+                              const projName = v === NONE ? "" : v;
+                              const match = projects.find((p) => p.name === projName);
+                              updateGridRow(row.id, "project_name", projName);
+                              if (match) updateGridRow(row.id, "client", match.client ?? "");
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-[11px] px-1.5 bg-background border-border">
+                              <SelectValue placeholder="Project..." />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-60 overflow-y-auto">
+                              <SelectItem value={NONE}>None</SelectItem>
+                              {projects.map((p) => (
+                                <SelectItem key={p.id} value={p.name}>
+                                  {p.client ? `${p.name} (${p.client})` : p.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="py-1.5 px-1.5 border-r border-border/40">
                           <Select
@@ -1610,134 +1480,56 @@ export function TaskFormDialog({
                     />
                   </div>
 
-                  {/* Project Field (Select or Type Custom) */}
+                  {/* Project Field: choose from the master list only (Admin / Manager add projects in Settings) */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <Label className="text-xs text-muted-foreground">Project</Label>
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomProject(!isCustomProject)}
-                        className="text-[10px] text-primary hover:underline font-medium inline-flex items-center gap-1"
-                      >
-                        {isCustomProject ? (
-                          <>
-                            <List className="h-3 w-3" /> Select from list
-                          </>
-                        ) : (
-                          <>
-                            <Pencil className="h-3 w-3" /> Type custom project
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {isCustomProject ? (
-                      <Input
-                        className="h-9 text-xs bg-card border-border text-foreground"
-                        placeholder="Type custom project name..."
-                        value={form.project_name ?? ""}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            project_name: e.target.value,
-                          }))
-                        }
-                      />
-                    ) : (
-                      <Select
-                        value={form.project_name || NONE}
-                        onValueChange={(val) => {
-                          if (val === "__CUSTOM__") {
-                            setIsCustomProject(true);
-                            return;
-                          }
-                          const projName = val === NONE ? "" : val;
-                          const match = projects.find((p) => p.name === projName);
-                          setForm((prev) => ({
-                            ...prev,
-                            project_name: projName,
-                            project_id: match ? match.id : prev.project_id,
-                            client: match?.client ? match.client : prev.client,
-                          }));
-                        }}
-                      >
-                        <SelectTrigger className="h-9 text-xs bg-card border-border text-foreground">
-                          <SelectValue placeholder="Select project..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60 overflow-y-auto">
-                          <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
-                            <span className="flex items-center gap-1.5">
-                              <Pencil className="h-3.5 w-3.5 text-primary" /> Type custom project name...
-                            </span>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Project</Label>
+                    <Select
+                      value={form.project_name || NONE}
+                      onValueChange={(val) => {
+                        const projName = val === NONE ? "" : val;
+                        const match = projects.find((p) => p.name === projName);
+                        setForm((prev) => ({
+                          ...prev,
+                          project_name: projName,
+                          project_id: match ? match.id : null,
+                          client: match ? (match.client ?? "") : prev.client,
+                        }));
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs bg-card border-border text-foreground">
+                        <SelectValue placeholder="Select project..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        <SelectItem value={NONE}>None (No Project)</SelectItem>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.client ? `${p.name} (${p.client})` : p.name}
                           </SelectItem>
-                          <SelectItem value={NONE}>None (No Project)</SelectItem>
-                          {projects.map((p, idx) => (
-                            <SelectItem key={`proj-${p.id || 'typed'}-${p.name}-${idx}`} value={p.name}>
-                              {p.client ? `${p.name} (${p.client})` : p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
-                  {/* Client Field (Select or Type Custom) */}
+                  {/* Client Field: comes from the selected project; pick from the master clients only when no project */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <Label className="text-xs text-muted-foreground">Client</Label>
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomClient(!isCustomClient)}
-                        className="text-[10px] text-primary hover:underline font-medium inline-flex items-center gap-1"
-                      >
-                        {isCustomClient ? (
-                          <>
-                            <List className="h-3 w-3" /> Select from list
-                          </>
-                        ) : (
-                          <>
-                            <Pencil className="h-3 w-3" /> Type custom client
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {isCustomClient ? (
-                      <Input
-                        className="h-9 text-xs bg-card border-border text-foreground"
-                        placeholder="Type custom client name..."
-                        value={form.client ?? ""}
-                        onChange={(e) => setForm({ ...form, client: e.target.value })}
-                      />
-                    ) : (
-                      <Select
-                        value={form.client || NONE}
-                        onValueChange={(val) => {
-                          if (val === "__CUSTOM__") {
-                            setIsCustomClient(true);
-                            return;
-                          }
-                          setForm({ ...form, client: val === NONE ? "" : val });
-                        }}
-                      >
-                        <SelectTrigger className="h-9 text-xs bg-card border-border text-foreground">
-                          <SelectValue placeholder="Select client..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60 overflow-y-auto">
-                          <SelectItem value="__CUSTOM__" className="text-primary font-semibold border-b border-border pb-1 mb-1">
-                            <span className="flex items-center gap-1.5">
-                              <Pencil className="h-3.5 w-3.5 text-primary" /> Type custom client name...
-                            </span>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Client</Label>
+                    <Select
+                      value={form.client || NONE}
+                      disabled={rowClientLocked(form.project_name)}
+                      onValueChange={(val) => setForm({ ...form, client: val === NONE ? "" : val })}
+                    >
+                      <SelectTrigger className="h-9 text-xs bg-card border-border text-foreground">
+                        <SelectValue placeholder="Select client..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        <SelectItem value={NONE}>None (No Client)</SelectItem>
+                        {clientOptions(form.client).map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
                           </SelectItem>
-                          <SelectItem value={NONE}>None (No Client)</SelectItem>
-                          {uniqueClients.map((c: string, idx: number) => (
-                            <SelectItem key={`client-${c || 'blank'}-${idx}`} value={c || NONE}>
-                              {c}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Start Date & Due Date Grid */}
